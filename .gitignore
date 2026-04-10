@@ -1,22 +1,27 @@
+.scratchpad/
 
-# See https://help.github.com/ignore-files/ for more about ignoring files.
-
-# dependencies
 node_modules
-
-# builds
-build
 dist
-.rpt2_cache
-
-# misc
+build
 .DS_Store
+*.tsbuildinfo
+
+# env
 .env
 .env.local
-.env.development.local
-.env.test.local
-.env.production.local
+.env.*.local
 
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
+# logs
+*.log
+
+# editor
+.idea
+.vscode
+*.swp
+*.swo
+
+# pnpm
+.pnpm-debug.log
+
+# next.js
+.next

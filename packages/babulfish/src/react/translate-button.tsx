@@ -1,0 +1,504 @@
+// TranslateButton — pre-built translation UI component
+// 5-state machine: idle -> confirm -> downloading -> ready -> translating
+// No Tailwind, no external icons. Positioning is the consumer's job.
+
+import {
+  useState,
+  useEffect,
+  useRef,
+  useCallback,
+  type ReactNode,
+} from "react"
+import { useBabulfish } from "./use-babulfish.js"
+import { TranslateDropdown } from "./translate-dropdown.js"
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+export type TranslateButtonClassNames = {
+  readonly container?: string
+  readonly button?: string
+  readonly tooltip?: string
+  readonly dropdown?: string
+  readonly dropdownItem?: string
+  readonly progressRing?: string
+}
+
+type ProgressRingColors = {
+  readonly downloadColor?: string
+  readonly translateColor?: string
+}
+
+type ButtonState =
+  | { readonly kind: "idle" }
+  | { readonly kind: "confirm" }
+  | { readonly kind: "downloading"; readonly progress: number }
+  | { readonly kind: "ready"; readonly dropdownOpen: boolean }
+  | { readonly kind: "translating"; readonly dropdownOpen: boolean; readonly progress: number }
+
+export type TranslateButtonProps = {
+  readonly classNames?: TranslateButtonClassNames
+  readonly icon?: ReactNode
+  readonly renderTooltip?: (props: { mobile: boolean; confirming: boolean }) => ReactNode
+  readonly progressRing?: ProgressRingColors
+}
+
+// ---------------------------------------------------------------------------
+// Built-in globe SVG (no lucide dependency)
+// ---------------------------------------------------------------------------
+
+function GlobeIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <circle cx="12" cy="12" r="10" />
+      <path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20" />
+      <path d="M2 12h20" />
+    </svg>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// ProgressRing
+// ---------------------------------------------------------------------------
+
+const RING_RADIUS = 23
+const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS
+
+function ProgressRing({
+  progress,
+  color = "var(--babulfish-accent, #3b82f6)",
+  className,
+}: {
+  progress: number
+  color?: string
+  className?: string
+}) {
+  const offset = (1 - Math.min(Math.max(progress, 0), 1)) * RING_CIRCUMFERENCE
+
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 54 54"
+      aria-hidden="true"
+      style={{
+        position: "absolute",
+        inset: "-8px",
+        transform: "rotate(-90deg)",
+        pointerEvents: "none",
+      }}
+    >
+      <circle
+        cx="27"
+        cy="27"
+        r={RING_RADIUS}
+        fill="none"
+        stroke={color}
+        strokeWidth="3"
+        strokeDasharray={RING_CIRCUMFERENCE}
+        strokeDashoffset={offset}
+        strokeLinecap="round"
+        style={{ transition: "stroke-dashoffset 300ms ease-out" }}
+      />
+    </svg>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Default tooltip
+// ---------------------------------------------------------------------------
+
+function DefaultTooltip({
+  mobile,
+  confirming,
+  fading,
+  onFadeComplete,
+  className,
+}: {
+  mobile: boolean
+  confirming: boolean
+  fading: boolean
+  onFadeComplete?: () => void
+  className?: string
+}) {
+  return (
+    <div
+      id="babulfish-tooltip"
+      className={"babulfish-popup" + (className ? ` ${className}` : "")}
+      style={fading ? { opacity: 0, transition: "opacity 2s ease-out" } : undefined}
+      onTransitionEnd={fading ? onFadeComplete : undefined}
+      role="tooltip"
+    >
+      {mobile ? (
+        "Translation requires a desktop browser"
+      ) : confirming ? (
+        <p style={{ margin: 0 }}>
+          Heads up: <strong>~2.9 GB download.</strong> Click again to confirm.
+        </p>
+      ) : (
+        <p style={{ margin: 0 }}>
+          Client-side AI translation — runs on your GPU,{" "}
+          <strong>never phones home.</strong>
+        </p>
+      )}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// TranslateButton
+// ---------------------------------------------------------------------------
+
+export function TranslateButton({
+  classNames,
+  icon,
+  renderTooltip,
+  progressRing,
+}: TranslateButtonProps = {}) {
+  const {
+    model,
+    isSupported,
+    isMobile,
+    languages,
+    loadModel,
+    translateTo,
+    restore,
+    currentLanguage,
+  } = useBabulfish()
+
+  const [state, setState] = useState<ButtonState>({ kind: "idle" })
+  const [focusedIndex, setFocusedIndex] = useState(0)
+  const [hovered, setHovered] = useState(false)
+  const [initialPeek, setInitialPeek] = useState(false)
+  const [peekFading, setPeekFading] = useState(false)
+  const peekDismissed = useRef(false)
+  const containerRef = useRef<HTMLDivElement>(null)
+
+  // Sync engine status -> button state
+  const modelProgress = model.status === "downloading" ? model.progress : 0
+  useEffect(() => {
+    if (model.status === "downloading") {
+      setState({ kind: "downloading", progress: modelProgress })
+    } else if (model.status === "ready" && state.kind === "downloading") {
+      setState({ kind: "ready", dropdownOpen: false })
+    } else if (model.status === "error") {
+      setState({ kind: "idle" })
+    }
+  }, [model.status, modelProgress, state.kind])
+
+  // Auto-show tooltip peek
+  useEffect(() => {
+    const showTimer = setTimeout(() => {
+      if (!peekDismissed.current) setInitialPeek(true)
+    }, 2_000)
+    const fadeTimer = setTimeout(() => setPeekFading(true), 5_000)
+    const cleanupTimer = setTimeout(() => {
+      setInitialPeek(false)
+      setPeekFading(false)
+    }, 7_000)
+    return () => {
+      clearTimeout(showTimer)
+      clearTimeout(fadeTimer)
+      clearTimeout(cleanupTimer)
+    }
+  }, [])
+
+  // Dismiss peek when state leaves idle
+  useEffect(() => {
+    if (state.kind !== "idle") {
+      peekDismissed.current = true
+      setInitialPeek(false)
+      setPeekFading(false)
+    }
+  }, [state.kind])
+
+  // Click-away dismiss
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (!containerRef.current?.contains(e.target as Node)) {
+        setState((prev) => {
+          if (prev.kind === "confirm") return { kind: "idle" }
+          if (prev.kind === "ready" && prev.dropdownOpen)
+            return { kind: "ready", dropdownOpen: false }
+          return prev
+        })
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside)
+    return () => document.removeEventListener("mousedown", handleClickOutside)
+  }, [])
+
+  // Escape key dismiss
+  useEffect(() => {
+    function handleEscape(e: KeyboardEvent) {
+      if (e.key !== "Escape") return
+      setState((prev) => {
+        if (prev.kind === "confirm") return { kind: "idle" }
+        if (prev.kind === "ready" && prev.dropdownOpen)
+          return { kind: "ready", dropdownOpen: false }
+        return prev
+      })
+    }
+    document.addEventListener("keydown", handleEscape)
+    return () => document.removeEventListener("keydown", handleEscape)
+  }, [])
+
+  // Keyboard nav for dropdown — no useCallback; deps include
+  // handleLanguageSelect which is a plain function, and this handler
+  // only fires on key events so re-creation cost is negligible.
+  function handleKeyDown(e: React.KeyboardEvent) {
+    if (state.kind !== "ready" || !state.dropdownOpen) return
+
+    if (e.key === "ArrowDown") {
+      e.preventDefault()
+      setFocusedIndex((prev) => Math.min(prev + 1, languages.length - 1))
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault()
+      setFocusedIndex((prev) => Math.max(prev - 1, 0))
+    } else if (e.key === "Enter") {
+      e.preventDefault()
+      const lang = languages[focusedIndex]
+      if (lang) handleLanguageSelect(lang.code)
+    }
+  }
+
+  const handlePeekFadeComplete = useCallback(() => {
+    setInitialPeek(false)
+    setPeekFading(false)
+  }, [])
+
+  // Button click handler
+  function handleButtonClick() {
+    switch (state.kind) {
+      case "idle":
+        setState({ kind: "confirm" })
+        break
+      case "confirm":
+        if (isMobile) return
+        startDownload()
+        break
+      case "ready":
+        setFocusedIndex(0)
+        setState((prev) =>
+          prev.kind === "ready"
+            ? { kind: "ready", dropdownOpen: !prev.dropdownOpen }
+            : prev,
+        )
+        break
+      default:
+        break
+    }
+  }
+
+  async function startDownload() {
+    setState({ kind: "downloading", progress: 0 })
+    try {
+      await loadModel()
+    } catch {
+      setState({ kind: "idle" })
+    }
+  }
+
+  async function handleLanguageSelect(code: string) {
+    if (state.kind !== "ready") return
+
+    if (code === "restore") {
+      restore()
+      setState({ kind: "ready", dropdownOpen: false })
+      return
+    }
+
+    setState({ kind: "translating", dropdownOpen: true, progress: 0 })
+    try {
+      await translateTo(code)
+    } catch {
+      restore()
+    }
+    setState({ kind: "ready", dropdownOpen: false })
+  }
+
+  // Don't render if WebGPU unavailable on desktop
+  if (!isSupported && !isMobile) return null
+
+  const isInteractive =
+    state.kind !== "downloading" && state.kind !== "translating"
+
+  const showTooltip =
+    state.kind === "confirm" ||
+    (state.kind === "idle" && (hovered || initialPeek))
+
+  const tooltipFading = peekFading && !hovered && state.kind !== "confirm"
+
+  const downloadColor =
+    progressRing?.downloadColor ?? "var(--babulfish-accent, #3b82f6)"
+  const translateColor =
+    progressRing?.translateColor ?? "rgb(248 113 113)"
+
+  const ariaLabel =
+    state.kind === "downloading"
+      ? `Downloading translation model: ${Math.round(state.progress * 100)}%`
+      : state.kind === "translating"
+        ? "Translating page"
+        : state.kind === "ready"
+          ? "Translation model ready"
+          : "Translate page"
+
+  const liveText =
+    state.kind === "downloading"
+      ? `Downloading translation model: ${Math.round(state.progress * 100)}%`
+      : state.kind === "ready"
+        ? "Translation model ready"
+        : state.kind === "translating"
+          ? "Translating page"
+          : ""
+
+  const buttonAnimClass =
+    state.kind === "idle" && initialPeek && !tooltipFading
+      ? "babulfish-globe-peek"
+      : state.kind === "idle" && tooltipFading
+        ? "babulfish-globe-peek-out"
+        : state.kind === "translating"
+          ? "babulfish-active"
+          : state.kind === "ready"
+            ? "babulfish-globe-ready"
+            : ""
+
+  const iconElement = icon ?? (
+    <GlobeIcon
+      className={
+        state.kind === "ready"
+          ? "babulfish-icon-ready"
+          : initialPeek && !tooltipFading
+            ? "babulfish-icon-peek"
+            : "babulfish-icon-muted"
+      }
+    />
+  )
+
+  return (
+    <div
+      ref={containerRef}
+      className={classNames?.container}
+      onKeyDown={handleKeyDown}
+      style={{ position: "relative" }}
+    >
+      {/* Live region for screen readers */}
+      <span
+        style={{
+          position: "absolute",
+          width: "1px",
+          height: "1px",
+          padding: 0,
+          margin: "-1px",
+          overflow: "hidden",
+          clip: "rect(0, 0, 0, 0)",
+          whiteSpace: "nowrap",
+          borderWidth: 0,
+        }}
+        aria-live="polite"
+      >
+        {liveText}
+      </span>
+
+      <button
+        type="button"
+        aria-label={ariaLabel}
+        aria-describedby={showTooltip ? "babulfish-tooltip" : undefined}
+        tabIndex={0}
+        onClick={handleButtonClick}
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+        disabled={!isInteractive}
+        className={
+          buttonAnimClass +
+          (classNames?.button ? ` ${classNames.button}` : "")
+        }
+        style={{
+          position: "relative",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          width: "2.5rem",
+          height: "2.5rem",
+          borderRadius: "9999px",
+          border: "1px solid var(--babulfish-border, #e5e7eb)",
+          background: "var(--babulfish-surface, #fff)",
+          cursor: isInteractive ? "pointer" : "default",
+        }}
+      >
+        {state.kind === "translating" ? (
+          <span style={{ fontSize: "10px", fontWeight: 500, fontVariantNumeric: "tabular-nums" }}>
+            {Math.round(state.progress * 100)}%
+          </span>
+        ) : state.kind === "downloading" ? (
+          <span style={{ fontSize: "10px", fontWeight: 500, fontVariantNumeric: "tabular-nums" }}>
+            {Math.round(state.progress * 100)}%
+          </span>
+        ) : (
+          iconElement
+        )}
+
+        {state.kind === "downloading" && (
+          <ProgressRing
+            progress={state.progress}
+            color={downloadColor}
+            className={classNames?.progressRing}
+          />
+        )}
+        {state.kind === "translating" && (
+          <ProgressRing
+            progress={state.progress}
+            color={translateColor}
+            className={classNames?.progressRing}
+          />
+        )}
+      </button>
+
+      {/* Tooltip */}
+      {showTooltip && (
+        renderTooltip
+          ? renderTooltip({ mobile: isMobile, confirming: state.kind === "confirm" })
+          : (
+            <DefaultTooltip
+              mobile={isMobile}
+              confirming={state.kind === "confirm"}
+              fading={tooltipFading}
+              onFadeComplete={handlePeekFadeComplete}
+              className={classNames?.tooltip}
+            />
+          )
+      )}
+
+      {/* Language dropdown */}
+      {state.kind === "ready" && state.dropdownOpen && (
+        <TranslateDropdown
+          value={currentLanguage}
+          disabled={false}
+          onSelect={handleLanguageSelect}
+          focusedIndex={focusedIndex}
+          className={classNames?.dropdown}
+        />
+      )}
+      {state.kind === "translating" && state.dropdownOpen && (
+        <TranslateDropdown
+          value={currentLanguage}
+          disabled
+          onSelect={() => {}}
+          focusedIndex={-1}
+          className={classNames?.dropdown}
+        />
+      )}
+    </div>
+  )
+}

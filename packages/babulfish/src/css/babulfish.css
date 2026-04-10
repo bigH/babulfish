@@ -1,0 +1,110 @@
+/* babulfish — base styles and animations */
+
+:root {
+  --babulfish-accent: var(--accent, #3b82f6);
+  --babulfish-error: rgb(239 68 68);
+  --babulfish-border: var(--border, #e5e7eb);
+  --babulfish-surface: var(--surface, #fff);
+}
+
+/* ---------------------------------------------------------------------------
+   Pulse animation (general)
+   --------------------------------------------------------------------------- */
+
+@keyframes babulfish-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.2; }
+}
+
+.babulfish-pulse {
+  animation: babulfish-pulse 0.75s ease-in-out infinite;
+}
+
+/* ---------------------------------------------------------------------------
+   Active pulse (translating state)
+   --------------------------------------------------------------------------- */
+
+@keyframes babulfish-active-pulse {
+  0%, 100% {
+    border-color: rgb(239 68 68 / 0.5);
+    box-shadow: 0 0 8px rgb(239 68 68 / 0.25);
+  }
+  50% {
+    border-color: var(--babulfish-error);
+    box-shadow: 0 0 14px rgb(239 68 68 / 0.45);
+  }
+}
+
+.babulfish-active {
+  animation: babulfish-active-pulse 0.75s ease-in-out infinite;
+}
+
+/* ---------------------------------------------------------------------------
+   Settle animation (translation complete)
+   --------------------------------------------------------------------------- */
+
+@keyframes babulfish-settle {
+  from { clip-path: inset(0 100% 0 0); }
+  to { clip-path: inset(0 0 0 0); }
+}
+
+.babulfish-settled {
+  animation: babulfish-settle 0.3s ease-out;
+}
+
+/* ---------------------------------------------------------------------------
+   Globe peek animations (initial tooltip appearance)
+   --------------------------------------------------------------------------- */
+
+.babulfish-globe-peek {
+  border-color: orange;
+  box-shadow: 0 0 12px color-mix(in srgb, orange 50%, transparent);
+  transition: border-color 2s ease-out, box-shadow 2s ease-out;
+}
+
+.babulfish-globe-peek-out {
+  transition: border-color 2s ease-out, box-shadow 2s ease-out;
+}
+
+.babulfish-globe-ready {
+  border-color: var(--babulfish-accent);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--babulfish-accent) 30%, transparent);
+}
+
+/* ---------------------------------------------------------------------------
+   Popup (tooltip + dropdown) fade-slide-in
+   --------------------------------------------------------------------------- */
+
+@keyframes babulfish-fade-slide-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.babulfish-popup {
+  animation: babulfish-fade-slide-in 150ms ease-out both;
+}
+
+/* ---------------------------------------------------------------------------
+   Icon state classes
+   --------------------------------------------------------------------------- */
+
+.babulfish-icon-ready {
+  color: var(--babulfish-accent);
+  filter: drop-shadow(0 0 6px var(--babulfish-accent));
+}
+
+.babulfish-icon-peek {
+  color: orange;
+  transition: color 500ms;
+}
+
+.babulfish-icon-muted {
+  color: var(--babulfish-muted, #9ca3af);
+  transition: color 500ms;
+}
