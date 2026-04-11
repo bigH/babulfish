@@ -15,6 +15,9 @@ export type {
   PreserveMatcher,
 } from "./dom/index.js"
 
+export { createTranslator } from "./translator.js"
+export type { CreateTranslatorConfig, TranslatorPair } from "./translator.js"
+
 export {
   TranslatorProvider,
   DEFAULT_LANGUAGES,
