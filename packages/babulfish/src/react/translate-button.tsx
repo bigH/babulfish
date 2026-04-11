@@ -9,7 +9,7 @@ import {
   useCallback,
   type ReactNode,
 } from "react"
-import { useBabulfish } from "./use-babulfish.js"
+import { useTranslator } from "./use-translator.js"
 import { TranslateDropdown } from "./translate-dropdown.js"
 
 // ---------------------------------------------------------------------------
@@ -17,7 +17,6 @@ import { TranslateDropdown } from "./translate-dropdown.js"
 // ---------------------------------------------------------------------------
 
 export type TranslateButtonClassNames = {
-  readonly container?: string
   readonly button?: string
   readonly tooltip?: string
   readonly dropdown?: string
@@ -132,11 +131,22 @@ function DefaultTooltip({
   onFadeComplete?: () => void
   className?: string
 }) {
+  const baseStyle: React.CSSProperties = {
+    whiteSpace: "nowrap",
+    padding: "0.5rem 0.75rem",
+    borderRadius: "0.5rem",
+    background: "var(--babulfish-surface, #fff)",
+    border: "1px solid var(--babulfish-border, #e5e7eb)",
+    boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
+    fontSize: "0.875rem",
+    ...(fading ? { opacity: 0, transition: "opacity 2s ease-out" } : {}),
+  }
+
   return (
     <div
       id="babulfish-tooltip"
       className={"babulfish-popup" + (className ? ` ${className}` : "")}
-      style={fading ? { opacity: 0, transition: "opacity 2s ease-out" } : undefined}
+      style={baseStyle}
       onTransitionEnd={fading ? onFadeComplete : undefined}
       role="tooltip"
     >
@@ -175,7 +185,7 @@ export function TranslateButton({
     translateTo,
     restore,
     currentLanguage,
-  } = useBabulfish()
+  } = useTranslator()
 
   const [state, setState] = useState<ButtonState>({ kind: "idle" })
   const [focusedIndex, setFocusedIndex] = useState(0)
@@ -389,116 +399,115 @@ export function TranslateButton({
   return (
     <div
       ref={containerRef}
-      className={classNames?.container}
       onKeyDown={handleKeyDown}
       style={{ position: "relative" }}
     >
-      {/* Live region for screen readers */}
-      <span
-        style={{
-          position: "absolute",
-          width: "1px",
-          height: "1px",
-          padding: 0,
-          margin: "-1px",
-          overflow: "hidden",
-          clip: "rect(0, 0, 0, 0)",
-          whiteSpace: "nowrap",
-          borderWidth: 0,
-        }}
-        aria-live="polite"
-      >
-        {liveText}
-      </span>
+        {/* Live region for screen readers */}
+        <span
+          style={{
+            position: "absolute",
+            width: "1px",
+            height: "1px",
+            padding: 0,
+            margin: "-1px",
+            overflow: "hidden",
+            clip: "rect(0, 0, 0, 0)",
+            whiteSpace: "nowrap",
+            borderWidth: 0,
+          }}
+          aria-live="polite"
+        >
+          {liveText}
+        </span>
 
-      <button
-        type="button"
-        aria-label={ariaLabel}
-        aria-describedby={showTooltip ? "babulfish-tooltip" : undefined}
-        tabIndex={0}
-        onClick={handleButtonClick}
-        onMouseEnter={() => setHovered(true)}
-        onMouseLeave={() => setHovered(false)}
-        disabled={!isInteractive}
-        className={
-          buttonAnimClass +
-          (classNames?.button ? ` ${classNames.button}` : "")
-        }
-        style={{
-          position: "relative",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          width: "2.5rem",
-          height: "2.5rem",
-          borderRadius: "9999px",
-          border: "1px solid var(--babulfish-border, #e5e7eb)",
-          background: "var(--babulfish-surface, #fff)",
-          cursor: isInteractive ? "pointer" : "default",
-        }}
-      >
-        {state.kind === "translating" ? (
-          <span style={{ fontSize: "10px", fontWeight: 500, fontVariantNumeric: "tabular-nums" }}>
-            {Math.round(state.progress * 100)}%
-          </span>
-        ) : state.kind === "downloading" ? (
-          <span style={{ fontSize: "10px", fontWeight: 500, fontVariantNumeric: "tabular-nums" }}>
-            {Math.round(state.progress * 100)}%
-          </span>
-        ) : (
-          iconElement
-        )}
+        <button
+          type="button"
+          aria-label={ariaLabel}
+          aria-describedby={showTooltip ? "babulfish-tooltip" : undefined}
+          tabIndex={0}
+          onClick={handleButtonClick}
+          onMouseEnter={() => setHovered(true)}
+          onMouseLeave={() => setHovered(false)}
+          disabled={!isInteractive}
+          className={
+            buttonAnimClass +
+            (classNames?.button ? ` ${classNames.button}` : "")
+          }
+          style={{
+            position: "relative",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            width: "2.5rem",
+            height: "2.5rem",
+            borderRadius: "9999px",
+            border: "1px solid var(--babulfish-border, #e5e7eb)",
+            background: "var(--babulfish-surface, #fff)",
+            cursor: isInteractive ? "pointer" : "default",
+          }}
+        >
+          {state.kind === "translating" ? (
+            <span style={{ fontSize: "10px", fontWeight: 500, fontVariantNumeric: "tabular-nums" }}>
+              {Math.round(state.progress * 100)}%
+            </span>
+          ) : state.kind === "downloading" ? (
+            <span style={{ fontSize: "10px", fontWeight: 500, fontVariantNumeric: "tabular-nums" }}>
+              {Math.round(state.progress * 100)}%
+            </span>
+          ) : (
+            iconElement
+          )}
 
-        {state.kind === "downloading" && (
-          <ProgressRing
-            progress={state.progress}
-            color={downloadColor}
-            className={classNames?.progressRing}
-          />
-        )}
-        {state.kind === "translating" && (
-          <ProgressRing
-            progress={state.progress}
-            color={translateColor}
-            className={classNames?.progressRing}
-          />
-        )}
-      </button>
-
-      {/* Tooltip */}
-      {showTooltip && (
-        renderTooltip
-          ? renderTooltip({ mobile: isMobile, confirming: state.kind === "confirm" })
-          : (
-            <DefaultTooltip
-              mobile={isMobile}
-              confirming={state.kind === "confirm"}
-              fading={tooltipFading}
-              onFadeComplete={handlePeekFadeComplete}
-              className={classNames?.tooltip}
+          {state.kind === "downloading" && (
+            <ProgressRing
+              progress={state.progress}
+              color={downloadColor}
+              className={classNames?.progressRing}
             />
-          )
-      )}
+          )}
+          {state.kind === "translating" && (
+            <ProgressRing
+              progress={state.progress}
+              color={translateColor}
+              className={classNames?.progressRing}
+            />
+          )}
+        </button>
 
-      {/* Language dropdown */}
-      {state.kind === "ready" && state.dropdownOpen && (
-        <TranslateDropdown
-          value={currentLanguage}
-          disabled={false}
-          onSelect={handleLanguageSelect}
-          focusedIndex={focusedIndex}
-          className={classNames?.dropdown}
-        />
-      )}
-      {state.kind === "translating" && state.dropdownOpen && (
-        <TranslateDropdown
-          value={currentLanguage}
-          disabled
-          onSelect={() => {}}
-          focusedIndex={-1}
-          className={classNames?.dropdown}
-        />
-      )}
+        {/* Tooltip */}
+        {showTooltip && (
+          renderTooltip
+            ? renderTooltip({ mobile: isMobile, confirming: state.kind === "confirm" })
+            : (
+              <DefaultTooltip
+                mobile={isMobile}
+                confirming={state.kind === "confirm"}
+                fading={tooltipFading}
+                onFadeComplete={handlePeekFadeComplete}
+                className={classNames?.tooltip}
+              />
+            )
+        )}
+
+        {/* Language dropdown */}
+        {state.kind === "ready" && state.dropdownOpen && (
+          <TranslateDropdown
+            value={currentLanguage}
+            disabled={false}
+            onSelect={handleLanguageSelect}
+            focusedIndex={focusedIndex}
+            className={classNames?.dropdown}
+          />
+        )}
+        {state.kind === "translating" && state.dropdownOpen && (
+          <TranslateDropdown
+            value={currentLanguage}
+            disabled
+            onSelect={() => {}}
+            focusedIndex={-1}
+            className={classNames?.dropdown}
+          />
+        )}
     </div>
   )
 }

@@ -1,8 +1,8 @@
 // TranslateDropdown — standalone language picker, usable independently
 
 import { useContext, useEffect, useRef, type ReactNode } from "react"
-import { BabulfishContext } from "./context.js"
-import type { BabulfishLanguage } from "./context.js"
+import { TranslatorContext } from "./context.js"
+import type { TranslatorLanguage } from "./context.js"
 
 // ---------------------------------------------------------------------------
 // Types
@@ -13,8 +13,8 @@ export type TranslateDropdownProps = {
   readonly value?: string | null
   readonly disabled?: boolean
   readonly className?: string
-  readonly renderOption?: (lang: BabulfishLanguage, active: boolean) => ReactNode
-  readonly languages?: BabulfishLanguage[]
+  readonly renderOption?: (lang: TranslatorLanguage, active: boolean) => ReactNode
+  readonly languages?: TranslatorLanguage[]
   readonly focusedIndex?: number
 }
 
@@ -55,12 +55,12 @@ export function TranslateDropdown({
 }: TranslateDropdownProps) {
   // Always call useContext unconditionally (hook rules).
   // When languages prop is supplied, the context value is simply ignored.
-  const ctx = useContext(BabulfishContext)
+  const ctx = useContext(TranslatorContext)
   const languages = languagesProp ?? ctx?.languages
 
   if (!languages) {
     throw new Error(
-      "TranslateDropdown requires either a languages prop or a <BabulfishProvider>",
+      "TranslateDropdown requires either a languages prop or a <TranslatorProvider>",
     )
   }
 

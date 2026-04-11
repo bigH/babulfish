@@ -9,28 +9,28 @@ import type { DOMTranslator } from "../dom/index.js"
 // Types (shared across react layer)
 // ---------------------------------------------------------------------------
 
-export type BabulfishLanguage = {
+export type TranslatorLanguage = {
   readonly label: string
   readonly code: string
 }
 
-export type BabulfishContextValue = {
+export type TranslatorContextValue = {
   readonly engine: Translator
   readonly domTranslator: DOMTranslator | null
-  readonly languages: BabulfishLanguage[]
+  readonly languages: TranslatorLanguage[]
 }
 
 // ---------------------------------------------------------------------------
 // Context
 // ---------------------------------------------------------------------------
 
-export const BabulfishContext =
-  createContext<BabulfishContextValue | null>(null)
+export const TranslatorContext =
+  createContext<TranslatorContextValue | null>(null)
 
-export function useBabulfishContext(): BabulfishContextValue {
-  const ctx = useContext(BabulfishContext)
+export function useTranslatorContext(): TranslatorContextValue {
+  const ctx = useContext(TranslatorContext)
   if (!ctx) {
-    throw new Error("useBabulfish must be used within <BabulfishProvider>")
+    throw new Error("useTranslator must be used within <TranslatorProvider>")
   }
   return ctx
 }

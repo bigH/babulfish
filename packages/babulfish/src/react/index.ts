@@ -1,8 +1,8 @@
-export { BabulfishProvider, DEFAULT_LANGUAGES } from "./provider.js"
-export type { BabulfishConfig, BabulfishLanguage } from "./provider.js"
+export { TranslatorProvider, DEFAULT_LANGUAGES } from "./provider.js"
+export type { TranslatorConfig, TranslatorLanguage } from "./provider.js"
 
-export { useBabulfish } from "./use-babulfish.js"
-export type { BabulfishModelState, BabulfishTranslationState } from "./use-babulfish.js"
+export { useTranslator } from "./use-translator.js"
+export type { ModelState, TranslationState } from "./use-translator.js"
 
 export { useTranslateDOM } from "./use-translate-dom.js"
 

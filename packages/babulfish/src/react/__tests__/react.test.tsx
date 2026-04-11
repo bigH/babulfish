@@ -62,19 +62,19 @@ const mockIsMobileDevice = vi.fn(() => false)
 // Imports (after mocks)
 // ---------------------------------------------------------------------------
 
-import { BabulfishProvider } from "../provider.js"
-import { useBabulfish } from "../use-babulfish.js"
+import { TranslatorProvider } from "../provider.js"
+import { useTranslator } from "../use-translator.js"
 import { useTranslateDOM } from "../use-translate-dom.js"
 import { TranslateButton } from "../translate-button.js"
 import { TranslateDropdown } from "../translate-dropdown.js"
 import { DEFAULT_LANGUAGES } from "../provider.js"
-import type { BabulfishConfig } from "../provider.js"
+import type { TranslatorConfig } from "../provider.js"
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-const DOM_CONFIG: BabulfishConfig = {
+const DOM_CONFIG: TranslatorConfig = {
   dom: { roots: ["main"] },
 }
 
@@ -82,20 +82,20 @@ function clickOutside() {
   fireEvent.mouseDown(document.body)
 }
 
-/** Wrapper that provides the BabulfishProvider */
+/** Wrapper that provides the TranslatorProvider */
 function Wrapper({
   config,
   children,
 }: {
-  config?: BabulfishConfig
+  config?: TranslatorConfig
   children: React.ReactNode
 }) {
-  return <BabulfishProvider config={config}>{children}</BabulfishProvider>
+  return <TranslatorProvider config={config}>{children}</TranslatorProvider>
 }
 
-/** Test component that exposes useBabulfish state */
+/** Test component that exposes useTranslator state */
 function HookInspector() {
-  const state = useBabulfish()
+  const state = useTranslator()
   return (
     <div>
       <span data-testid="model-status">{state.model.status}</span>
@@ -132,7 +132,7 @@ function setupMockOn() {
 // Tests
 // ---------------------------------------------------------------------------
 
-describe("BabulfishProvider", () => {
+describe("TranslatorProvider", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockEngineStatus = "idle"
@@ -150,9 +150,9 @@ describe("BabulfishProvider", () => {
 
   it("renders children", () => {
     render(
-      <BabulfishProvider>
+      <TranslatorProvider>
         <span data-testid="child">hello</span>
-      </BabulfishProvider>,
+      </TranslatorProvider>,
     )
     expect(screen.getByTestId("child")).toHaveTextContent("hello")
   })
@@ -161,7 +161,7 @@ describe("BabulfishProvider", () => {
     // Suppress React error boundary output
     const spy = vi.spyOn(console, "error").mockImplementation(() => {})
     expect(() => render(<HookInspector />)).toThrow(
-      "useBabulfish must be used within <BabulfishProvider>",
+      "useTranslator must be used within <TranslatorProvider>",
     )
     spy.mockRestore()
   })
@@ -178,7 +178,7 @@ describe("BabulfishProvider", () => {
   })
 })
 
-describe("useBabulfish", () => {
+describe("useTranslator", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockEngineStatus = "idle"

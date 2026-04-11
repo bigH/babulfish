@@ -1,6 +1,6 @@
 "use client"
 
-import { BabulfishProvider, TranslateButton } from "babulfish"
+import { TranslatorProvider, TranslateButton } from "babulfish"
 import "./globals.css"
 
 export default function RootLayout({
@@ -11,7 +11,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="bg-white text-gray-900 antialiased">
-        <BabulfishProvider
+        <TranslatorProvider
           config={{
             dom: {
               roots: ["main"],
@@ -22,10 +22,10 @@ export default function RootLayout({
           }}
         >
           {children}
-          <TranslateButton
-            classNames={{ container: "fixed right-4 top-4 z-50" }}
-          />
-        </BabulfishProvider>
+          <div className="fixed right-4 top-4 z-50">
+            <TranslateButton />
+          </div>
+        </TranslatorProvider>
       </body>
     </html>
   )

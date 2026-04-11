@@ -1,31 +1,31 @@
-// useBabulfish — primary hook wiring engine events to React state
+// useTranslator — primary hook wiring engine events to React state
 
 import { useCallback, useEffect, useState } from "react"
 import { isWebGPUAvailable, isMobileDevice } from "../engine/detect.js"
-import { useBabulfishContext } from "./context.js"
-import type { BabulfishLanguage } from "./context.js"
+import { useTranslatorContext } from "./context.js"
+import type { TranslatorLanguage } from "./context.js"
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-export type BabulfishModelState =
+export type ModelState =
   | { readonly status: "idle" }
   | { readonly status: "downloading"; readonly progress: number }
   | { readonly status: "ready" }
   | { readonly status: "error"; readonly error: unknown }
 
-export type BabulfishTranslationState =
+export type TranslationState =
   | { readonly status: "idle" }
   | { readonly status: "translating"; readonly progress: number }
 
-export type UseBabulfishReturn = {
-  readonly model: BabulfishModelState
-  readonly translation: BabulfishTranslationState
+export type UseTranslatorReturn = {
+  readonly model: ModelState
+  readonly translation: TranslationState
   readonly currentLanguage: string | null
   readonly isSupported: boolean
   readonly isMobile: boolean
-  readonly languages: BabulfishLanguage[]
+  readonly languages: TranslatorLanguage[]
   loadModel(): Promise<void>
   translateTo(code: string): Promise<void>
   restore(): void
@@ -36,15 +36,15 @@ export type UseBabulfishReturn = {
 // Hook
 // ---------------------------------------------------------------------------
 
-export function useBabulfish(): UseBabulfishReturn {
-  const { engine, domTranslator, languages } = useBabulfishContext()
+export function useTranslator(): UseTranslatorReturn {
+  const { engine, domTranslator, languages } = useTranslatorContext()
 
-  const [model, setModel] = useState<BabulfishModelState>(() =>
+  const [model, setModel] = useState<ModelState>(() =>
     engine.status === "ready"
       ? { status: "ready" }
       : { status: "idle" },
   )
-  const [translation, setTranslation] = useState<BabulfishTranslationState>({
+  const [translation, setTranslation] = useState<TranslationState>({
     status: "idle",
   })
   const [currentLanguage, setCurrentLanguage] = useState<string | null>(

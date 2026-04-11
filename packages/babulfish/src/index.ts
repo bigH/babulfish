@@ -16,18 +16,18 @@ export type {
 } from "./dom/index.js"
 
 export {
-  BabulfishProvider,
+  TranslatorProvider,
   DEFAULT_LANGUAGES,
-  useBabulfish,
+  useTranslator,
   useTranslateDOM,
   TranslateButton,
   TranslateDropdown,
 } from "./react/index.js"
 export type {
-  BabulfishConfig,
-  BabulfishLanguage,
-  BabulfishModelState,
-  BabulfishTranslationState,
+  TranslatorConfig,
+  TranslatorLanguage,
+  ModelState,
+  TranslationState,
   TranslateButtonClassNames,
   TranslateButtonProps,
   TranslateDropdownProps,

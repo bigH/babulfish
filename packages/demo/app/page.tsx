@@ -31,15 +31,15 @@ export default function Home() {
         <li>Preserves brand names and technical terms during translation</li>
         <li>Rich text support — translates markdown content without breaking formatting</li>
         <li>Progress indicators and accessible ARIA live regions</li>
-        <li>One-line React integration via BabulfishProvider</li>
+        <li>One-line React integration via TranslatorProvider</li>
       </ul>
 
       <h2 className="mb-4 text-xl font-semibold">How It Works</h2>
       <p className="mb-4 text-gray-700">
-        Wrap your app in a BabulfishProvider, drop in a TranslateButton, and
+        Wrap your app in a TranslatorProvider, drop in a TranslateButton, and
         mark which DOM roots to translate. babulfish handles model loading,
         text extraction, batching, placeholder preservation, and DOM updates
-        automatically. For custom UI, the useBabulfish hook exposes the full
+        automatically. For custom UI, the useTranslator hook exposes the full
         model and translation state.
       </p>
 

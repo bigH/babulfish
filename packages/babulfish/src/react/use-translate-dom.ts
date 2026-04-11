@@ -2,7 +2,7 @@
 // who build their own UI and skip TranslateButton
 
 import { useCallback, useState } from "react"
-import { useBabulfishContext } from "./context.js"
+import { useTranslatorContext } from "./context.js"
 
 export type UseTranslateDOMReturn = {
   translatePage(lang: string): Promise<void>
@@ -11,7 +11,7 @@ export type UseTranslateDOMReturn = {
 }
 
 export function useTranslateDOM(): UseTranslateDOMReturn {
-  const { domTranslator } = useBabulfishContext()
+  const { domTranslator } = useTranslatorContext()
   const [progress, setProgress] = useState<number | null>(null)
 
   const translatePage = useCallback(

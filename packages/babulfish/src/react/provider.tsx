@@ -1,4 +1,4 @@
-// BabulfishProvider — creates engine + DOM translator, stores them in context
+// TranslatorProvider — creates engine + DOM translator, stores them in context
 
 import {
   useEffect,
@@ -11,27 +11,27 @@ import { createEngine } from "../engine/index.js"
 import { createDOMTranslator } from "../dom/index.js"
 import type { EngineConfig, Translator } from "../engine/index.js"
 import type { DOMTranslatorConfig, DOMTranslator } from "../dom/index.js"
-import { BabulfishContext } from "./context.js"
-import type { BabulfishContextValue, BabulfishLanguage } from "./context.js"
+import { TranslatorContext } from "./context.js"
+import type { TranslatorContextValue, TranslatorLanguage } from "./context.js"
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-export type BabulfishConfig = {
+export type TranslatorConfig = {
   readonly engine?: EngineConfig
   readonly dom?: Omit<DOMTranslatorConfig, "translate">
-  readonly languages?: BabulfishLanguage[]
+  readonly languages?: TranslatorLanguage[]
 }
 
-// Re-export BabulfishLanguage so consumers can import from provider
-export type { BabulfishLanguage } from "./context.js"
+// Re-export TranslatorLanguage so consumers can import from provider
+export type { TranslatorLanguage } from "./context.js"
 
 // ---------------------------------------------------------------------------
 // Default languages
 // ---------------------------------------------------------------------------
 
-export const DEFAULT_LANGUAGES: BabulfishLanguage[] = [
+export const DEFAULT_LANGUAGES: TranslatorLanguage[] = [
   { label: "English (Original)", code: "restore" },
   { label: "Spanish", code: "es-ES" },
   { label: "French", code: "fr" },
@@ -49,18 +49,18 @@ export const DEFAULT_LANGUAGES: BabulfishLanguage[] = [
 ]
 
 // Re-export context utilities for consumers
-export { useBabulfishContext } from "./context.js"
-export type { BabulfishContextValue } from "./context.js"
+export { useTranslatorContext } from "./context.js"
+export type { TranslatorContextValue } from "./context.js"
 
 // ---------------------------------------------------------------------------
 // Provider
 // ---------------------------------------------------------------------------
 
-export function BabulfishProvider({
+export function TranslatorProvider({
   config,
   children,
 }: {
-  config?: BabulfishConfig
+  config?: TranslatorConfig
   children: ReactNode
 }) {
   const engineRef = useRef<Translator | null>(null)
@@ -95,14 +95,14 @@ export function BabulfishProvider({
     }
   }, [engine])
 
-  const value = useMemo<BabulfishContextValue>(
+  const value = useMemo<TranslatorContextValue>(
     () => ({ engine, domTranslator, languages }),
     [engine, domTranslator, languages],
   )
 
   return (
-    <BabulfishContext.Provider value={value}>
+    <TranslatorContext.Provider value={value}>
       {children}
-    </BabulfishContext.Provider>
+    </TranslatorContext.Provider>
   )
 }
