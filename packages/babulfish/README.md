@@ -9,18 +9,18 @@ No server. No API keys. Translation runs entirely in the browser using [Translat
 ## Quick Start
 
 ```tsx
-import { BabulfishProvider, TranslateButton } from "babulfish"
+import { TranslatorProvider, TranslateButton } from "babulfish"
 import "babulfish/css"
 
 function App() {
   return (
-    <BabulfishProvider config={{ dom: { roots: ["#content"] } }}>
+    <TranslatorProvider config={{ dom: { roots: ["#content"] } }}>
       <main id="content">
         <h1>Hello, world</h1>
         <p>This text can be translated client-side.</p>
       </main>
       <TranslateButton />
-    </BabulfishProvider>
+    </TranslatorProvider>
   )
 }
 ```
@@ -42,7 +42,7 @@ babulfish is three layers, each usable independently:
 ```
 ┌─────────────────────────────────────────────┐
 │  React Bindings  (babulfish)                │
-│  BabulfishProvider, TranslateButton, hooks  │
+│  TranslatorProvider, TranslateButton, hooks │
 ├─────────────────────────────────────────────┤
 │  DOM Translator  (babulfish/dom)            │
 │  Tree walking, batching, placeholder logic  │
@@ -162,14 +162,14 @@ dt.restore()
 
 ### React Bindings (`babulfish`)
 
-The default import includes everything: engine types, DOM types, and React components.
+The root `babulfish` entrypoint re-exports the engine and DOM types plus the React components and hooks as named exports.
 
-#### `<BabulfishProvider>`
+#### `<TranslatorProvider>`
 
 Wraps your app. Creates the engine and DOM translator, stores them in context.
 
 ```tsx
-<BabulfishProvider config={{
+<TranslatorProvider config={{
   engine: { device: "webgpu", dtype: "q4" },
   dom: { roots: ["#content"] },
   languages: [
@@ -179,14 +179,14 @@ Wraps your app. Creates the engine and DOM translator, stores them in context.
   ],
 }}>
   {children}
-</BabulfishProvider>
+</TranslatorProvider>
 ```
 
 | Prop               | Type                | Description                           |
 |--------------------|---------------------|---------------------------------------|
 | `config.engine`    | `EngineConfig`      | Engine options (model, device, etc.)  |
 | `config.dom`       | `DOMTranslatorConfig` (minus `translate`) | DOM translator options |
-| `config.languages` | `BabulfishLanguage[]` | Language list for dropdowns         |
+| `config.languages` | `TranslatorLanguage[]` | Language list for dropdowns       |
 
 If `languages` is omitted, `DEFAULT_LANGUAGES` is used (14 languages).
 
@@ -196,7 +196,12 @@ Drop-in translation button with a 5-state machine: idle -> confirm -> downloadin
 
 ```tsx
 <TranslateButton
-  classNames={{ container: "my-btn-wrap", button: "my-btn" }}
+  classNames={{
+    button: "my-btn",
+    tooltip: "my-tooltip",
+    dropdown: "my-dropdown",
+    progressRing: "my-progress-ring",
+  }}
   progressRing={{ downloadColor: "#3b82f6", translateColor: "#ef4444" }}
 />
 ```
@@ -222,7 +227,7 @@ Standalone language picker. Can be used outside `TranslateButton` for custom UIs
 />
 ```
 
-#### `useBabulfish()`
+#### `useTranslator()`
 
 Primary hook. Returns model state, translation state, and controls.
 
@@ -238,7 +243,7 @@ const {
   translateTo,    // (code: string) => Promise<void>  — translates the DOM
   restore,        // () => void
   translate,      // (text: string, lang: string) => Promise<string>  — raw text
-} = useBabulfish()
+} = useTranslator()
 ```
 
 #### `useTranslateDOM()`
@@ -249,7 +254,7 @@ Lighter hook for custom UIs that only need DOM translation controls.
 const { translatePage, restorePage, progress } = useTranslateDOM()
 
 await translatePage("ja")
-// progress is 0..1 during translation, null when idle
+// progress is 0 while translation is in flight, null when idle
 restorePage()
 ```
 
@@ -294,18 +299,18 @@ The default model (TranslateGemma 4B) supports translation between many language
 | Thai                  | `th`    |
 | Vietnamese            | `vi`    |
 
-Pass a custom `languages` array to `BabulfishProvider` to add or remove languages.
+Pass a custom `languages` array to `TranslatorProvider` to add or remove languages.
 
 ## Custom UI
 
 Skip `TranslateButton` and build your own with hooks:
 
 ```tsx
-import { BabulfishProvider, useBabulfish } from "babulfish"
+import { TranslatorProvider, useTranslator } from "babulfish"
 import "babulfish/css"
 
 function MyTranslateUI() {
-  const { model, loadModel, translateTo, restore, currentLanguage } = useBabulfish()
+  const { model, loadModel, translateTo, restore, currentLanguage } = useTranslator()
 
   if (model.status === "idle") {
     return <button onClick={loadModel}>Load translator</button>
@@ -331,12 +336,12 @@ function MyTranslateUI() {
 
 function App() {
   return (
-    <BabulfishProvider config={{ dom: { roots: ["#content"] } }}>
+    <TranslatorProvider config={{ dom: { roots: ["#content"] } }}>
       <MyTranslateUI />
       <main id="content">
         <p>Translatable content here.</p>
       </main>
-    </BabulfishProvider>
+    </TranslatorProvider>
   )
 }
 ```
@@ -350,7 +355,7 @@ Translate elements that contain inline markdown (bold/italic). The translated ma
 ```tsx
 import { renderInlineMarkdownToHtml } from "babulfish/dom"
 
-<BabulfishProvider config={{
+<TranslatorProvider config={{
   dom: {
     roots: ["#content"],
     richText: {
@@ -369,7 +374,7 @@ Elements matching `selector` are translated from the `sourceAttribute` value (ma
 Protect strings that must not be translated (brand names, technical terms):
 
 ```tsx
-<BabulfishProvider config={{
+<TranslatorProvider config={{
   dom: {
     roots: ["#content"],
     preserve: {
@@ -390,7 +395,7 @@ A `PreserveMatcher` is `string | RegExp | ((text: string) => string[])`. Matched
 Translate a group of elements sharing a key attribute once, then apply the same result to all:
 
 ```tsx
-<BabulfishProvider config={{
+<TranslatorProvider config={{
   dom: {
     roots: ["#content"],
     linkedBy: {
@@ -410,7 +415,7 @@ By default, babulfish skips text inside `<code>`, `<pre>`, `<script>`, `<style>`
 Override or extend:
 
 ```tsx
-<BabulfishProvider config={{
+<TranslatorProvider config={{
   dom: {
     roots: ["#content"],
     skipTags: ["kbd", "var"],  // additional tags to skip

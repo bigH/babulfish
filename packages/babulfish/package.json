@@ -26,6 +26,7 @@
   ],
   "scripts": {
     "build": "tsup && mkdir -p dist/css && cp src/css/babulfish.css dist/css/babulfish.css",
+    "docs:check": "tsc -p tsconfig.docs.json --pretty false",
     "test": "vitest run",
     "lint": "tsc --noEmit"
   },
