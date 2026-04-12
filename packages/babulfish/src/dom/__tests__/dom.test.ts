@@ -171,6 +171,27 @@ describe("DOM translator", () => {
     ])
   })
 
+  it("restores original plain text after translate -> translate -> restore", async () => {
+    const main = setUpMain([{ tag: "p", text: "Hello" }])
+    const paragraph = main.querySelector("p")!
+
+    translate
+      .mockResolvedValueOnce("2024")
+      .mockResolvedValueOnce("Bonjour")
+
+    const t = makeTranslator(translate)
+    await t.translate("es-ES")
+    await t.translate("fr")
+
+    expect(translate).toHaveBeenCalledTimes(2)
+    expect(translate.mock.calls[0]![0]).toBe("Hello")
+    expect(translate.mock.calls[1]![0]).toBe("Hello")
+    expect(paragraph.textContent).toBe("Bonjour")
+
+    t.restore()
+    expect(paragraph.textContent).toBe("Hello")
+  })
+
   // -----------------------------------------------------------------------
   // 5. Abort — second translate aborts the first
   // -----------------------------------------------------------------------
@@ -737,6 +758,120 @@ describe("DOM translator", () => {
     expect(b.textContent).toBe("Introduccion")
   })
 
+  it("restores linked groups after translate -> translate -> restore", async () => {
+    const main = document.createElement("main")
+    const a = document.createElement("span")
+    a.setAttribute("data-section-title", "intro")
+    a.textContent = "Introduction"
+    const b = document.createElement("span")
+    b.setAttribute("data-section-title", "intro")
+    b.textContent = "Introduction"
+    main.append(a, b)
+    document.body.appendChild(main)
+
+    translate
+      .mockResolvedValueOnce("2024")
+      .mockResolvedValueOnce("Apercu")
+
+    const t = makeTranslator(translate, {
+      linkedBy: {
+        selector: "[data-section-title]",
+        keyAttribute: "data-section-title",
+      },
+    })
+
+    await t.translate("es-ES")
+    await t.translate("fr")
+
+    expect(translate).toHaveBeenCalledTimes(2)
+    expect(translate.mock.calls[0]![0]).toBe("Introduction")
+    expect(translate.mock.calls[1]![0]).toBe("Introduction")
+    expect(a.textContent).toBe("Apercu")
+    expect(b.textContent).toBe("Apercu")
+
+    t.restore()
+    expect(a.textContent).toBe("Introduction")
+    expect(b.textContent).toBe("Introduction")
+  })
+
+  it("treats the current linked text as a new source after restore and DOM mutation", async () => {
+    const main = document.createElement("main")
+    const a = document.createElement("span")
+    a.setAttribute("data-section-title", "intro")
+    a.textContent = "Introduction"
+    const b = document.createElement("span")
+    b.setAttribute("data-section-title", "intro")
+    b.textContent = "Introduction"
+    main.append(a, b)
+    document.body.appendChild(main)
+
+    translate
+      .mockResolvedValueOnce("Introduccion")
+      .mockResolvedValueOnce("Zusammenfassung")
+
+    const t = makeTranslator(translate, {
+      linkedBy: {
+        selector: "[data-section-title]",
+        keyAttribute: "data-section-title",
+      },
+    })
+
+    await t.translate("es-ES")
+    t.restore()
+
+    a.textContent = "Summary"
+    b.textContent = "Summary"
+
+    await t.translate("de")
+
+    expect(translate).toHaveBeenCalledTimes(2)
+    expect(translate.mock.calls[1]![0]).toBe("Summary")
+    expect(a.textContent).toBe("Zusammenfassung")
+    expect(b.textContent).toBe("Zusammenfassung")
+  })
+
+  it("restores remounted linked nodes from the keyed original source", async () => {
+    const main = document.createElement("main")
+    const a = document.createElement("span")
+    a.setAttribute("data-section-title", "intro")
+    a.textContent = "Introduction"
+    const b = document.createElement("span")
+    b.setAttribute("data-section-title", "intro")
+    b.textContent = "Introduction"
+    main.append(a, b)
+    document.body.appendChild(main)
+
+    translate
+      .mockResolvedValueOnce("Introduccion")
+      .mockResolvedValueOnce("Apercu")
+
+    const t = makeTranslator(translate, {
+      linkedBy: {
+        selector: "[data-section-title]",
+        keyAttribute: "data-section-title",
+      },
+    })
+
+    await t.translate("es-ES")
+
+    const remounted = document.createElement("span")
+    remounted.setAttribute("data-section-title", "intro")
+    remounted.textContent = "Introduccion"
+    b.replaceWith(remounted)
+
+    await t.translate("fr")
+
+    expect(translate).toHaveBeenCalledTimes(2)
+    expect(translate.mock.calls[1]![0]).toBe("Introduction")
+    expect(a.textContent).toBe("Apercu")
+    expect(remounted.textContent).toBe("Apercu")
+
+    t.restore()
+
+    expect(a.textContent).toBe("Introduction")
+    expect(remounted.textContent).toBe("Introduction")
+  })
+
   // -----------------------------------------------------------------------
   // NEW: Lifecycle hooks
   // -----------------------------------------------------------------------
@@ -816,6 +951,30 @@ describe("DOM translator", () => {
     const t = makeTranslator(translate)
     await t.translate("es-ES")
     expect(a.getAttribute("title")).toBe("Ir a casa")
+
+    t.restore()
+    expect(a.getAttribute("title")).toBe("Go home")
+  })
+
+  it("restores translated attributes after translate -> translate -> restore", async () => {
+    const main = document.createElement("main")
+    const a = document.createElement("a")
+    a.setAttribute("title", "Go home")
+    main.appendChild(a)
+    document.body.appendChild(main)
+
+    translate
+      .mockResolvedValueOnce("1")
+      .mockResolvedValueOnce("Aller a la maison")
+
+    const t = makeTranslator(translate)
+    await t.translate("es-ES")
+    await t.translate("fr")
+
+    expect(translate).toHaveBeenCalledTimes(2)
+    expect(translate.mock.calls[0]![0]).toBe("Go home")
+    expect(translate.mock.calls[1]![0]).toBe("Go home")
+    expect(a.getAttribute("title")).toBe("Aller a la maison")
 
     t.restore()
     expect(a.getAttribute("title")).toBe("Go home")

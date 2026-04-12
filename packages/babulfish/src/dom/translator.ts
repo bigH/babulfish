@@ -131,6 +131,7 @@ export function createDOMTranslator(config: DOMTranslatorConfig): DOMTranslator 
   const originalTexts = new WeakMap<Text, string>()
   const originalRichElements = new Map<Element, string>()
   const originalAttrs = new Map<Element, Record<string, string>>()
+  const originalLinkedSources = new Map<string, string>()
   const savedDirs = new Map<Element, string | null>()
   let activeController: AbortController | null = null
   let translating = false
@@ -151,6 +152,37 @@ export function createDOMTranslator(config: DOMTranslatorConfig): DOMTranslator 
   const skipSelectors: Array<{ selector: string }> = []
   if (config.richText) skipSelectors.push({ selector: `[${config.richText.sourceAttribute}]` })
   if (config.linkedBy) skipSelectors.push({ selector: `[${config.linkedBy.keyAttribute}]` })
+
+  function captureLinkedOriginalText(node: Text, key: string): string {
+    const original = originalTexts.get(node)
+    if (original != null) return original
+    const current = originalLinkedSources.get(key) ?? node.textContent ?? ""
+    originalTexts.set(node, current)
+    return current
+  }
+
+  function getOriginalAttrValue(el: Element, attrName: string): string | null {
+    const attrs = originalAttrs.get(el)
+    if (attrs && attrName in attrs) return attrs[attrName]!
+    return el.getAttribute(attrName)
+  }
+
+  function captureOriginalAttrValue(el: Element, attrName: string): string | null {
+    const current = el.getAttribute(attrName)
+    if (current == null) return null
+
+    let attrs = originalAttrs.get(el)
+    if (!attrs) {
+      attrs = {}
+      originalAttrs.set(el, attrs)
+    }
+
+    if (!(attrName in attrs)) {
+      attrs[attrName] = current
+    }
+
+    return attrs[attrName]!
+  }
 
   // -------------------------------------------------------------------------
   // Linked element sync (e.g. section titles)
@@ -187,28 +219,39 @@ export function createDOMTranslator(config: DOMTranslatorConfig): DOMTranslator 
       }
     }
 
-    for (const [, elements] of groups) {
+    for (const [key, elements] of groups) {
       if (signal.aborted) return
 
-      const first = elements[0]!
-      const firstNode = findDirectTextNode(first)
-      const sourceText = firstNode?.textContent?.trim()
-      if (!sourceText || shouldSkip(sourceText)) {
+      const writableTargets = elements.flatMap((el) => {
+        const textNode = findDirectTextNode(el)
+        return textNode ? [{ el, textNode }] : []
+      })
+      if (writableTargets.length === 0) {
         onUnit()
         continue
       }
 
-      for (const el of elements) notifyStart(el, config.hooks?.onTranslateStart)
+      const sourceText =
+        originalLinkedSources.get(key)
+        ?? writableTargets[0]!.textNode.textContent?.trim()
+        ?? ""
+      if (!sourceText || shouldSkip(sourceText)) {
+        onUnit()
+        continue
+      }
+      if (!originalLinkedSources.has(key)) {
+        originalLinkedSources.set(key, sourceText)
+      }
+
+      for (const { el } of writableTargets) {
+        notifyStart(el, config.hooks?.onTranslateStart)
+      }
 
       const translated = await config.translate(sourceText, targetLang)
       if (signal.aborted) return
 
-      for (const el of elements) {
-        const textNode = findDirectTextNode(el)
-        if (!textNode) continue
-        if (!originalTexts.has(textNode)) {
-          originalTexts.set(textNode, textNode.textContent!)
-        }
+      for (const { el, textNode } of writableTargets) {
+        captureLinkedOriginalText(textNode, key)
         textNode.textContent = translated
         notifyEnd(el, config.hooks?.onTranslateEnd)
       }
@@ -225,10 +268,10 @@ export function createDOMTranslator(config: DOMTranslatorConfig): DOMTranslator 
     const items: TranslatableAttr[] = []
     for (const attrName of attrNames) {
       for (const el of root.querySelectorAll(`[${attrName}]`)) {
-        const text = el.getAttribute(attrName)!
-        if (shouldSkip(text)) continue
-        if (!originalAttrs.has(el)) originalAttrs.set(el, {})
-        originalAttrs.get(el)![attrName] = text
+        const sourceText = getOriginalAttrValue(el, attrName)
+        if (sourceText == null || shouldSkip(sourceText)) continue
+        const text = captureOriginalAttrValue(el, attrName)
+        if (text == null) continue
         items.push({ el, attr: attrName, text })
       }
     }
@@ -445,6 +488,7 @@ export function createDOMTranslator(config: DOMTranslatorConfig): DOMTranslator 
       }
     }
     originalAttrs.clear()
+    originalLinkedSources.clear()
 
     // Restore text nodes
     const roots = resolveRoots(config.roots)

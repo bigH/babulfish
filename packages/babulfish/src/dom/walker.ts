@@ -57,9 +57,10 @@ export function collectTextNodes(
     acceptNode(node: Text) {
       if (isInsideSkipped(node, config.skipTags, skipSelectors))
         return NodeFilter.FILTER_REJECT
-      const text = node.textContent?.trim()
-      if (!text) return NodeFilter.FILTER_REJECT
-      if (config.shouldSkip(text)) return NodeFilter.FILTER_REJECT
+      const sourceText = originalTexts.get(node) ?? node.textContent ?? ""
+      const trimmed = sourceText.trim()
+      if (!trimmed) return NodeFilter.FILTER_REJECT
+      if (config.shouldSkip(trimmed)) return NodeFilter.FILTER_REJECT
       return NodeFilter.FILTER_ACCEPT
     },
   })
@@ -67,8 +68,11 @@ export function collectTextNodes(
   const nodes: TaggedTextNode[] = []
   let current = walker.nextNode() as Text | null
   while (current) {
-    originalTexts.set(current, current.textContent!)
-    nodes.push({ node: current, text: current.textContent ?? "" })
+    const sourceText = originalTexts.get(current) ?? current.textContent ?? ""
+    if (!originalTexts.has(current)) {
+      originalTexts.set(current, sourceText)
+    }
+    nodes.push({ node: current, text: sourceText })
     current = walker.nextNode() as Text | null
   }
   return nodes
