@@ -4,6 +4,7 @@
 import { createContext, useContext } from "react"
 import type { Translator } from "../engine/index.js"
 import type { DOMTranslator } from "../dom/index.js"
+import type { DevicePreference } from "../engine/detect.js"
 
 // ---------------------------------------------------------------------------
 // Types (shared across react layer)
@@ -18,6 +19,7 @@ export type TranslatorContextValue = {
   readonly engine: Translator
   readonly domTranslator: DOMTranslator | null
   readonly languages: TranslatorLanguage[]
+  readonly devicePreference: DevicePreference
 }
 
 // ---------------------------------------------------------------------------

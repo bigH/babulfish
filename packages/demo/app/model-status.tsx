@@ -3,8 +3,16 @@
 import { useTranslator } from "babulfish"
 
 export function ModelStatus() {
-  const { model, translation, currentLanguage, capabilitiesReady, isSupported } =
-    useTranslator()
+  const {
+    model,
+    translation,
+    currentLanguage,
+    capabilitiesReady,
+    hasWebGPU,
+    canTranslate,
+    device,
+    isMobile,
+  } = useTranslator()
 
   return (
     <section className="rounded-lg border border-gray-200 bg-gray-50 p-4">
@@ -15,9 +23,31 @@ export function ModelStatus() {
         <dt className="font-medium text-gray-600">WebGPU</dt>
         <dd>
           {capabilitiesReady
-            ? isSupported
+            ? hasWebGPU
               ? "Supported"
               : "Not available"
+            : "Checking"}
+        </dd>
+
+        <dt className="font-medium text-gray-600">Translation Path</dt>
+        <dd>
+          {capabilitiesReady
+            ? canTranslate
+              ? device === "webgpu"
+                ? "WebGPU"
+                : "WASM fallback"
+              : "Unavailable"
+            : "Checking"}
+        </dd>
+
+        <dt className="font-medium text-gray-600">Default Button</dt>
+        <dd>
+          {capabilitiesReady
+            ? isMobile
+              ? "Desktop only for now"
+              : canTranslate
+                ? "Available"
+                : "Unavailable"
             : "Checking"}
         </dd>
 

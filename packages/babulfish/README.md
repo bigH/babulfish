@@ -4,7 +4,7 @@
 
 No server. No API keys. Translation runs entirely in the browser using [TranslateGemma](https://huggingface.co/onnx-community/translategemma-text-4b-it-ONNX) via `@huggingface/transformers`.
 
-**Heads up:** the default model is ~2.9 GB (q4 quantized). It's cached after the first download, but users need a decent connection and a WebGPU-capable browser for the best experience. WASM fallback is available but slower.
+**Heads up:** the default model is ~2.9 GB (q4 quantized). It's cached after the first download, but users need a decent connection and a WebGPU-capable browser for the best experience. WASM fallback is available but slower, and the default `TranslateButton` uses it on desktop browsers without WebGPU.
 
 ## Quick Start
 
@@ -25,7 +25,7 @@ function App() {
 }
 ```
 
-That's it. The button handles model download, language selection, and DOM translation.
+That's it. The button handles model download, language selection, and DOM translation. On desktop browsers without WebGPU, it stays available and falls back to slower WASM inference.
 
 ## Installation
 
@@ -213,7 +213,7 @@ Drop-in translation button with a 5-state machine: idle -> confirm -> downloadin
 | `renderTooltip` | `(props) => ReactNode`      | Custom tooltip render function     |
 | `progressRing`  | `{ downloadColor?, translateColor? }` | Ring colors                |
 
-The button auto-hides on desktops without WebGPU. On mobile, it shows a "desktop only" message.
+The button stays available on desktop browsers without WebGPU and falls back to the slower WASM path. On mobile, it shows an explicit desktop-only warning instead of pretending translation is unavailable.
 
 #### `<TranslateDropdown>`
 
@@ -236,7 +236,10 @@ const {
   model,          // { status: "idle" | "downloading" | "ready" | "error", progress?, error? }
   translation,    // { status: "idle" | "translating", progress? }
   currentLanguage,
-  isSupported,    // WebGPU available?
+  isSupported,    // legacy alias for hasWebGPU
+  hasWebGPU,      // raw WebGPU availability
+  device,         // "webgpu" | "wasm" once capabilitiesReady is true
+  canTranslate,   // translation can run in this browser
   isMobile,
   languages,
   loadModel,      // () => Promise<void>
@@ -472,7 +475,7 @@ await Promise.all([
 | WASM fallback | Any modern browser (slower) |
 | SharedArrayBuffer | Required by some ONNX backends; needs [cross-origin isolation headers](https://web.dev/cross-origin-isolation-guide/) |
 
-Mobile browsers lack WebGPU support. The `TranslateButton` detects this and shows a "desktop only" message rather than failing silently.
+The engine can fall back to WASM when WebGPU is unavailable. The shipped `TranslateButton` uses that fallback on desktop, but keeps mobile as an explicit desktop-only product choice until the team validates mobile translation as a default experience.
 
 ## License
 

@@ -11,6 +11,7 @@ import {
 } from "react"
 import { useTranslator } from "./use-translator.js"
 import { TranslateDropdown } from "./translate-dropdown.js"
+import type { ResolvedDevice } from "../engine/detect.js"
 
 // ---------------------------------------------------------------------------
 // Types
@@ -29,6 +30,15 @@ type ProgressRingColors = {
   readonly translateColor?: string
 }
 
+type TooltipRenderProps = {
+  readonly mobile: boolean
+  readonly confirming: boolean
+  readonly hasWebGPU: boolean
+  readonly canTranslate: boolean
+  readonly device: ResolvedDevice | null
+  readonly defaultUIEnabled: boolean
+}
+
 type ButtonState =
   | { readonly kind: "idle" }
   | { readonly kind: "confirm" }
@@ -39,7 +49,7 @@ type ButtonState =
 export type TranslateButtonProps = {
   readonly classNames?: TranslateButtonClassNames
   readonly icon?: ReactNode
-  readonly renderTooltip?: (props: { mobile: boolean; confirming: boolean }) => ReactNode
+  readonly renderTooltip?: (props: TooltipRenderProps) => ReactNode
   readonly progressRing?: ProgressRingColors
 }
 
@@ -121,18 +131,27 @@ function ProgressRing({
 function DefaultTooltip({
   mobile,
   confirming,
+  hasWebGPU,
+  canTranslate,
+  device,
+  defaultUIEnabled,
   fading,
   onFadeComplete,
   className,
 }: {
   mobile: boolean
   confirming: boolean
+  hasWebGPU: boolean
+  canTranslate: boolean
+  device: ResolvedDevice | null
+  defaultUIEnabled: boolean
   fading: boolean
   onFadeComplete?: () => void
   className?: string
 }) {
   const baseStyle: React.CSSProperties = {
-    whiteSpace: "nowrap",
+    whiteSpace: "normal",
+    maxWidth: "18rem",
     padding: "0.5rem 0.75rem",
     borderRadius: "0.5rem",
     background: "var(--babulfish-surface, #fff)",
@@ -150,11 +169,22 @@ function DefaultTooltip({
       onTransitionEnd={fading ? onFadeComplete : undefined}
       role="tooltip"
     >
-      {mobile ? (
-        "Translation requires a desktop browser"
+      {!canTranslate ? (
+        "Translation is unavailable in this browser."
+      ) : !defaultUIEnabled && mobile ? (
+        "The default TranslateButton stays desktop-only for now. Mobile translation is not validated as a default product path yet."
       ) : confirming ? (
         <p style={{ margin: 0 }}>
-          Heads up: <strong>~2.9 GB download.</strong> Click again to confirm.
+          Heads up: <strong>~2.9 GB download.</strong>{" "}
+          {device === "wasm" && !hasWebGPU
+            ? "This browser will use the slower WASM fallback. "
+            : ""}
+          Click again to confirm.
+        </p>
+      ) : device === "wasm" && !hasWebGPU ? (
+        <p style={{ margin: 0 }}>
+          WebGPU is unavailable here, so translation will run through the
+          slower WASM fallback. <strong>Still client-side.</strong>
         </p>
       ) : (
         <p style={{ margin: 0 }}>
@@ -179,7 +209,9 @@ export function TranslateButton({
   const {
     model,
     capabilitiesReady,
-    isSupported,
+    hasWebGPU,
+    canTranslate,
+    device,
     isMobile,
     languages,
     loadModel,
@@ -296,7 +328,7 @@ export function TranslateButton({
         setState({ kind: "confirm" })
         break
       case "confirm":
-        if (isMobile) return
+        if (isMobile || !canTranslate) return
         startDownload()
         break
       case "ready":
@@ -342,11 +374,15 @@ export function TranslateButton({
   // Keep SSR and first client render on the same neutral markup.
   if (!capabilitiesReady) return null
 
-  // Don't render if WebGPU unavailable on desktop
-  if (!isSupported && !isMobile) return null
+  if (!canTranslate) return null
+
+  const defaultUIEnabled = canTranslate && !isMobile
+  const confirmDisabled = state.kind === "confirm" && !defaultUIEnabled
 
   const isInteractive =
-    state.kind !== "downloading" && state.kind !== "translating"
+    state.kind !== "downloading" &&
+    state.kind !== "translating" &&
+    !confirmDisabled
 
   const showTooltip =
     state.kind === "confirm" ||
@@ -364,6 +400,8 @@ export function TranslateButton({
       ? `Downloading translation model: ${Math.round(state.progress * 100)}%`
       : state.kind === "translating"
         ? "Translating page"
+        : state.kind === "confirm" && !defaultUIEnabled
+          ? "Translation is currently desktop-only"
         : state.kind === "ready"
           ? "Translation model ready"
           : "Translate page"
@@ -481,11 +519,22 @@ export function TranslateButton({
         {/* Tooltip */}
         {showTooltip && (
           renderTooltip
-            ? renderTooltip({ mobile: isMobile, confirming: state.kind === "confirm" })
+            ? renderTooltip({
+                mobile: isMobile,
+                confirming: state.kind === "confirm",
+                hasWebGPU,
+                canTranslate,
+                device,
+                defaultUIEnabled,
+              })
             : (
               <DefaultTooltip
                 mobile={isMobile}
                 confirming={state.kind === "confirm"}
+                hasWebGPU={hasWebGPU}
+                canTranslate={canTranslate}
+                device={device}
+                defaultUIEnabled={defaultUIEnabled}
                 fading={tooltipFading}
                 onFadeComplete={handlePeekFadeComplete}
                 className={classNames?.tooltip}

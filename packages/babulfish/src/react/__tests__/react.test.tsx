@@ -52,9 +52,23 @@ vi.mock("../../dom/index.js", () => ({
 }))
 
 // Detect mock
+let mockResolvedDevice: "webgpu" | "wasm" = "webgpu"
+let mockCanTranslate = true
+const mockGetTranslationCapabilities = vi.fn(
+  (_preference: "auto" | "webgpu" | "wasm" = "auto") => ({
+    hasWebGPU: mockIsWebGPUAvailable(),
+    isMobile: mockIsMobileDevice(),
+    device: mockResolvedDevice,
+    canTranslate: mockCanTranslate,
+  }),
+)
+
 vi.mock("../../engine/detect.js", () => ({
   isWebGPUAvailable: () => mockIsWebGPUAvailable(),
   isMobileDevice: () => mockIsMobileDevice(),
+  getTranslationCapabilities: (
+    preference: "auto" | "webgpu" | "wasm" = "auto",
+  ) => mockGetTranslationCapabilities(preference),
 }))
 
 const mockIsWebGPUAvailable = vi.fn(() => true)
@@ -105,6 +119,9 @@ function HookInspector() {
       <span data-testid="current-language">{state.currentLanguage ?? "none"}</span>
       <span data-testid="capabilities-ready">{String(state.capabilitiesReady)}</span>
       <span data-testid="is-supported">{String(state.isSupported)}</span>
+      <span data-testid="has-webgpu">{String(state.hasWebGPU)}</span>
+      <span data-testid="can-translate">{String(state.canTranslate)}</span>
+      <span data-testid="device">{state.device ?? "none"}</span>
       <span data-testid="is-mobile">{String(state.isMobile)}</span>
       <span data-testid="language-count">{state.languages.length}</span>
       <button data-testid="load" onClick={() => state.loadModel()}>Load</button>
@@ -127,12 +144,22 @@ function DOMHookInspector() {
 }
 
 function CapabilitySnapshotProbe() {
-  const { capabilitiesReady, isSupported, isMobile } = useTranslator()
+  const {
+    capabilitiesReady,
+    isSupported,
+    hasWebGPU,
+    canTranslate,
+    device,
+    isMobile,
+  } = useTranslator()
   return (
     <output data-testid="capabilities-probe">
       {JSON.stringify({
         capabilitiesReady,
         isSupported,
+        hasWebGPU,
+        canTranslate,
+        device,
         isMobile,
       })}
     </output>
@@ -156,6 +183,8 @@ describe("TranslatorProvider", () => {
     mockDOMCurrentLang = null
     mockIsWebGPUAvailable.mockReturnValue(true)
     mockIsMobileDevice.mockReturnValue(false)
+    mockResolvedDevice = "webgpu"
+    mockCanTranslate = true
     mockLoad.mockResolvedValue(undefined)
     mockTranslate.mockResolvedValue("translated")
     mockDOMTranslate.mockResolvedValue(undefined)
@@ -202,6 +231,8 @@ describe("useTranslator", () => {
     mockDOMCurrentLang = null
     mockIsWebGPUAvailable.mockReturnValue(true)
     mockIsMobileDevice.mockReturnValue(false)
+    mockResolvedDevice = "webgpu"
+    mockCanTranslate = true
     mockLoad.mockResolvedValue(undefined)
     mockTranslate.mockResolvedValue("translated")
     mockDOMTranslate.mockResolvedValue(undefined)
@@ -222,17 +253,24 @@ describe("useTranslator", () => {
     expect(screen.getByTestId("current-language")).toHaveTextContent("none")
     expect(screen.getByTestId("capabilities-ready")).toHaveTextContent("true")
     expect(screen.getByTestId("is-supported")).toHaveTextContent("true")
+    expect(screen.getByTestId("has-webgpu")).toHaveTextContent("true")
+    expect(screen.getByTestId("can-translate")).toHaveTextContent("true")
+    expect(screen.getByTestId("device")).toHaveTextContent("webgpu")
     expect(screen.getByTestId("is-mobile")).toHaveTextContent("false")
   })
 
-  it("reports isSupported=false when WebGPU unavailable", () => {
+  it("reports WASM fallback when WebGPU is unavailable", () => {
     mockIsWebGPUAvailable.mockReturnValue(false)
+    mockResolvedDevice = "wasm"
     render(
       <Wrapper config={DOM_CONFIG}>
         <HookInspector />
       </Wrapper>,
     )
     expect(screen.getByTestId("is-supported")).toHaveTextContent("false")
+    expect(screen.getByTestId("has-webgpu")).toHaveTextContent("false")
+    expect(screen.getByTestId("can-translate")).toHaveTextContent("true")
+    expect(screen.getByTestId("device")).toHaveTextContent("wasm")
   })
 
   it("reports isMobile=true on mobile device", () => {
@@ -243,6 +281,27 @@ describe("useTranslator", () => {
       </Wrapper>,
     )
     expect(screen.getByTestId("is-mobile")).toHaveTextContent("true")
+  })
+
+  it("uses the provider device preference when resolving capabilities", () => {
+    mockIsWebGPUAvailable.mockReturnValue(false)
+    mockResolvedDevice = "webgpu"
+    mockCanTranslate = false
+
+    render(
+      <Wrapper
+        config={{
+          engine: { device: "webgpu" },
+          dom: { roots: ["main"] },
+        }}
+      >
+        <HookInspector />
+      </Wrapper>,
+    )
+
+    expect(mockGetTranslationCapabilities).toHaveBeenCalledWith("webgpu")
+    expect(screen.getByTestId("device")).toHaveTextContent("webgpu")
+    expect(screen.getByTestId("can-translate")).toHaveTextContent("false")
   })
 
   it("keeps capability state neutral through hydration, then resolves browser capabilities", async () => {
@@ -256,6 +315,9 @@ describe("useTranslator", () => {
     expect(mockIsMobileDevice).not.toHaveBeenCalled()
     expect(serverHtml).toContain("&quot;capabilitiesReady&quot;:false")
     expect(serverHtml).toContain("&quot;isSupported&quot;:false")
+    expect(serverHtml).toContain("&quot;hasWebGPU&quot;:false")
+    expect(serverHtml).toContain("&quot;canTranslate&quot;:false")
+    expect(serverHtml).toContain("&quot;device&quot;:null")
     expect(serverHtml).toContain("&quot;isMobile&quot;:false")
 
     const container = document.createElement("div")
@@ -274,6 +336,9 @@ describe("useTranslator", () => {
 
     expect(container.textContent).toContain("\"capabilitiesReady\":false")
     expect(container.textContent).toContain("\"isSupported\":false")
+    expect(container.textContent).toContain("\"hasWebGPU\":false")
+    expect(container.textContent).toContain("\"canTranslate\":false")
+    expect(container.textContent).toContain("\"device\":null")
     expect(container.textContent).toContain("\"isMobile\":false")
     expect(mockIsWebGPUAvailable).not.toHaveBeenCalled()
     expect(mockIsMobileDevice).not.toHaveBeenCalled()
@@ -287,6 +352,9 @@ describe("useTranslator", () => {
     expect(mockIsMobileDevice).toHaveBeenCalledTimes(1)
     expect(container.textContent).toContain("\"capabilitiesReady\":true")
     expect(container.textContent).toContain("\"isSupported\":true")
+    expect(container.textContent).toContain("\"hasWebGPU\":true")
+    expect(container.textContent).toContain("\"canTranslate\":true")
+    expect(container.textContent).toContain("\"device\":\"webgpu\"")
     expect(container.textContent).toContain("\"isMobile\":false")
 
     await act(async () => {
@@ -329,6 +397,8 @@ describe("TranslateButton", () => {
     mockDOMCurrentLang = null
     mockIsWebGPUAvailable.mockReturnValue(true)
     mockIsMobileDevice.mockReturnValue(false)
+    mockResolvedDevice = "webgpu"
+    mockCanTranslate = true
     mockLoad.mockResolvedValue(undefined)
     mockTranslate.mockResolvedValue("translated")
     mockDOMTranslate.mockResolvedValue(undefined)
@@ -448,8 +518,9 @@ describe("TranslateButton", () => {
     expect(screen.getByText("French")).toBeInTheDocument()
   })
 
-  it("shows mobile message on mobile device", () => {
+  it("shows an explicit mobile warning state", () => {
     mockIsMobileDevice.mockReturnValue(true)
+    mockResolvedDevice = "wasm"
 
     render(
       <Wrapper config={DOM_CONFIG}>
@@ -457,18 +528,52 @@ describe("TranslateButton", () => {
       </Wrapper>,
     )
 
-    fireEvent.click(screen.getByRole("button"))
-    expect(
-      screen.getByText(/requires a desktop browser/i),
-    ).toBeInTheDocument()
+    const button = screen.getByRole("button")
+
+    fireEvent.click(button)
+
+    expect(screen.getByText(/desktop-only for now/i)).toBeInTheDocument()
+    expect(button).toBeDisabled()
   })
 
-  it("does not render when WebGPU is unavailable on desktop", () => {
+  it("renders and explains the WASM fallback when WebGPU is unavailable on desktop", async () => {
     mockIsWebGPUAvailable.mockReturnValue(false)
     mockIsMobileDevice.mockReturnValue(false)
+    mockResolvedDevice = "wasm"
+
+    render(
+      <Wrapper config={DOM_CONFIG}>
+        <TranslateButton />
+      </Wrapper>,
+    )
+
+    const button = screen.getByRole("button")
+
+    fireEvent.mouseEnter(button)
+    expect(screen.getByText(/slower WASM fallback/i)).toBeInTheDocument()
+
+    fireEvent.click(button)
+    expect(screen.getByText(/Click again to confirm/i)).toBeInTheDocument()
+
+    await act(async () => {
+      fireEvent.click(button)
+    })
+
+    expect(mockLoad).toHaveBeenCalledTimes(1)
+  })
+
+  it("does not render when the provider forces WebGPU on an unsupported desktop", () => {
+    mockIsWebGPUAvailable.mockReturnValue(false)
+    mockResolvedDevice = "webgpu"
+    mockCanTranslate = false
 
     const { container } = render(
-      <Wrapper config={DOM_CONFIG}>
+      <Wrapper
+        config={{
+          engine: { device: "webgpu" },
+          dom: { roots: ["main"] },
+        }}
+      >
         <TranslateButton />
       </Wrapper>,
     )

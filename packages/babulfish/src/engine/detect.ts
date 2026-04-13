@@ -1,7 +1,14 @@
 // Device and capability detection for translation engine
 
-type DevicePreference = "auto" | "webgpu" | "wasm"
-type ResolvedDevice = "webgpu" | "wasm"
+export type DevicePreference = "auto" | "webgpu" | "wasm"
+export type ResolvedDevice = "webgpu" | "wasm"
+
+export type TranslationCapabilities = {
+  readonly hasWebGPU: boolean
+  readonly isMobile: boolean
+  readonly device: ResolvedDevice
+  readonly canTranslate: boolean
+}
 
 const MOBILE_WIDTH_THRESHOLD = 768
 
@@ -25,5 +32,22 @@ export function resolveDevice(preference: DevicePreference): ResolvedDevice {
       return "wasm"
     case "auto":
       return isWebGPUAvailable() ? "webgpu" : "wasm"
+  }
+}
+
+export function getTranslationCapabilities(
+  preference: DevicePreference = "auto",
+): TranslationCapabilities {
+  const hasBrowserWindow = typeof window !== "undefined"
+  const hasWebGPU = isWebGPUAvailable()
+  const isMobile = hasBrowserWindow && isMobileDevice()
+  const device = resolveDevice(preference)
+
+  return {
+    hasWebGPU,
+    isMobile,
+    device,
+    canTranslate:
+      hasBrowserWindow && (device === "wasm" || hasWebGPU),
   }
 }

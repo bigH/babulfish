@@ -1,5 +1,10 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
-import { isWebGPUAvailable, isMobileDevice, resolveDevice } from "../detect.js"
+import { describe, it, expect, afterEach } from "vitest"
+import {
+  getTranslationCapabilities,
+  isMobileDevice,
+  isWebGPUAvailable,
+  resolveDevice,
+} from "../detect.js"
 
 describe("isWebGPUAvailable", () => {
   const originalNavigator = globalThis.navigator
@@ -30,10 +35,15 @@ describe("isWebGPUAvailable", () => {
 
 describe("isMobileDevice", () => {
   const originalWindow = globalThis.window
+  const originalNavigator = globalThis.navigator
 
   afterEach(() => {
     Object.defineProperty(globalThis, "window", {
       value: originalWindow,
+      configurable: true,
+    })
+    Object.defineProperty(globalThis, "navigator", {
+      value: originalNavigator,
       configurable: true,
     })
   })
@@ -92,5 +102,75 @@ describe("resolveDevice", () => {
       configurable: true,
     })
     expect(resolveDevice("auto")).toBe("webgpu")
+  })
+})
+
+describe("getTranslationCapabilities", () => {
+  const originalWindow = globalThis.window
+  const originalNavigator = globalThis.navigator
+
+  afterEach(() => {
+    Object.defineProperty(globalThis, "window", {
+      value: originalWindow,
+      configurable: true,
+    })
+    Object.defineProperty(globalThis, "navigator", {
+      value: originalNavigator,
+      configurable: true,
+    })
+  })
+
+  it("reports desktop WASM fallback when WebGPU is unavailable", () => {
+    Object.defineProperty(globalThis, "window", {
+      value: { innerWidth: 1280 },
+      configurable: true,
+    })
+    Object.defineProperty(globalThis, "navigator", {
+      value: { maxTouchPoints: 0 },
+      configurable: true,
+    })
+
+    expect(getTranslationCapabilities()).toEqual({
+      hasWebGPU: false,
+      isMobile: false,
+      device: "wasm",
+      canTranslate: true,
+    })
+  })
+
+  it("keeps mobile explicit without claiming the default UI path is unavailable", () => {
+    Object.defineProperty(globalThis, "window", {
+      value: { innerWidth: 400, ontouchstart: null },
+      configurable: true,
+    })
+    Object.defineProperty(globalThis, "navigator", {
+      value: { maxTouchPoints: 1 },
+      configurable: true,
+    })
+
+    expect(getTranslationCapabilities()).toEqual({
+      hasWebGPU: false,
+      isMobile: true,
+      device: "wasm",
+      canTranslate: true,
+    })
+  })
+
+  it("reports translation unavailable when WebGPU is forced but missing", () => {
+    Object.defineProperty(globalThis, "window", {
+      value: { innerWidth: 1280 },
+      configurable: true,
+    })
+    Object.defineProperty(globalThis, "navigator", {
+      value: { maxTouchPoints: 0 },
+      configurable: true,
+    })
+
+    expect(getTranslationCapabilities("webgpu")).toEqual({
+      hasWebGPU: false,
+      isMobile: false,
+      device: "webgpu",
+      canTranslate: false,
+    })
   })
 })

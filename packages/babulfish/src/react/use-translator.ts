@@ -1,7 +1,10 @@
 // useTranslator — primary hook wiring engine events to React state
 
 import { useCallback, useEffect, useState } from "react"
-import { isWebGPUAvailable, isMobileDevice } from "../engine/detect.js"
+import {
+  getTranslationCapabilities,
+  type ResolvedDevice,
+} from "../engine/detect.js"
 import { useTranslatorContext } from "./context.js"
 import type { TranslatorLanguage } from "./context.js"
 
@@ -25,6 +28,9 @@ export type UseTranslatorReturn = {
   readonly currentLanguage: string | null
   readonly capabilitiesReady: boolean
   readonly isSupported: boolean
+  readonly hasWebGPU: boolean
+  readonly canTranslate: boolean
+  readonly device: ResolvedDevice | null
   readonly isMobile: boolean
   readonly languages: TranslatorLanguage[]
   loadModel(): Promise<void>
@@ -35,14 +41,18 @@ export type UseTranslatorReturn = {
 
 type CapabilitySnapshot = {
   readonly ready: boolean
-  readonly supported: boolean
-  readonly mobile: boolean
+  readonly hasWebGPU: boolean
+  readonly canTranslate: boolean
+  readonly device: ResolvedDevice | null
+  readonly isMobile: boolean
 }
 
 const NEUTRAL_CAPABILITIES: CapabilitySnapshot = {
   ready: false,
-  supported: false,
-  mobile: false,
+  hasWebGPU: false,
+  canTranslate: false,
+  device: null,
+  isMobile: false,
 }
 
 // ---------------------------------------------------------------------------
@@ -50,7 +60,8 @@ const NEUTRAL_CAPABILITIES: CapabilitySnapshot = {
 // ---------------------------------------------------------------------------
 
 export function useTranslator(): UseTranslatorReturn {
-  const { engine, domTranslator, languages } = useTranslatorContext()
+  const { engine, domTranslator, languages, devicePreference } =
+    useTranslatorContext()
 
   const [model, setModel] = useState<ModelState>(() =>
     engine.status === "ready"
@@ -70,10 +81,9 @@ export function useTranslator(): UseTranslatorReturn {
   useEffect(() => {
     setCapabilities({
       ready: true,
-      supported: isWebGPUAvailable(),
-      mobile: isMobileDevice(),
+      ...getTranslationCapabilities(devicePreference),
     })
-  }, [])
+  }, [devicePreference])
 
   // Wire engine events -> model state
   useEffect(() => {
@@ -148,8 +158,11 @@ export function useTranslator(): UseTranslatorReturn {
     translation,
     currentLanguage,
     capabilitiesReady: capabilities.ready,
-    isSupported: capabilities.supported,
-    isMobile: capabilities.mobile,
+    isSupported: capabilities.hasWebGPU,
+    hasWebGPU: capabilities.hasWebGPU,
+    canTranslate: capabilities.canTranslate,
+    device: capabilities.device,
+    isMobile: capabilities.isMobile,
     languages,
     loadModel,
     translateTo,

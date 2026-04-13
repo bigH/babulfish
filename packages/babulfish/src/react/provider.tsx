@@ -11,6 +11,7 @@ import { createEngine } from "../engine/index.js"
 import { createDOMTranslator } from "../dom/index.js"
 import type { EngineConfig, Translator } from "../engine/index.js"
 import type { DOMTranslatorConfig, DOMTranslator } from "../dom/index.js"
+import type { DevicePreference } from "../engine/detect.js"
 import { TranslatorContext } from "./context.js"
 import type { TranslatorContextValue, TranslatorLanguage } from "./context.js"
 
@@ -73,6 +74,7 @@ export function TranslatorProvider({
   const engine = engineRef.current
 
   const languages = config?.languages ?? DEFAULT_LANGUAGES
+  const devicePreference: DevicePreference = config?.engine?.device ?? "auto"
 
   useEffect(() => {
     if (!config?.dom) return
@@ -96,8 +98,8 @@ export function TranslatorProvider({
   }, [engine])
 
   const value = useMemo<TranslatorContextValue>(
-    () => ({ engine, domTranslator, languages }),
-    [engine, domTranslator, languages],
+    () => ({ engine, domTranslator, languages, devicePreference }),
+    [devicePreference, domTranslator, engine, languages],
   )
 
   return (
