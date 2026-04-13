@@ -509,6 +509,40 @@ await Promise.all([
 
 The engine can fall back to WASM when WebGPU is unavailable. The shipped `TranslateButton` uses that fallback on desktop, but keeps mobile as an explicit desktop-only product choice until the team validates mobile translation as a default experience.
 
+### Cross-Origin Isolation
+
+If you force an ONNX backend that depends on `SharedArrayBuffer`, your app must be cross-origin isolated in production. Without it, those backends fail to initialize in the browser and translation either falls back to a slower path or does not start at all, depending on the backend you picked.
+
+For a Next.js app, add COOP and COEP headers at the app level:
+
+```ts
+import type { NextConfig } from "next"
+
+const nextConfig: NextConfig = {
+  async headers() {
+    return [
+      {
+        source: "/:path*",
+        headers: [
+          {
+            key: "Cross-Origin-Opener-Policy",
+            value: "same-origin",
+          },
+          {
+            key: "Cross-Origin-Embedder-Policy",
+            value: "require-corp",
+          },
+        ],
+      },
+    ]
+  },
+}
+
+export default nextConfig
+```
+
+That works on Vercel too because these headers ship with your Next.js deployment config. It is not magic dust, though: `Cross-Origin-Embedder-Policy: require-corp` can break third-party embeds and cross-origin assets unless they are served with compatible CORS or `Cross-Origin-Resource-Policy` headers, and `Cross-Origin-Opener-Policy: same-origin` can break popup/opener-based integrations such as OAuth, payments, and other cross-window communication flows. If your app depends on external iframes, scripts, fonts, images, or CDN assets you do not control, or on windows talking to each other via `window.opener`, treat this as an opt-in deployment decision and test those integrations before turning it on.
+
 ## License
 
 MIT

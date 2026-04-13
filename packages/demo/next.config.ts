@@ -10,6 +10,25 @@ const config: NextConfig = {
   experimental: {
     externalDir: true,
   },
+  // Revisit these before adding third-party embeds or opener-dependent flows
+  // such as OAuth or payment popups.
+  async headers() {
+    return [
+      {
+        source: "/:path*",
+        headers: [
+          {
+            key: "Cross-Origin-Opener-Policy",
+            value: "same-origin",
+          },
+          {
+            key: "Cross-Origin-Embedder-Policy",
+            value: "require-corp",
+          },
+        ],
+      },
+    ]
+  },
   transpilePackages: ["babulfish"],
   webpack: (webpackConfig) => {
     webpackConfig.resolve ??= {}
