@@ -3,7 +3,8 @@
 import { useTranslator } from "babulfish"
 
 export function ModelStatus() {
-  const { model, translation, currentLanguage, isSupported } = useTranslator()
+  const { model, translation, currentLanguage, capabilitiesReady, isSupported } =
+    useTranslator()
 
   return (
     <section className="rounded-lg border border-gray-200 bg-gray-50 p-4">
@@ -12,7 +13,13 @@ export function ModelStatus() {
       </h2>
       <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
         <dt className="font-medium text-gray-600">WebGPU</dt>
-        <dd>{isSupported ? "Supported" : "Not available"}</dd>
+        <dd>
+          {capabilitiesReady
+            ? isSupported
+              ? "Supported"
+              : "Not available"
+            : "Checking"}
+        </dd>
 
         <dt className="font-medium text-gray-600">Model</dt>
         <dd>

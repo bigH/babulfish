@@ -178,6 +178,7 @@ export function TranslateButton({
 }: TranslateButtonProps = {}) {
   const {
     model,
+    capabilitiesReady,
     isSupported,
     isMobile,
     languages,
@@ -337,6 +338,9 @@ export function TranslateButton({
     }
     setState({ kind: "ready", dropdownOpen: false })
   }
+
+  // Keep SSR and first client render on the same neutral markup.
+  if (!capabilitiesReady) return null
 
   // Don't render if WebGPU unavailable on desktop
   if (!isSupported && !isMobile) return null

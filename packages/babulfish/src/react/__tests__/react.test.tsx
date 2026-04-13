@@ -1,6 +1,8 @@
 /// <reference types="@testing-library/jest-dom" />
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import { render, screen, fireEvent, act, cleanup } from "@testing-library/react"
+import { hydrateRoot } from "react-dom/client"
+import { renderToString } from "react-dom/server"
 
 // ---------------------------------------------------------------------------
 // Mocks — must be declared before imports that use them
@@ -101,6 +103,7 @@ function HookInspector() {
       <span data-testid="model-status">{state.model.status}</span>
       <span data-testid="translation-status">{state.translation.status}</span>
       <span data-testid="current-language">{state.currentLanguage ?? "none"}</span>
+      <span data-testid="capabilities-ready">{String(state.capabilitiesReady)}</span>
       <span data-testid="is-supported">{String(state.isSupported)}</span>
       <span data-testid="is-mobile">{String(state.isMobile)}</span>
       <span data-testid="language-count">{state.languages.length}</span>
@@ -120,6 +123,19 @@ function DOMHookInspector() {
       <button data-testid="dom-translate" onClick={() => translatePage("fr")}>Translate</button>
       <button data-testid="dom-restore" onClick={() => restorePage()}>Restore</button>
     </div>
+  )
+}
+
+function CapabilitySnapshotProbe() {
+  const { capabilitiesReady, isSupported, isMobile } = useTranslator()
+  return (
+    <output data-testid="capabilities-probe">
+      {JSON.stringify({
+        capabilitiesReady,
+        isSupported,
+        isMobile,
+      })}
+    </output>
   )
 }
 
@@ -204,6 +220,7 @@ describe("useTranslator", () => {
     expect(screen.getByTestId("model-status")).toHaveTextContent("idle")
     expect(screen.getByTestId("translation-status")).toHaveTextContent("idle")
     expect(screen.getByTestId("current-language")).toHaveTextContent("none")
+    expect(screen.getByTestId("capabilities-ready")).toHaveTextContent("true")
     expect(screen.getByTestId("is-supported")).toHaveTextContent("true")
     expect(screen.getByTestId("is-mobile")).toHaveTextContent("false")
   })
@@ -226,6 +243,56 @@ describe("useTranslator", () => {
       </Wrapper>,
     )
     expect(screen.getByTestId("is-mobile")).toHaveTextContent("true")
+  })
+
+  it("keeps capability state neutral through hydration, then resolves browser capabilities", async () => {
+    const serverHtml = renderToString(
+      <Wrapper config={DOM_CONFIG}>
+        <CapabilitySnapshotProbe />
+      </Wrapper>,
+    )
+
+    expect(mockIsWebGPUAvailable).not.toHaveBeenCalled()
+    expect(mockIsMobileDevice).not.toHaveBeenCalled()
+    expect(serverHtml).toContain("&quot;capabilitiesReady&quot;:false")
+    expect(serverHtml).toContain("&quot;isSupported&quot;:false")
+    expect(serverHtml).toContain("&quot;isMobile&quot;:false")
+
+    const container = document.createElement("div")
+    container.innerHTML = serverHtml
+    document.body.append(container)
+
+    const recoverableError = vi.fn()
+
+    const root = hydrateRoot(
+      container,
+      <Wrapper config={DOM_CONFIG}>
+        <CapabilitySnapshotProbe />
+      </Wrapper>,
+      { onRecoverableError: recoverableError },
+    )
+
+    expect(container.textContent).toContain("\"capabilitiesReady\":false")
+    expect(container.textContent).toContain("\"isSupported\":false")
+    expect(container.textContent).toContain("\"isMobile\":false")
+    expect(mockIsWebGPUAvailable).not.toHaveBeenCalled()
+    expect(mockIsMobileDevice).not.toHaveBeenCalled()
+
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    expect(recoverableError).not.toHaveBeenCalled()
+    expect(mockIsWebGPUAvailable).toHaveBeenCalledTimes(1)
+    expect(mockIsMobileDevice).toHaveBeenCalledTimes(1)
+    expect(container.textContent).toContain("\"capabilitiesReady\":true")
+    expect(container.textContent).toContain("\"isSupported\":true")
+    expect(container.textContent).toContain("\"isMobile\":false")
+
+    await act(async () => {
+      root.unmount()
+    })
+    container.remove()
   })
 
   it("calls engine.load on loadModel", async () => {

@@ -23,6 +23,7 @@ export type UseTranslatorReturn = {
   readonly model: ModelState
   readonly translation: TranslationState
   readonly currentLanguage: string | null
+  readonly capabilitiesReady: boolean
   readonly isSupported: boolean
   readonly isMobile: boolean
   readonly languages: TranslatorLanguage[]
@@ -30,6 +31,18 @@ export type UseTranslatorReturn = {
   translateTo(code: string): Promise<void>
   restore(): void
   translate(text: string, lang: string): Promise<string>
+}
+
+type CapabilitySnapshot = {
+  readonly ready: boolean
+  readonly supported: boolean
+  readonly mobile: boolean
+}
+
+const NEUTRAL_CAPABILITIES: CapabilitySnapshot = {
+  ready: false,
+  supported: false,
+  mobile: false,
 }
 
 // ---------------------------------------------------------------------------
@@ -50,8 +63,17 @@ export function useTranslator(): UseTranslatorReturn {
   const [currentLanguage, setCurrentLanguage] = useState<string | null>(
     domTranslator?.currentLang ?? null,
   )
-  const [supported] = useState(() => isWebGPUAvailable())
-  const [mobile] = useState(() => isMobileDevice())
+  const [capabilities, setCapabilities] = useState<CapabilitySnapshot>(
+    NEUTRAL_CAPABILITIES,
+  )
+
+  useEffect(() => {
+    setCapabilities({
+      ready: true,
+      supported: isWebGPUAvailable(),
+      mobile: isMobileDevice(),
+    })
+  }, [])
 
   // Wire engine events -> model state
   useEffect(() => {
@@ -125,8 +147,9 @@ export function useTranslator(): UseTranslatorReturn {
     model,
     translation,
     currentLanguage,
-    isSupported: supported,
-    isMobile: mobile,
+    capabilitiesReady: capabilities.ready,
+    isSupported: capabilities.supported,
+    isMobile: capabilities.mobile,
     languages,
     loadModel,
     translateTo,
