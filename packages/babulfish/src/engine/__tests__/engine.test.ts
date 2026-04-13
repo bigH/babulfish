@@ -1,13 +1,63 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
+import type {
+  Message,
+  TextGenerationChatOutput,
+  TextGenerationPipeline,
+  TextGenerationStringOutput,
+} from "@huggingface/transformers"
 
 // ---------------------------------------------------------------------------
 // Mock @huggingface/transformers
 // ---------------------------------------------------------------------------
 
-const mockGenerator = vi.fn()
+function createMockTextGenerationPipeline() {
+  const generate = vi.fn<TextGenerationPipeline["_call"]>()
+  type GenerateOptions = Parameters<TextGenerationPipeline["_call"]>[1]
+
+  function mockGenerator(
+    texts: string,
+    options?: GenerateOptions,
+  ): Promise<TextGenerationStringOutput>
+  function mockGenerator(
+    texts: Message[],
+    options?: GenerateOptions,
+  ): Promise<TextGenerationChatOutput>
+  function mockGenerator(
+    texts: string[],
+    options?: GenerateOptions,
+  ): Promise<TextGenerationStringOutput[]>
+  function mockGenerator(
+    texts: Message[][],
+    options?: GenerateOptions,
+  ): Promise<TextGenerationChatOutput[]>
+  function mockGenerator(
+    texts: string | string[] | Message[] | Message[][],
+    options?: GenerateOptions,
+  ) {
+    return generate(texts, options)
+  }
+
+  return {
+    generate,
+    generator: Object.assign(mockGenerator, {
+      _call: generate,
+      task: "text-generation",
+      model: {} as TextGenerationPipeline["model"],
+      tokenizer: {} as TextGenerationPipeline["tokenizer"],
+      dispose: vi.fn(async () => {}),
+    }) satisfies TextGenerationPipeline,
+  }
+}
+
+function resolveMockPipeline(): Promise<TextGenerationPipeline> {
+  return Promise.resolve(mockGenerator)
+}
+
+const { generate: mockGenerate, generator: mockGenerator } =
+  createMockTextGenerationPipeline()
 
 vi.mock("@huggingface/transformers", () => ({
-  pipeline: vi.fn(() => Promise.resolve(mockGenerator)),
+  pipeline: vi.fn(resolveMockPipeline),
 }))
 
 // Must import after mock setup
@@ -34,10 +84,8 @@ function statusChanges(engine: ReturnType<typeof createEngine>) {
 describe("createEngine", () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mockGenerator.mockReset()
-    mockPipeline.mockImplementation(
-      () => Promise.resolve(mockGenerator) as ReturnType<typeof pipeline>,
-    )
+    mockGenerate.mockReset()
+    mockPipeline.mockImplementation(resolveMockPipeline)
   })
 
   it("returns idle status initially", () => {
@@ -57,10 +105,8 @@ describe("createEngine", () => {
 describe("load", () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mockGenerator.mockReset()
-    mockPipeline.mockImplementation(
-      () => Promise.resolve(mockGenerator) as ReturnType<typeof pipeline>,
-    )
+    mockGenerate.mockReset()
+    mockPipeline.mockImplementation(resolveMockPipeline)
   })
 
   it("transitions idle -> downloading -> ready", async () => {
@@ -116,9 +162,7 @@ describe("load", () => {
   })
 
   it("transitions to error on failure", async () => {
-    mockPipeline.mockImplementation(
-      () => Promise.reject(new Error("network down")) as ReturnType<typeof pipeline>,
-    )
+    mockPipeline.mockImplementation(() => Promise.reject(new Error("network down")))
 
     const engine = createEngine()
     const changes = statusChanges(engine)
@@ -134,12 +178,8 @@ describe("load", () => {
 
   it("allows retry after failure", async () => {
     mockPipeline
-      .mockImplementationOnce(
-        () => Promise.reject(new Error("fail")) as ReturnType<typeof pipeline>,
-      )
-      .mockImplementationOnce(
-        () => Promise.resolve(mockGenerator) as ReturnType<typeof pipeline>,
-      )
+      .mockImplementationOnce(() => Promise.reject(new Error("fail")))
+      .mockImplementationOnce(resolveMockPipeline)
 
     const engine = createEngine()
     await expect(engine.load()).rejects.toThrow("fail")
@@ -151,10 +191,8 @@ describe("load", () => {
 describe("translate", () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mockGenerator.mockReset()
-    mockPipeline.mockImplementation(
-      () => Promise.resolve(mockGenerator) as ReturnType<typeof pipeline>,
-    )
+    mockGenerate.mockReset()
+    mockPipeline.mockImplementation(resolveMockPipeline)
   })
 
   it("throws if model not loaded", async () => {
@@ -165,7 +203,7 @@ describe("translate", () => {
   })
 
   it("calls generator with correct message format", async () => {
-    mockGenerator.mockResolvedValue([
+    mockGenerate.mockResolvedValue([
       {
         generated_text: [
           { role: "user", content: "..." },
@@ -179,7 +217,7 @@ describe("translate", () => {
     const result = await engine.translate("hello", "es")
 
     expect(result).toBe("hola")
-    expect(mockGenerator).toHaveBeenCalledWith(
+    expect(mockGenerate).toHaveBeenCalledWith(
       [
         {
           role: "user",
@@ -198,7 +236,7 @@ describe("translate", () => {
   })
 
   it("respects custom maxNewTokens", async () => {
-    mockGenerator.mockResolvedValue([
+    mockGenerate.mockResolvedValue([
       {
         generated_text: [{ role: "assistant", content: "hola" }],
       },
@@ -208,14 +246,14 @@ describe("translate", () => {
     await engine.load()
     await engine.translate("hello", "es")
 
-    expect(mockGenerator).toHaveBeenCalledWith(
+    expect(mockGenerate).toHaveBeenCalledWith(
       expect.anything(),
       { max_new_tokens: 128 },
     )
   })
 
   it("throws on unexpected model output", async () => {
-    mockGenerator.mockResolvedValue([{ generated_text: [] }])
+    mockGenerate.mockResolvedValue([{ generated_text: [] }])
 
     const engine = createEngine()
     await engine.load()
@@ -228,10 +266,8 @@ describe("translate", () => {
 describe("dispose", () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mockGenerator.mockReset()
-    mockPipeline.mockImplementation(
-      () => Promise.resolve(mockGenerator) as ReturnType<typeof pipeline>,
-    )
+    mockGenerate.mockReset()
+    mockPipeline.mockImplementation(resolveMockPipeline)
   })
 
   it("resets status to idle and removes listeners", async () => {
@@ -260,10 +296,8 @@ describe("dispose", () => {
 describe("event emitter", () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mockGenerator.mockReset()
-    mockPipeline.mockImplementation(
-      () => Promise.resolve(mockGenerator) as ReturnType<typeof pipeline>,
-    )
+    mockGenerate.mockReset()
+    mockPipeline.mockImplementation(resolveMockPipeline)
   })
 
   it("on() returns unsubscribe function", async () => {
@@ -284,7 +318,7 @@ describe("event emitter", () => {
 
     mockPipeline.mockImplementation((_task, _model, opts) => {
       capturedCallback = (opts as { progress_callback: (e: unknown) => void }).progress_callback
-      return Promise.resolve(mockGenerator) as ReturnType<typeof pipeline>
+      return resolveMockPipeline()
     })
 
     const engine = createEngine()
@@ -325,7 +359,7 @@ describe("event emitter", () => {
 
     mockPipeline.mockImplementation((_task, _model, opts) => {
       capturedCallback = (opts as { progress_callback: (e: unknown) => void }).progress_callback
-      return Promise.resolve(mockGenerator) as ReturnType<typeof pipeline>
+      return resolveMockPipeline()
     })
 
     const engine = createEngine()
@@ -344,10 +378,8 @@ describe("event emitter", () => {
 describe("multiple instances", () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mockGenerator.mockReset()
-    mockPipeline.mockImplementation(
-      () => Promise.resolve(mockGenerator) as ReturnType<typeof pipeline>,
-    )
+    mockGenerate.mockReset()
+    mockPipeline.mockImplementation(resolveMockPipeline)
   })
 
   it("instances are fully independent", async () => {

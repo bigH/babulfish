@@ -1,13 +1,63 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
+import type {
+  Message,
+  TextGenerationChatOutput,
+  TextGenerationPipeline,
+  TextGenerationStringOutput,
+} from "@huggingface/transformers"
 
 // ---------------------------------------------------------------------------
 // Mock @huggingface/transformers
 // ---------------------------------------------------------------------------
 
-const mockGenerator = vi.fn()
+function createMockTextGenerationPipeline() {
+  const generate = vi.fn<TextGenerationPipeline["_call"]>()
+  type GenerateOptions = Parameters<TextGenerationPipeline["_call"]>[1]
+
+  function mockGenerator(
+    texts: string,
+    options?: GenerateOptions,
+  ): Promise<TextGenerationStringOutput>
+  function mockGenerator(
+    texts: Message[],
+    options?: GenerateOptions,
+  ): Promise<TextGenerationChatOutput>
+  function mockGenerator(
+    texts: string[],
+    options?: GenerateOptions,
+  ): Promise<TextGenerationStringOutput[]>
+  function mockGenerator(
+    texts: Message[][],
+    options?: GenerateOptions,
+  ): Promise<TextGenerationChatOutput[]>
+  function mockGenerator(
+    texts: string | string[] | Message[] | Message[][],
+    options?: GenerateOptions,
+  ) {
+    return generate(texts, options)
+  }
+
+  return {
+    generate,
+    generator: Object.assign(mockGenerator, {
+      _call: generate,
+      task: "text-generation",
+      model: {} as TextGenerationPipeline["model"],
+      tokenizer: {} as TextGenerationPipeline["tokenizer"],
+      dispose: vi.fn(async () => {}),
+    }) satisfies TextGenerationPipeline,
+  }
+}
+
+function resolveMockPipeline(): Promise<TextGenerationPipeline> {
+  return Promise.resolve(mockGenerator)
+}
+
+const { generate: mockGenerate, generator: mockGenerator } =
+  createMockTextGenerationPipeline()
 
 vi.mock("@huggingface/transformers", () => ({
-  pipeline: vi.fn(() => Promise.resolve(mockGenerator)),
+  pipeline: vi.fn(resolveMockPipeline),
 }))
 
 import { createTranslator } from "../translator.js"
@@ -39,10 +89,8 @@ function setUpMain(
 describe("createTranslator", () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mockGenerator.mockReset()
-    mockPipeline.mockImplementation(
-      () => Promise.resolve(mockGenerator) as ReturnType<typeof pipeline>,
-    )
+    mockGenerate.mockReset()
+    mockPipeline.mockImplementation(resolveMockPipeline)
   })
 
   afterEach(() => {
@@ -92,7 +140,7 @@ describe("createTranslator", () => {
   })
 
   it("wires engine.translate into DOM translator", async () => {
-    mockGenerator.mockResolvedValue([
+    mockGenerate.mockResolvedValue([
       { generated_text: [{ role: "assistant", content: "hola mundo" }] },
     ])
 
@@ -105,7 +153,7 @@ describe("createTranslator", () => {
     await engine.load()
     await dom.translate("es")
 
-    expect(mockGenerator).toHaveBeenCalled()
+    expect(mockGenerate).toHaveBeenCalled()
     expect(document.querySelector("p")?.textContent).toBe("hola mundo")
   })
 })
