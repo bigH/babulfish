@@ -55,22 +55,26 @@ const NEUTRAL_CAPABILITIES: CapabilitySnapshot = {
   isMobile: false,
 }
 
+const IDLE_TRANSLATION: TranslationState = { status: "idle" }
+
 // ---------------------------------------------------------------------------
 // Hook
 // ---------------------------------------------------------------------------
 
 export function useTranslator(): UseTranslatorReturn {
-  const { engine, domTranslator, languages, devicePreference } =
-    useTranslatorContext()
+  const {
+    engine,
+    domTranslator,
+    translationProgress,
+    languages,
+    devicePreference,
+  } = useTranslatorContext()
 
   const [model, setModel] = useState<ModelState>(() =>
     engine.status === "ready"
       ? { status: "ready" }
       : { status: "idle" },
   )
-  const [translation, setTranslation] = useState<TranslationState>({
-    status: "idle",
-  })
   const [currentLanguage, setCurrentLanguage] = useState<string | null>(
     domTranslator?.currentLang ?? null,
   )
@@ -126,18 +130,11 @@ export function useTranslator(): UseTranslatorReturn {
       if (code === "restore") {
         domTranslator.restore()
         setCurrentLanguage(null)
-        setTranslation({ status: "idle" })
         return
       }
 
-      setTranslation({ status: "translating", progress: 0 })
-
-      try {
-        await domTranslator.translate(code)
-        setCurrentLanguage(code)
-      } finally {
-        setTranslation({ status: "idle" })
-      }
+      await domTranslator.translate(code)
+      setCurrentLanguage(code)
     },
     [domTranslator],
   )
@@ -145,13 +142,17 @@ export function useTranslator(): UseTranslatorReturn {
   const restore = useCallback(() => {
     domTranslator?.restore()
     setCurrentLanguage(null)
-    setTranslation({ status: "idle" })
   }, [domTranslator])
 
   const translate = useCallback(
     (text: string, lang: string) => engine.translate(text, lang),
     [engine],
   )
+
+  const translation: TranslationState =
+    translationProgress === null
+      ? IDLE_TRANSLATION
+      : { status: "translating", progress: translationProgress }
 
   return {
     model,

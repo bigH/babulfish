@@ -36,19 +36,29 @@ const mockDOMRestore = vi.fn()
 const mockDOMAbort = vi.fn()
 let mockDOMIsTranslating = false
 let mockDOMCurrentLang: string | null = null
+type MockDOMHooks = {
+  readonly onTranslateStart?: (element: Element) => void
+  readonly onTranslateEnd?: (element: Element) => void
+  readonly onProgress?: (done: number, total: number) => void
+  readonly onDirectionChange?: (root: Element, dir: "ltr" | "rtl") => void
+}
+let mockDOMHooks: MockDOMHooks | undefined
 
 vi.mock("../../dom/index.js", () => ({
-  createDOMTranslator: () => ({
-    translate: (lang: string) => mockDOMTranslate(lang),
-    restore: () => mockDOMRestore(),
-    abort: () => mockDOMAbort(),
-    get isTranslating() {
-      return mockDOMIsTranslating
-    },
-    get currentLang() {
-      return mockDOMCurrentLang
-    },
-  }),
+  createDOMTranslator: (config: { hooks?: MockDOMHooks }) => {
+    mockDOMHooks = config.hooks
+    return {
+      translate: (lang: string) => mockDOMTranslate(lang),
+      restore: () => mockDOMRestore(),
+      abort: () => mockDOMAbort(),
+      get isTranslating() {
+        return mockDOMIsTranslating
+      },
+      get currentLang() {
+        return mockDOMCurrentLang
+      },
+    }
+  },
 }))
 
 // Detect mock
@@ -166,6 +176,16 @@ function CapabilitySnapshotProbe() {
   )
 }
 
+function createDeferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise
+    reject = rejectPromise
+  })
+  return { promise, resolve, reject }
+}
+
 // Set up mockOn to return an unsubscribe fn by default
 function setupMockOn() {
   mockOn.mockImplementation(() => () => {})
@@ -181,6 +201,7 @@ describe("TranslatorProvider", () => {
     mockEngineStatus = "idle"
     mockDOMIsTranslating = false
     mockDOMCurrentLang = null
+    mockDOMHooks = undefined
     mockIsWebGPUAvailable.mockReturnValue(true)
     mockIsMobileDevice.mockReturnValue(false)
     mockResolvedDevice = "webgpu"
@@ -229,6 +250,7 @@ describe("useTranslator", () => {
     mockEngineStatus = "idle"
     mockDOMIsTranslating = false
     mockDOMCurrentLang = null
+    mockDOMHooks = undefined
     mockIsWebGPUAvailable.mockReturnValue(true)
     mockIsMobileDevice.mockReturnValue(false)
     mockResolvedDevice = "webgpu"
@@ -395,6 +417,7 @@ describe("TranslateButton", () => {
     mockEngineStatus = "idle"
     mockDOMIsTranslating = false
     mockDOMCurrentLang = null
+    mockDOMHooks = undefined
     mockIsWebGPUAvailable.mockReturnValue(true)
     mockIsMobileDevice.mockReturnValue(false)
     mockResolvedDevice = "webgpu"
@@ -580,6 +603,58 @@ describe("TranslateButton", () => {
 
     expect(container.querySelector("button")).toBeNull()
   })
+
+  it("shows non-zero translation progress from hook state", async () => {
+    let statusHandler: ((data: { from: string; to: string }) => void) | null = null
+    mockOn.mockImplementation((event, handler) => {
+      if (event === "status-change") {
+        statusHandler = handler as (data: { from: string; to: string }) => void
+      }
+      return () => {}
+    })
+    mockLoad.mockImplementation(async () => {
+      mockEngineStatus = "ready"
+      statusHandler?.({ from: "downloading", to: "ready" })
+    })
+
+    const deferred = createDeferred<void>()
+    mockDOMTranslate.mockImplementation(async () => {
+      const paragraph = document.createElement("p")
+      mockDOMHooks?.onTranslateStart?.(paragraph)
+      mockDOMHooks?.onProgress?.(1, 2)
+      await deferred.promise
+      mockDOMHooks?.onProgress?.(2, 2)
+      mockDOMHooks?.onTranslateEnd?.(paragraph)
+    })
+
+    render(
+      <Wrapper config={DOM_CONFIG}>
+        <TranslateButton />
+      </Wrapper>,
+    )
+
+    const button = screen.getByRole("button")
+
+    fireEvent.click(button)
+    await act(async () => {
+      fireEvent.click(button)
+    })
+
+    fireEvent.click(button)
+    await act(async () => {
+      fireEvent.click(screen.getByText("Spanish"))
+      await Promise.resolve()
+    })
+
+    expect(button).toHaveTextContent("50%")
+
+    await act(async () => {
+      deferred.resolve()
+      await Promise.resolve()
+    })
+
+    expect(button).not.toHaveTextContent("50%")
+  })
 })
 
 describe("TranslateDropdown", () => {
@@ -686,6 +761,7 @@ describe("useTranslateDOM", () => {
     mockEngineStatus = "idle"
     mockDOMIsTranslating = false
     mockDOMCurrentLang = null
+    mockDOMHooks = undefined
     mockDOMTranslate.mockResolvedValue(undefined)
     setupMockOn()
   })
@@ -724,6 +800,53 @@ describe("useTranslateDOM", () => {
       </Wrapper>,
     )
 
+    expect(screen.getByTestId("dom-progress")).toHaveTextContent("null")
+  })
+
+  it("composes user DOM hooks and exposes real progress", async () => {
+    const onTranslateStart = vi.fn()
+    const onTranslateEnd = vi.fn()
+    const onProgress = vi.fn()
+    const deferred = createDeferred<void>()
+
+    mockDOMTranslate.mockImplementation(async () => {
+      const paragraph = document.createElement("p")
+      mockDOMHooks?.onTranslateStart?.(paragraph)
+      mockDOMHooks?.onProgress?.(1, 2)
+      await deferred.promise
+      mockDOMHooks?.onProgress?.(2, 2)
+      mockDOMHooks?.onTranslateEnd?.(paragraph)
+    })
+
+    render(
+      <Wrapper
+        config={{
+          dom: {
+            roots: ["main"],
+            hooks: { onTranslateStart, onTranslateEnd, onProgress },
+          },
+        }}
+      >
+        <DOMHookInspector />
+      </Wrapper>,
+    )
+
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("dom-translate"))
+      await Promise.resolve()
+    })
+
+    expect(screen.getByTestId("dom-progress")).toHaveTextContent("0.5")
+    expect(onTranslateStart).toHaveBeenCalledTimes(1)
+    expect(onProgress).toHaveBeenCalledWith(1, 2)
+    expect(onTranslateEnd).not.toHaveBeenCalled()
+
+    await act(async () => {
+      deferred.resolve()
+      await Promise.resolve()
+    })
+
+    expect(onTranslateEnd).toHaveBeenCalledTimes(1)
     expect(screen.getByTestId("dom-progress")).toHaveTextContent("null")
   })
 })

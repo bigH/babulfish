@@ -257,7 +257,7 @@ Lighter hook for custom UIs that only need DOM translation controls.
 const { translatePage, restorePage, progress } = useTranslateDOM()
 
 await translatePage("ja")
-// progress is 0 while translation is in flight, null when idle
+// progress is 0..1 while translation is in flight, null when idle
 restorePage()
 ```
 

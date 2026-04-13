@@ -1,7 +1,7 @@
 // useTranslateDOM — thin wrapper around the DOM translator for consumers
 // who build their own UI and skip TranslateButton
 
-import { useCallback, useState } from "react"
+import { useCallback } from "react"
 import { useTranslatorContext } from "./context.js"
 
 export type UseTranslateDOMReturn = {
@@ -11,27 +11,20 @@ export type UseTranslateDOMReturn = {
 }
 
 export function useTranslateDOM(): UseTranslateDOMReturn {
-  const { domTranslator } = useTranslatorContext()
-  const [progress, setProgress] = useState<number | null>(null)
+  const { domTranslator, translationProgress } = useTranslatorContext()
 
   const translatePage = useCallback(
     async (lang: string) => {
       if (!domTranslator) return
 
-      setProgress(0)
-      try {
-        await domTranslator.translate(lang)
-      } finally {
-        setProgress(null)
-      }
+      await domTranslator.translate(lang)
     },
     [domTranslator],
   )
 
   const restorePage = useCallback(() => {
     domTranslator?.restore()
-    setProgress(null)
   }, [domTranslator])
 
-  return { translatePage, restorePage, progress }
+  return { translatePage, restorePage, progress: translationProgress }
 }

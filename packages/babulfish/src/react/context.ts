@@ -18,6 +18,7 @@ export type TranslatorLanguage = {
 export type TranslatorContextValue = {
   readonly engine: Translator
   readonly domTranslator: DOMTranslator | null
+  readonly translationProgress: number | null
   readonly languages: TranslatorLanguage[]
   readonly devicePreference: DevicePreference
 }

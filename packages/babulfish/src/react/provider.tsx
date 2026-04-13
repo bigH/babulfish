@@ -53,6 +53,26 @@ export const DEFAULT_LANGUAGES: TranslatorLanguage[] = [
 export { useTranslatorContext } from "./context.js"
 export type { TranslatorContextValue } from "./context.js"
 
+type DOMHooks = NonNullable<DOMTranslatorConfig["hooks"]>
+
+function composeHook<TArgs extends unknown[]>(
+  internal: ((...args: TArgs) => void) | undefined,
+  external: ((...args: TArgs) => void) | undefined,
+) {
+  if (!internal) return external
+  if (!external) return internal
+
+  return (...args: TArgs) => {
+    internal(...args)
+    external(...args)
+  }
+}
+
+function normalizeProgress(done: number, total: number): number {
+  if (total <= 0) return 0
+  return Math.min(Math.max(done / total, 0), 1)
+}
+
 // ---------------------------------------------------------------------------
 // Provider
 // ---------------------------------------------------------------------------
@@ -66,6 +86,10 @@ export function TranslatorProvider({
 }) {
   const engineRef = useRef<Translator | null>(null)
   const [domTranslator, setDomTranslator] = useState<DOMTranslator | null>(null)
+  const [translationProgress, setTranslationProgress] = useState<number | null>(
+    null,
+  )
+  const translationRunIdRef = useRef(0)
 
   // Stable reference: only recreate engine if config identity changes
   if (!engineRef.current) {
@@ -79,14 +103,74 @@ export function TranslatorProvider({
   useEffect(() => {
     if (!config?.dom) return
 
-    const dt = createDOMTranslator({
+    const userHooks = config.dom.hooks
+    const internalHooks: DOMHooks = {
+      onTranslateStart: () => {
+        setTranslationProgress((current) => current ?? 0)
+      },
+      onTranslateEnd: () => {},
+      onProgress: (done, total) => {
+        setTranslationProgress(normalizeProgress(done, total))
+      },
+    }
+
+    const baseTranslator = createDOMTranslator({
       ...config.dom,
+      hooks: {
+        ...userHooks,
+        onTranslateStart: composeHook(
+          internalHooks.onTranslateStart,
+          userHooks?.onTranslateStart,
+        ),
+        onTranslateEnd: composeHook(
+          internalHooks.onTranslateEnd,
+          userHooks?.onTranslateEnd,
+        ),
+        onProgress: composeHook(
+          internalHooks.onProgress,
+          userHooks?.onProgress,
+        ),
+      },
       translate: (text, lang) => engine.translate(text, lang),
     })
-    setDomTranslator(dt)
+    const wrappedTranslator: DOMTranslator = {
+      async translate(targetLang) {
+        const runId = ++translationRunIdRef.current
+        setTranslationProgress(0)
+
+        try {
+          await baseTranslator.translate(targetLang)
+        } finally {
+          if (translationRunIdRef.current === runId) {
+            setTranslationProgress(null)
+          }
+        }
+      },
+      restore() {
+        translationRunIdRef.current++
+        baseTranslator.restore()
+        setTranslationProgress(null)
+      },
+      abort() {
+        translationRunIdRef.current++
+        baseTranslator.abort()
+        setTranslationProgress(null)
+      },
+      get isTranslating() {
+        return baseTranslator.isTranslating
+      },
+      get currentLang() {
+        return baseTranslator.currentLang
+      },
+    }
+
+    setTranslationProgress(null)
+    setDomTranslator(wrappedTranslator)
 
     return () => {
-      dt.abort()
+      translationRunIdRef.current++
+      baseTranslator.abort()
+      setTranslationProgress(null)
     }
   }, [config?.dom, engine])
 
@@ -98,8 +182,14 @@ export function TranslatorProvider({
   }, [engine])
 
   const value = useMemo<TranslatorContextValue>(
-    () => ({ engine, domTranslator, languages, devicePreference }),
-    [devicePreference, domTranslator, engine, languages],
+    () => ({
+      engine,
+      domTranslator,
+      translationProgress,
+      languages,
+      devicePreference,
+    }),
+    [devicePreference, domTranslator, engine, languages, translationProgress],
   )
 
   return (

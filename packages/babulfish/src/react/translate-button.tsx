@@ -208,6 +208,7 @@ export function TranslateButton({
 }: TranslateButtonProps = {}) {
   const {
     model,
+    translation,
     capabilitiesReady,
     hasWebGPU,
     canTranslate,
@@ -239,6 +240,40 @@ export function TranslateButton({
       setState({ kind: "idle" })
     }
   }, [model.status, modelProgress, state.kind])
+
+  const translationProgress =
+    translation.status === "translating" ? translation.progress : null
+  useEffect(() => {
+    if (translationProgress === null) {
+      setState((prev) =>
+        prev.kind === "translating"
+          ? { kind: "ready", dropdownOpen: false }
+          : prev,
+      )
+      return
+    }
+
+    setState((prev) => {
+      const dropdownOpen =
+        prev.kind === "ready" || prev.kind === "translating"
+          ? prev.dropdownOpen
+          : false
+
+      if (
+        prev.kind === "translating" &&
+        prev.progress === translationProgress &&
+        prev.dropdownOpen === dropdownOpen
+      ) {
+        return prev
+      }
+
+      return {
+        kind: "translating",
+        dropdownOpen,
+        progress: translationProgress,
+      }
+    })
+  }, [translationProgress])
 
   // Auto-show tooltip peek
   useEffect(() => {
