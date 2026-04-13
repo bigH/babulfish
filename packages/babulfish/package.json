@@ -1,7 +1,26 @@
 {
   "name": "babulfish",
   "version": "0.1.0",
+  "description": "Client-side browser translation with React, DOM, and engine entrypoints powered by TranslateGemma.",
+  "license": "MIT",
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bigH/babulfish.git",
+    "directory": "packages/babulfish"
+  },
+  "homepage": "https://github.com/bigH/babulfish/tree/main/packages/babulfish#readme",
+  "bugs": {
+    "url": "https://github.com/bigH/babulfish/issues"
+  },
+  "keywords": [
+    "translation",
+    "i18n",
+    "webgpu",
+    "wasm",
+    "react",
+    "dom"
+  ],
   "exports": {
     ".": {
       "import": "./dist/index.js",

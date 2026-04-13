@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm build
+
+      - name: Test
+        run: pnpm test
+
+      - name: Check package docs and consumer smoke
+        working-directory: packages/babulfish
+        run: pnpm docs:check
+
+      - name: Dry-run package publish surface
+        working-directory: packages/babulfish
+        run: |
+          npm pack --json --dry-run > pack-dry-run.json
+          node -e "const fs = require('node:fs'); const pack = JSON.parse(fs.readFileSync('pack-dry-run.json', 'utf8'))[0]; if (!pack.files.some((file) => file.path === 'LICENSE')) { console.error('LICENSE missing from npm pack dry-run output'); process.exit(1); }"
