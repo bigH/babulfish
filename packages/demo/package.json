@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "lint": "tsc --noEmit -p tsconfig.json",
+    "test": "pnpm run build && node scripts/smoke.mjs"
   },
   "dependencies": {
     "babulfish": "workspace:*",
