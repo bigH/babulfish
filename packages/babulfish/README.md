@@ -29,11 +29,43 @@ That's it. The button handles model download, language selection, and DOM transl
 
 ## Installation
 
+Pick the entrypoint you actually want:
+
+### Full React surface (`babulfish`)
+
+The root `babulfish` entrypoint is the batteries-included React surface. Bare `import "babulfish"` or `import { ... } from "babulfish"` resolves the React layer immediately, so `react` must be installed at module resolution time.
+
 ```bash
-npm install babulfish @huggingface/transformers react
+npm install babulfish react @huggingface/transformers
 ```
 
-`react` and `@huggingface/transformers` are peer dependencies. Both are optional if you only use a subset of the library (e.g. engine-only without React).
+Use the root entrypoint for `TranslatorProvider`, `TranslateButton`, hooks, or the convenience re-exports from the root barrel. Import styles separately from `babulfish/css`.
+
+### Engine only (`babulfish/engine`)
+
+Use the engine subpath when you want model loading and translation without the React UI layer.
+
+```bash
+npm install babulfish @huggingface/transformers
+```
+
+```ts
+import { createEngine } from "babulfish/engine"
+```
+
+### DOM only (`babulfish/dom`)
+
+Use the DOM translator subpath when you already have a translation backend and just want DOM walking, batching, and restore logic.
+
+```bash
+npm install babulfish
+```
+
+```ts
+import { createDOMTranslator } from "babulfish/dom"
+```
+
+If you do not want React in the dependency graph, do not write `import { createEngine } from "babulfish"` or any other bare root import. Import `babulfish/engine` and/or `babulfish/dom` directly.
 
 ## Architecture
 
@@ -162,7 +194,7 @@ dt.restore()
 
 ### React Bindings (`babulfish`)
 
-The root `babulfish` entrypoint re-exports the engine and DOM types plus the React components and hooks as named exports.
+The root `babulfish` entrypoint is the batteries-included React surface. It re-exports the engine and DOM helpers for convenience, but bare root imports still require `react` to resolve. Use `babulfish/engine` or `babulfish/dom` directly when you want the non-React layers on their own.
 
 #### `<TranslatorProvider>`
 
