@@ -1,11 +1,11 @@
 # UI-Agnostic Core — Design Doc
 
-**Status:** proposal, not committed.
+**Status:** ratified 2026-04-13. Decisions captured in §10. Execution plan: [`docs/plans/ui-agnostic-core.md`](plans/ui-agnostic-core.md).
 **Author:** Architect pass (Claude, orchestrated by Hiren).
 **Date:** 2026-04-13.
 **Scope:** `packages/babulfish`, with implications for `packages/demo` and any future bindings.
 
-> TL;DR — the engine and DOM layers are already framework-clean and the subpath bundles already carry zero React cost. What's misrepresented is the identity of the root `babulfish` import, and what's missing is a named, framework-neutral core contract that future bindings can consume. My recommendation is **Tier 2**, done in two shippable steps.
+> TL;DR — the engine and DOM layers are already framework-clean and the subpath bundles already carry zero React cost. What's misrepresented is the identity of the root `babulfish` import, and what's missing is a named, framework-neutral core contract that future bindings can consume. The original recommendation was **Tier 2** in two shippable steps; **Hiren overrode to do Tier 3 (full package split) immediately** — see §10.
 
 ---
 
@@ -577,7 +577,9 @@ graph TD
 
 ---
 
-## 9. Open questions for Hiren
+## 9. Open questions for Hiren — RESOLVED
+
+All six questions resolved during the 2026-04-13 interview. See §10 for the calls and rationale. Original prompts are preserved here for audit.
 
 1. **Root `babulfish` post-deprecation.** After the 0.2 → 0.3 window closes, do we (a) keep root as a permanent alias to `/react`, (b) remove root entirely (bare `import "babulfish"` errors), or (c) repurpose root as the headless `core` barrel? My lean: (a), because breaking bare root imports for a pure-rename benefit is hostile to existing consumers. Willing to be talked out of it.
 2. **Tier-3 timing.** If we're going to split packages eventually, is it worth doing it at 1.0 even without a second binding in hand, or wait until we actually have one? I lean "wait" (premature infrastructure), but there's a real argument that the rename is cheaper to do before we accrete more 0.x users.
@@ -585,6 +587,32 @@ graph TD
 4. **Conformance suite location in Tier 2.** `babulfish/core/testing` as a public subpath, or internal-only with bindings importing via relative paths inside the same package? I lean public (with a clear "experimental" banner) so we don't have to re-export again in Tier 3.
 5. **Error propagation during the contract move.** Fixing `use-translator.ts:106` requires `engine.on("status-change", ...)` to carry an `error` field. That's a small engine-event-shape change. Ship it in 0.2.0 as part of Tier 2, or separate PR first? Separate first is lower risk; Tier 2 depends on it.
 6. **Shadow DOM support as part of Tier 2.** Parameterizing `dom/translator.ts` to accept `root: ParentNode | Document` unlocks WC bindings. Include in Tier 2 scope so the contract genuinely supports WC from day one, or defer until an actual WC binding is being written? I lean include — designing the contract around a hypothetical limitation is worse than fixing the limitation.
+
+---
+
+## 10. Decisions ratified (2026-04-13)
+
+Captured during the interview that produced [`docs/plans/ui-agnostic-core.md`](plans/ui-agnostic-core.md). The plan is the source of truth for execution; this section is the audit trail for the calls.
+
+| # | Question | Architect's lean | **Hiren's call** | Notes |
+|---|---|---|---|---|
+| Q1 | Root `babulfish` post-deprecation | A — permanent alias | **A** | Under Tier 3, `babulfish` (unscoped) becomes a permanent (not deprecated) compat meta-package re-exporting `@babulfish/react`. |
+| Q2 | Tier-3 timing | A — wait for second binding | **C — do it now** ⚠ override | Library is unshipped; the rename never gets cheaper. Tier 2 contract work still happens first (Phase 1), then file-moves into scoped packages (Phase 2). |
+| Q3 | `"restore"` sentinel | A staged via C | **A — clean break** | Library is unshipped, so no compat shim. `DEFAULT_LANGUAGES` drops the sentinel; bindings own an "Original" UI affordance and call `core.restore()`. |
+| Q4 | Conformance suite location | A — public subpath | **A** | Ships as `@babulfish/core/testing` with an `@experimental` banner. |
+| Q5 | Error propagation (`use-translator.ts:106`) | A — separate PR first | **A** | Lands as the first PR (T-1) before any contract work. |
+| Q6 | Shadow DOM in `dom/translator.ts` | A — include now | **A** | `DOMTranslatorConfig.root: ParentNode \| Document`, default `document`. Non-breaking. |
+
+### Implications for the original tier plan
+
+- **§7's staged Tier-2 recommendation is superseded.** The work it describes still happens — and in roughly the same order (engine error fix → contract introduction → React thinning → `"restore"` removal) — but Phase 2 of the new plan continues into a full Tier-3 package split rather than stopping at "single package with `babulfish/core` subpath."
+- **Release-train framing in §6.4 is moot.** Library is unshipped; the first published version on npm will already include the Tier-3 split. No alpha cadence, no minor-version deprecation windows.
+- **Tier 1's `babulfish/core` subpath is folded into Tier 2's `BabulfishCore` contract**, which then becomes `@babulfish/core` in Phase 2.
+
+### Operating constraints
+
+- npm scope `@babulfish` is assumed available. If publishing reveals otherwise, the plan accommodates a single-PR rename follow-up.
+- Each task in the plan is a separate PR (per `~/.claude/CLAUDE.md` plan-adherence rules). T-1 and T-2 can run in parallel as the first PRs.
 
 ---
 
