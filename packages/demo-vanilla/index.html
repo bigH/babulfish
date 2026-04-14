@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>babulfish — Vanilla Demo</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <div class="toolbar">
+      <select id="language" disabled>
+        <option value="">Choose language…</option>
+      </select>
+      <button id="restore" type="button" disabled>Original</button>
+      <button id="load-model" type="button">Load Model</button>
+    </div>
+
+    <main>
+      <h1>babulfish — Zero-Framework Demo</h1>
+
+      <article>
+        <p>
+          babulfish translates your entire page client-side using a small
+          language model that runs directly in the browser. No server
+          round-trips, no API keys, no data leaves the device. Pick a language
+          from the dropdown above to try it.
+        </p>
+
+        <p>
+          Under the hood it loads TranslateGemma via WebGPU, walks the DOM to
+          collect text nodes, batches them for efficient inference, and swaps in
+          translations with smooth animations. The model is roughly 2.9 GB and
+          cached in IndexedDB after the first download.
+        </p>
+
+        <p>
+          This demo uses zero frameworks — just the DOM API and an ESM import of
+          <code>@babulfish/core</code>. If you can write
+          <code>document.querySelector</code>, you can integrate babulfish.
+        </p>
+      </article>
+    </main>
+
+    <section id="status" class="status" aria-live="polite">
+      <h2>Status</h2>
+      <dl>
+        <dt>Model</dt>
+        <dd id="status-model">Not loaded</dd>
+        <dt>Translation</dt>
+        <dd id="status-translation">Idle</dd>
+        <dt>Language</dt>
+        <dd id="status-language">Original</dd>
+      </dl>
+    </section>
+
+    <script type="module" src="./src/main.ts"></script>
+  </body>
+</html>
