@@ -20,15 +20,13 @@ export type Snapshot = {
 
 const IDLE_MODEL: ModelState = Object.freeze({ status: "idle" as const })
 const IDLE_TRANSLATION: TranslationState = Object.freeze({ status: "idle" as const })
-
-function createInitialSnapshot(): Snapshot {
-  return Object.freeze({
-    model: IDLE_MODEL,
-    translation: IDLE_TRANSLATION,
-    currentLanguage: null,
-    capabilities: SSR_CAPABILITIES,
-  })
-}
+const INITIAL_SNAPSHOT: Snapshot = Object.freeze({
+  model: IDLE_MODEL,
+  translation: IDLE_TRANSLATION,
+  currentLanguage: null,
+  capabilities: SSR_CAPABILITIES,
+})
+const NOOP_UNSUBSCRIBE = () => {}
 
 export type Store = {
   get(): Snapshot
@@ -38,7 +36,7 @@ export type Store = {
 }
 
 export function createStore(): Store {
-  let current = createInitialSnapshot()
+  let current = INITIAL_SNAPSHOT
   const listeners = new Set<(snapshot: Snapshot) => void>()
   let disposed = false
 
@@ -56,7 +54,7 @@ export function createStore(): Store {
       }
     },
     subscribe(listener) {
-      if (disposed) return () => {}
+      if (disposed) return NOOP_UNSUBSCRIBE
       listeners.add(listener)
       return () => { listeners.delete(listener) }
     },
