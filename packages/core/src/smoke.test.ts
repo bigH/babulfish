@@ -1,8 +1,21 @@
-import { describe, it, expect } from "vitest"
+import { describe, it, expect, expectTypeOf } from "vitest"
 import { createBabulfish } from "./core/babulfish.js"
 import { DEFAULT_LANGUAGES } from "./core/languages.js"
+import {
+  createDOMTranslator as createDOMTranslatorDirect,
+  type DOMTranslator as DOMTranslatorDirect,
+  type DOMTranslatorConfig as DOMTranslatorConfigDirect,
+  type LinkedConfig as LinkedConfigDirect,
+  type RichTextConfig as RichTextConfigDirect,
+} from "./dom/translator.js"
+import {
+  isWellFormedMarkdown as isWellFormedMarkdownDirect,
+  parseInlineMarkdown as parseInlineMarkdownDirect,
+  renderInlineMarkdownToHtml as renderInlineMarkdownToHtmlDirect,
+} from "./dom/markdown.js"
+import type { PreserveMatcher as PreserveMatcherDirect } from "./dom/preserve.js"
 import { createEngine } from "./engine/index.js"
-import { createDOMTranslator } from "./dom/index.js"
+import * as domBarrel from "./dom/index.js"
 import * as barrel from "./index.js"
 
 describe("smoke tests", () => {
@@ -17,7 +30,7 @@ describe("smoke tests", () => {
   })
 
   it("creates a DOM translator", () => {
-    const translator = createDOMTranslator({
+    const translator = createDOMTranslatorDirect({
       translate: async (text) => text,
       roots: ["main"],
     })
@@ -33,6 +46,26 @@ describe("smoke tests", () => {
     expect(barrel.createBabulfish).toBe(createBabulfish)
     expect(barrel.DEFAULT_LANGUAGES).toBe(DEFAULT_LANGUAGES)
     expect(barrel.createEngine).toBe(createEngine)
-    expect(barrel.createDOMTranslator).toBe(createDOMTranslator)
+    expect(barrel.createDOMTranslator).toBe(createDOMTranslatorDirect)
+  })
+
+  it("dom barrel re-exports the public DOM surface", () => {
+    expect(domBarrel.createDOMTranslator).toBe(createDOMTranslatorDirect)
+    expect(domBarrel.renderInlineMarkdownToHtml).toBe(renderInlineMarkdownToHtmlDirect)
+    expect(domBarrel.parseInlineMarkdown).toBe(parseInlineMarkdownDirect)
+    expect(domBarrel.isWellFormedMarkdown).toBe(isWellFormedMarkdownDirect)
+
+    expectTypeOf<typeof domBarrel>().toMatchTypeOf<{
+      createDOMTranslator: typeof createDOMTranslatorDirect
+      renderInlineMarkdownToHtml: typeof renderInlineMarkdownToHtmlDirect
+      parseInlineMarkdown: typeof parseInlineMarkdownDirect
+      isWellFormedMarkdown: typeof isWellFormedMarkdownDirect
+    }>()
+
+    expectTypeOf<DOMTranslatorConfigDirect>().toEqualTypeOf<domBarrel.DOMTranslatorConfig>()
+    expectTypeOf<DOMTranslatorDirect>().toEqualTypeOf<domBarrel.DOMTranslator>()
+    expectTypeOf<RichTextConfigDirect>().toEqualTypeOf<domBarrel.RichTextConfig>()
+    expectTypeOf<LinkedConfigDirect>().toEqualTypeOf<domBarrel.LinkedConfig>()
+    expectTypeOf<PreserveMatcherDirect>().toEqualTypeOf<domBarrel.PreserveMatcher>()
   })
 })

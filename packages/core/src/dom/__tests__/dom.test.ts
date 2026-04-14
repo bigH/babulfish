@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
-import { createDOMTranslator, renderInlineMarkdownToHtml } from "../index.js"
-import type { DOMTranslatorConfig, DOMTranslator } from "../index.js"
+import { renderInlineMarkdownToHtml } from "../markdown.js"
+import { createDOMTranslator, type DOMTranslatorConfig, type DOMTranslator } from "../translator.js"
 
 // ---------------------------------------------------------------------------
 // Helpers

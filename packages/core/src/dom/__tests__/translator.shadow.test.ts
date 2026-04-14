@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest"
-import { createDOMTranslator } from "../index.js"
+import { createDOMTranslator } from "../translator.js"
 
 function uppercaseTranslate(text: string): Promise<string> {
   return Promise.resolve(text.toUpperCase())

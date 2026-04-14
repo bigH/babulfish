@@ -1,6 +1,6 @@
 import type { EngineConfig } from "../engine/index.js"
-import type { DOMTranslatorConfig, DOMTranslator } from "../dom/index.js"
-import { createDOMTranslator } from "../dom/index.js"
+import type { DOMTranslatorConfig, DOMTranslator } from "../dom/translator.js"
+import { createDOMTranslator } from "../dom/translator.js"
 import { acquireEngine, releaseEngine, registerCoreEngine } from "./engine-handle.js"
 import { createStore, type Snapshot } from "./store.js"
 import type { ModelState } from "./store.js"
