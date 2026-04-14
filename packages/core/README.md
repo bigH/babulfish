@@ -10,7 +10,7 @@ npm install @babulfish/core @babulfish/styles
 ```
 
 ```ts
-import { createBabulfish, DEFAULT_LANGUAGES, type Snapshot } from "@babulfish/core"
+import { createBabulfish, type Snapshot } from "@babulfish/core"
 import "@babulfish/styles/css"
 
 const core = createBabulfish({
