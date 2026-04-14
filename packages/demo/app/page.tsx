@@ -1,5 +1,15 @@
 import { ModelStatus } from "./model-status"
 
+const richTextExample = {
+  boldText: "Bold text",
+  italicText: "italic text",
+  bodyText: "survive translation intact, along with",
+  linkLabel: "inline links",
+  linkHref: "https://example.com",
+} as const
+
+const richTextExampleMarkdown = `**${richTextExample.boldText}** and *${richTextExample.italicText}* ${richTextExample.bodyText} [${richTextExample.linkLabel}](${richTextExample.linkHref}).`
+
 export default function Home() {
   return (
     <main className="mx-auto max-w-2xl px-6 py-16">
@@ -43,12 +53,12 @@ export default function Home() {
 
       <p
         className="mb-8 rounded bg-gray-100 p-4 text-sm text-gray-600"
-        data-md="**Bold text** and *italic text* survive translation intact, along with [inline links](https://example.com)."
+        data-md={richTextExampleMarkdown}
       >
-        <strong>Bold text</strong> and <em>italic text</em> survive translation
-        intact, along with{" "}
-        <a href="https://example.com" className="underline">
-          inline links
+        <strong>{richTextExample.boldText}</strong> and{" "}
+        <em>{richTextExample.italicText}</em> {richTextExample.bodyText}{" "}
+        <a href={richTextExample.linkHref} className="underline">
+          {richTextExample.linkLabel}
         </a>
         .
       </p>

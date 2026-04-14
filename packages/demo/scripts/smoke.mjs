@@ -24,6 +24,14 @@ const homepageMarkers = [
   "Idle",
   "Original",
 ]
+const markdownExample =
+  "**Bold text** and *italic text* survive translation intact, along with [inline links](https://example.com)."
+const richTextExampleMarkers = [
+  markdownExample,
+  "<strong>Bold text</strong>",
+  "<em>italic text</em>",
+  '<a href="https://example.com" class="underline">inline links</a>',
+]
 
 let logs = ""
 
@@ -179,10 +187,19 @@ async function main() {
     const response = await waitForServer(url, child)
     const html = await response.text()
     const missingMarkers = homepageMarkers.filter((marker) => !html.includes(marker))
+    const missingRichTextExampleMarkers = richTextExampleMarkers.filter(
+      (marker) => !html.includes(marker),
+    )
 
     if (missingMarkers.length > 0) {
       throw new Error(
         `Demo homepage is missing expected markers: ${missingMarkers.join(", ")}.${formatLogs()}`,
+      )
+    }
+
+    if (missingRichTextExampleMarkers.length > 0) {
+      throw new Error(
+        `Demo homepage rich-text example is missing expected markers: ${missingRichTextExampleMarkers.join(", ")}.${formatLogs()}`,
       )
     }
 
