@@ -10,7 +10,8 @@ export function createDirectDriver(): ConformanceDriver {
     id: "direct",
     supportsDOM: false,
     async create(config?: BabulfishConfig) {
-      return createBabulfish(config)
+      const { dom: _dom, ...directConfig } = config ?? {}
+      return createBabulfish(directConfig)
     },
     async dispose(core: BabulfishCore) {
       await core.dispose()
