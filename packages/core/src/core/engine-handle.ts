@@ -41,7 +41,3 @@ export function __resetSharedEngine(): void {
   sharedEngineId = null
   refCount = 0
 }
-
-export function __getRefCount(): number {
-  return refCount
-}

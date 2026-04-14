@@ -9,7 +9,7 @@ export type Capabilities = {
   readonly isMobile: boolean
 }
 
-const SSR_CAPABILITIES: Capabilities = Object.freeze({
+export const SSR_CAPABILITIES: Capabilities = Object.freeze({
   ready: false,
   hasWebGPU: false,
   canTranslate: false,

@@ -1,4 +1,5 @@
 import type { Capabilities } from "./capabilities.js"
+import { SSR_CAPABILITIES } from "./capabilities.js"
 
 export type ModelState =
   | { readonly status: "idle" }
@@ -19,13 +20,6 @@ export type Snapshot = {
 
 const IDLE_MODEL: ModelState = Object.freeze({ status: "idle" as const })
 const IDLE_TRANSLATION: TranslationState = Object.freeze({ status: "idle" as const })
-const SSR_CAPABILITIES: Capabilities = Object.freeze({
-  ready: false,
-  hasWebGPU: false,
-  canTranslate: false,
-  device: null,
-  isMobile: false,
-})
 
 function createInitialSnapshot(): Snapshot {
   return Object.freeze({
