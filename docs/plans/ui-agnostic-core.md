@@ -16,9 +16,9 @@
 | Q5 | Error propagation (`use-translator.ts:106`) | **A** — separate PR first, lands before contract work | Lower risk; isolates the engine-event-shape change |
 | Q6 | Shadow DOM in `dom/translator.ts` | **A** — parameterize `root: ParentNode \| Document` now | Designing the contract around a hypothetical limitation is worse than fixing the limitation |
 | Q7 | Snapshot granularity | **A** — monolithic frozen snapshot with structural sharing | One `subscribe`, one `snapshot`. Untouched slices retain reference equality across transitions — binding-level selector equality (`Object.is`) is cheap. Selectors are a binding concern, not a core concern. |
-| Q8 | Multi-instance `createBabulfish` | **Commit from T-3** | Isolation is clean (DOM state is closure-scoped, engine is ref-counted). Deferring means walking back the contract when T-8's two-element WC demo ships. Conformance asserts engine sharing + cross-core dispose safety. |
+| Q8 | Multi-instance `createBabulfish` | **Commit from T-3b** | Isolation is clean (DOM state is closure-scoped, engine is ref-counted). Deferring means walking back the contract when T-8's two-element WC demo ships. Conformance asserts engine sharing + cross-core dispose safety. |
 | Q9 | Cancellation | **`AbortSignal` opt-in + `abort()` shortcut; `AbortError` rejections** | Web-Platform convention. Last-caller-wins on `translateTo`. `dispose()` returns `Promise<void>` and rejects in-flight ops. Engine cancellation via `InterruptableStoppingCriteria` (transformers.js has no `AbortSignal` support). |
-| Q10 | `root` lifetime | **Set-once default + per-call override** | `createBabulfish({ dom: { root } })` sets the default; `translateTo(lang, { root })` and `restore({ root })` override. `translate(text, lang)` is root-free (pure string output). |
+| Q10 | `root` lifetime | **Set-once default + per-call override** | `createBabulfish({ dom: { root } })` sets the default; `translateTo(lang, { root })` and `restore({ root })` override. `translateText(text, lang)` is root-free (pure string output). |
 
 **Deferred to [`ui-agnostic-polish.md`](./ui-agnostic-polish.md)**: Q1 (unscoped `babulfish` compat meta-package) — implement at publish time, not before.
 
@@ -44,14 +44,15 @@
 
 ```mermaid
 graph TD
-  T1[T-1 engine error event] --> T3[T-3 scaffold packages + implement core]
-  T2[T-2 dom root param] --> T3
-  T3 --> T4[T-4 conformance scenarios + drivers]
-  T3 --> T5[T-5 thin react + drop restore]
+  T1[T-1 engine error event] --> T3a[T-3a topology move]
+  T2[T-2 dom root param] --> T3a
+  T3a --> T3b[T-3b implement core module]
+  T3b --> T4[T-4 conformance scenarios + drivers]
+  T3b --> T5[T-5 thin react + drop restore]
   T4 --> T6[T-6 react conformance tests]
   T5 --> T6
-  T3 --> T7[T-7 packages/demo-vanilla]
-  T3 --> T8[T-8 packages/demo-webcomponent]
+  T3b --> T7[T-7 packages/demo-vanilla]
+  T3b --> T8[T-8 packages/demo-webcomponent]
   T5 --> T9[T-9 documentation refresh]
   T6 --> T9
   T7 --> T9
@@ -76,6 +77,7 @@ Per `~/.claude/CLAUDE.md`:
   ```
 - **Critic review (`subagent_type=general-purpose`, persona `[Critic]`)** before requesting human review. Max 2 reflexion rounds, then escalate.
 - **Test Maven check** for any task that adds or changes behavior.
+- **Cross-plan coherence.** Plan files are the source of truth and must stay consistent as tasks execute. If completing your task surfaces a decision or detail that contradicts this plan, a sibling plan (`docs/plans/ui-agnostic-polish.md`), or another task's written contract (files, acceptance, invariants, dispatch template), update the affected plan file(s) in the SAME PR. Downstream agents trust the plan — if a later task's written expectation turns out to be wrong, the fault lies with the upstream agent who didn't propagate the change. Re-read your dependencies before dispatching a downstream agent, and update every place affected — not just the nearest one.
 
 The dispatch templates below assume these constraints — they are not repeated in each one.
 
@@ -87,7 +89,7 @@ The dispatch templates below assume these constraints — they are not repeated 
 
 - **Owner:** `[Artisan]`
 - **Phase:** 0
-- **Blocks:** T-3
+- **Blocks:** T-3a
 - **Blocked by:** —
 - **Files:**
   - `packages/babulfish/src/engine/model.ts` — emit `{ status, error }` on transition into `"error"`
@@ -126,7 +128,7 @@ The dispatch templates below assume these constraints — they are not repeated 
 
 - **Owner:** `[Artisan]`
 - **Phase:** 0
-- **Blocks:** T-3
+- **Blocks:** T-3a
 - **Blocked by:** —
 - **Files:**
   - `packages/babulfish/src/dom/translator.ts` — replace global `document` references at lines 83, 371, 496 with `(config.root ?? document)` and use `el.ownerDocument` for tree-walker construction
@@ -167,159 +169,253 @@ The dispatch templates below assume these constraints — they are not repeated 
 
 ## Phase 1 — UI-agnostic core + React binding + package topology
 
-### T-3 — Scaffold `@babulfish/{core,react,styles}` and implement core
+### T-3 — Topology + core implementation (executed in two sub-step PRs)
+
+This task is structured as two sub-steps that land as **separate PRs**. The dispatched agent MUST complete ONE sub-step at a time, stop, and prompt a rerun on this plan file to pick up the next sub-step. Do not collapse T-3a and T-3b into one PR — T-3a is a pure topology move (trivially reviewable) and T-3b is the net-new contract; reviewing them separately is the whole point of the split.
+
+Sub-steps:
+
+1. **T-3a — Topology move.** `git mv` existing code into the three target packages, rewrite imports, migrate the demo, delete `packages/babulfish/` (including the old `createTranslator` factory). Zero net-new behavior.
+2. **T-3b — Implement core module.** Add `packages/core/src/core/` (the `createBabulfish` contract), the `pipeline-loader.ts` import chokepoint, and the `engine/testing/` subpath exposing `__resetEngineForTests()`.
+
+Dispatch note for agents: when you pick this task up, scan the file tree — if `packages/babulfish/` still exists, start with T-3a. If `packages/core/src/core/` is missing, start with T-3b. Complete exactly ONE sub-step per PR.
+
+---
+
+### T-3a — Topology move (scaffold `@babulfish/{core,react,styles}`)
+
+- **Owner:** `[Artisan]`
+- **Phase:** 1
+- **Blocks:** T-3b
+- **Blocked by:** T-1, T-2
+- **Scope:** Pure topology move. Create the three target packages, `git mv` existing files into their permanent homes, rewrite intra-repo imports, migrate the demo, delete `packages/babulfish/`. **No net-new code.** `createBabulfish`, `pipeline-loader.ts`, and the testing subpaths all come in T-3b. The React provider keeps its current shape, sourcing engine/dom via the new `@babulfish/core/engine` and `@babulfish/core/dom` subpath exports.
+- **Files:**
+  - New: `packages/core/` — `package.json` (name `@babulfish/core`, `version "0.0.0"`, `exports ".", "./engine", "./dom"` — T-3b extends with `"./testing"` and `"./engine/testing"`), `tsup.config.ts`, `tsconfig.json`, `README.md` stub
+  - `git mv packages/babulfish/src/engine/ → packages/core/src/engine/`
+  - `git mv packages/babulfish/src/dom/ → packages/core/src/dom/`
+  - `git mv packages/babulfish/src/react/ → packages/react/src/`
+  - `git mv packages/babulfish/src/css/babulfish.css → packages/styles/src/babulfish.css`
+  - **Delete:** `packages/babulfish/src/translator.ts` (the old `createTranslator` factory). `BabulfishCore.translateText` (T-3b) strictly supersedes it; the unshipped-library rule means no shim owed.
+  - **Delete:** `packages/babulfish/src/__tests__/translator.test.ts` if it targets that factory. Its coverage folds into T-3b's `contract.smoke.test.ts` plus the T-4 conformance scenarios. Split any remaining `packages/babulfish/src/__tests__/` entries between `packages/core/src/__tests__/` and `packages/react/src/__tests__/` based on what each test imports.
+  - New: `packages/core/src/index.ts` re-exporting `./engine` + `./dom` only, with a `// TODO(T-3b): re-export ./core once implemented` comment. The core module ships in T-3b.
+  - New: `packages/react/` — `package.json` (name `@babulfish/react`, `version "0.0.0"`, peerDependencies `{ react: "^18 || ^19" }`, dependencies `{ "@babulfish/core": "workspace:^", "@babulfish/styles": "workspace:^" }`, exports `".", "./css"`), `tsup.config.ts`, `tsconfig.json`, `README.md` stub
+  - Rewrite imports in `packages/react/src/`: `"../engine/*"` → `"@babulfish/core/engine"`; `"../dom/*"` → `"@babulfish/core/dom"`; delete any import of the old `translator.ts`.
+  - New: `packages/styles/` — `package.json` (name `@babulfish/styles`, `version "0.0.0"`, `exports["./css"]`, `files ["src/babulfish.css"]`; no build step), `README.md` listing every `--babulfish-*` custom property the stylesheet exposes
+  - Update: `packages/react/package.json` — `exports["./css"]` re-exports `@babulfish/styles/css`
+  - Update: `packages/demo/package.json` — replace `"babulfish": "workspace:*"` with `"@babulfish/react": "workspace:*"` (plus `@babulfish/styles` if the demo imports CSS directly)
+  - Grep-replace `packages/demo/**/*.{ts,tsx}`: `from "babulfish"` → `from "@babulfish/react"`, `"babulfish/css"` → `"@babulfish/react/css"`
+  - **Delete:** `packages/babulfish/` entirely
+  - Update: root `pnpm-workspace.yaml` / `package.json` scripts if needed
+- **Acceptance:**
+  - `pnpm -r install && pnpm -r build && pnpm -r test` all green — existing tests unchanged, just re-homed.
+  - `packages/babulfish/` directory no longer exists.
+  - `packages/babulfish/src/translator.ts` and its test file are deleted (not moved).
+  - `packages/react/dist/` does NOT bundle `@babulfish/core` (external).
+  - `pnpm --filter demo dev` renders the page.
+  - Zero net-new behavior: the PR diff shows only moves, import rewrites, deletions, and the three new package.json / tsup / tsconfig / stub README files.
+- **Dispatch template:**
+  ```
+  [Artisan] T-3a — Topology move
+
+  Goal: relocate the repo from `packages/babulfish/` into the final three-package topology in one pure-move PR. No createBabulfish, no pipeline-loader, no net-new behavior. T-3b adds the contract on top.
+
+  Context: library is unshipped. Delete packages/babulfish/ outright — no compat shim. The old `createTranslator` factory at packages/babulfish/src/translator.ts is DELETED (not moved); T-3b's createBabulfish supersedes it. Demo is the only in-repo consumer and gets migrated in the same PR so the workspace never leaves green.
+
+  Task:
+  1. Create packages/core/, packages/react/, packages/styles/ skeletons (package.json with version "0.0.0", tsup.config.ts, tsconfig.json, README.md stub). Mirror existing tsconfig/tsup styles.
+  2. git mv:
+     - packages/babulfish/src/engine/ → packages/core/src/engine/
+     - packages/babulfish/src/dom/ → packages/core/src/dom/
+     - packages/babulfish/src/react/ → packages/react/src/
+     - packages/babulfish/src/css/babulfish.css → packages/styles/src/babulfish.css
+     - Split packages/babulfish/src/__tests__/ between packages/core/src/__tests__/ and packages/react/src/__tests__/ based on imports.
+  3. DELETE packages/babulfish/src/translator.ts AND packages/babulfish/src/__tests__/translator.test.ts. createBabulfish (T-3b) supersedes them; the unshipped rule means no shim owed.
+  4. packages/core/src/index.ts re-exports ./engine + ./dom only. Leave `// TODO(T-3b): re-export ./core once implemented`.
+  5. packages/core/package.json exports ".", "./engine", "./dom". (T-3b extends with "./testing" and "./engine/testing".)
+  6. Rewrite packages/react/src/* imports: "../engine/*" → "@babulfish/core/engine"; "../dom/*" → "@babulfish/core/dom"; delete any stale import of the removed translator.ts. The React provider keeps its current shape — this PR is NOT introducing createBabulfish.
+  7. packages/react/package.json: peerDependencies { react: "^18 || ^19" }, dependencies { "@babulfish/core": "workspace:^", "@babulfish/styles": "workspace:^" }, exports ".", "./css" (re-export from @babulfish/styles/css).
+  8. packages/styles/package.json: exports "./css", files ["src/babulfish.css"]. No build step.
+  9. packages/styles/README.md lists every `--babulfish-*` custom property.
+  10. DELETE packages/babulfish/ entirely.
+  11. Update packages/demo/: package.json dep swap; grep-replace `from "babulfish"` → `from "@babulfish/react"`, `"babulfish/css"` → `"@babulfish/react/css"`.
+  12. Run `pnpm install`, `pnpm -r build`, `pnpm -r test`, `pnpm --filter demo build`, `pnpm --filter demo dev`. Green across the board.
+
+  Deliverable: a single PR titled `T-3a — Topology move`.
+
+  When you finish T-3a: STOP. Report completion and prompt a rerun on docs/plans/ui-agnostic-core.md for T-3b. Do NOT begin T-3b in the same PR.
+
+  Constraints:
+  - ZERO net-new behavior. If a diff line isn't a move, an import rewrite, a deletion, or scaffolding config, it doesn't belong here.
+  - Do NOT add a packages/babulfish/ compat shim.
+  - Do NOT introduce createBabulfish, pipeline-loader.ts, the testing subpaths, or __resetEngineForTests.
+  - Do NOT preserve the old `createTranslator` factory — it is DELETED. createBabulfish + translateText supersede it.
+  - Cross-plan coherence: if the move forces updates in docs/plans/ui-agnostic-polish.md (e.g. references to `packages/babulfish/`), update that file in the same PR.
+  ```
+
+---
+
+### T-3b — Implement `@babulfish/core/core` + pipeline-loader seam + engine/testing subpath
 
 - **Owner:** `[Artisan]`
 - **Phase:** 1
 - **Blocks:** T-4, T-5, T-7, T-8
-- **Blocked by:** T-1, T-2
-- **Scope:** This is the big topology PR. It scaffolds the three target packages, moves existing code into its permanent home, writes the new framework-neutral `src/core/` module inside `@babulfish/core`, keeps the React binding working (still "fat" — T-5 slims it), and migrates the demo's imports so the workspace stays green. **`packages/babulfish/` is deleted outright** — no compat meta-package; that lives in [`ui-agnostic-polish.md`](./ui-agnostic-polish.md) P-1 for publish time.
+- **Blocked by:** T-3a
+- **Scope:** Add the framework-neutral `createBabulfish` contract on top of the topology T-3a landed. Introduces three things that together make the contract testable and isolable:
+  1. `packages/core/src/core/` — the UI-agnostic public module (`createBabulfish`, `BabulfishCore`, `Snapshot`, `DEFAULT_LANGUAGES`).
+  2. `packages/core/src/engine/pipeline-loader.ts` — the SINGLE file in the repo that imports `@huggingface/transformers`. Enforced by ESLint.
+  3. `packages/core/src/engine/testing/` — test-only subpath exposing `__resetEngineForTests()` (nuke singleton + listeners + ref-counter between scenarios) and `getEngineIdentity(core)` (conformance probe).
 - **Files:**
-  - New: `packages/core/` — `package.json`, `tsup.config.ts`, `tsconfig.json`, `README.md` stub
-  - Move: `packages/babulfish/src/{engine,dom,translator.ts}` → `packages/core/src/`
-  - New: `packages/core/src/core/` module (`index.ts`, `babulfish.ts`, `store.ts`, `progress.ts`, `languages.ts`, `capabilities.ts`, `engine-handle.ts`, `__tests__/contract.smoke.test.ts`)
-  - New: `packages/core/src/testing/` scaffold (empty scenarios module; populated in T-4)
-  - New: `packages/core/src/index.ts` re-exporting `./core`
-  - New: `packages/react/` — `package.json` (peer `react`, dep `@babulfish/core` workspace exact), `tsup.config.ts`, `tsconfig.json`, `README.md` stub
-  - Move: `packages/babulfish/src/react/` → `packages/react/src/` with imports rewritten `"../core/*"`/`"../engine/*"`/`"../dom/*"` → `"@babulfish/core"`/`"@babulfish/core/engine"`/`"@babulfish/core/dom"`
-  - New: `packages/styles/` — `package.json` (no peer deps, `exports["./css"]`), `README.md` documenting the CSS custom-property contract
-  - Move: `packages/babulfish/src/css/babulfish.css` → `packages/styles/src/babulfish.css`
-  - Update: `packages/react/package.json` — dep on `@babulfish/styles`; `exports["./css"]` re-exports `@babulfish/styles/css`
-  - Update: `packages/demo/package.json` — replace `"babulfish": "workspace:*"` with `"@babulfish/react": "workspace:*"` (and `@babulfish/styles` if the demo imports CSS directly)
-  - Update: all `packages/demo/**/*.{ts,tsx}` — `from "babulfish"` → `from "@babulfish/react"`, `"babulfish/css"` → `"@babulfish/react/css"`
-  - **Delete:** `packages/babulfish/` entirely
-  - Update: root `pnpm-workspace.yaml` / `package.json` scripts if needed
+  - New: `packages/core/src/core/index.ts` — public barrel: `createBabulfish`, types from `store.ts`, `DEFAULT_LANGUAGES` (restore-free)
+  - New: `packages/core/src/core/babulfish.ts` — `createBabulfish(config): BabulfishCore` factory
+  - New: `packages/core/src/core/store.ts` — frozen-snapshot pub/sub with structural sharing
+  - New: `packages/core/src/core/progress.ts` — run-ID race guard lifted from `packages/react/src/provider.tsx:92-171` as pure logic; owns per-translation `AbortController`
+  - New: `packages/core/src/core/languages.ts` — `DEFAULT_LANGUAGES` without `"restore"` (Q3)
+  - New: `packages/core/src/core/capabilities.ts` — wraps `engine/detect.ts` with SSR-safe defaults (`ready: false` until detected)
+  - New: `packages/core/src/core/engine-handle.ts` — ref-counted `acquireEngine()` / `releaseEngine()`. On ref-count zero: engine stays alive (HMR-friendly). **Forbidden:** calling `engine.listeners.clear()` anywhere in `releaseEngine`.
+  - New: `packages/core/src/core/__tests__/contract.smoke.test.ts` — invariants 4.1–4.5 (including the new 4.5 `translateText` snapshot-purity test)
+  - New: `packages/core/src/engine/pipeline-loader.ts` — exports a single `loadPipeline(task, model, opts)` function. **This is the ONLY file in the repo that imports `@huggingface/transformers`.** Enforce via ESLint `no-restricted-imports` rule: `"@huggingface/transformers"` allowed only in this file.
+  - Update: `packages/core/src/engine/model.ts` — call `loadPipeline` from `./pipeline-loader`; remove the direct `@huggingface/transformers` import; remove the blanket `listeners.clear()` at ~lines 204-205 (if still present post-T-3a)
+  - New: `packages/core/src/engine/testing/index.ts` — test-only subpath (`@experimental — test-only; subject to change`) exporting:
+    - `__resetEngineForTests()` — nullifies the module-level engine singleton, clears any in-flight `loadPromise`, zeroes the ref-counter, AND clears every cross-core listener set. Designed for `beforeEach` / `afterEach` in unit + conformance tests to guarantee scenario isolation.
+    - `getEngineIdentity(core)` — opaque engine-identity probe for singleton-sharing assertions.
+  - New: `packages/core/src/testing/index.ts` — scaffold barrel (T-4 populates with scenarios + drivers; not used in this PR but the `"./testing"` export must resolve)
+  - Update: `packages/core/package.json` — extend `exports` with `"./testing"` and `"./engine/testing"` (both `@experimental`)
+  - Update: `packages/core/src/index.ts` — re-export `./core` at the top (replacing the T-3a TODO)
+  - Add: ESLint `no-restricted-imports` rule (in whichever config file the repo uses) forbidding `@huggingface/transformers` outside `packages/core/src/engine/pipeline-loader.ts`
+  - Verify: React binding is **unchanged**. Do NOT rewrite the provider to use `createBabulfish` — that is T-5.
+- **Core contract invariants** (all five tested by T-4 conformance scenarios):
+
+  **4.1 Engine singleton + multi-instance (Q8):**
+  - `packages/core/src/engine/` exports a module-level lazy singleton that owns the transformers runtime state (WASM/WebGPU contexts, model cache). Never construct eagerly.
+  - `engine-handle.ts` exposes `acquireEngine()` → handle + ref-count++, `releaseEngine(handle)` → ref-count--. When ref-count hits zero, DO NOT tear down synchronously — leave the engine alive (tear-down is async and expensive; HMR remounts would otherwise thrash). The `__resetEngineForTests()` escape hatch in `@babulfish/core/engine/testing` is the test-mode teardown.
+  - **`releaseEngine()` MUST NOT clear cross-core listeners.** Each core owns the unsubscribe thunks `engine.on()` returned to it and calls them on its own dispose. The singleton NEVER blanket-clears `listeners[event]` — otherwise disposing core A rips the rug out from under core B. (Today's `engine/model.ts:204-205` calls `listeners.clear()`; the T-3b implementation removes that behavior.)
+  - **Concurrent `loadModel()` from N cores MUST share one in-flight `loadPipeline()` call.** Preserve the `if (loadPromise) await loadPromise; return` guard at `engine/model.ts:121-123`, now routed through `pipeline-loader.loadPipeline()`.
+  - Result: multiple `createBabulfish` instances in the same process share one engine. HMR remounts, Storybook mounts, and two-element WC demos don't double-load. Subpath imports (`@babulfish/core` + `@babulfish/core/engine`) resolve to the same module instance — bundlers handle that for us, but document the expectation.
+
+  **4.2 Snapshot — monolithic + structural sharing (Q7):**
+  - One `core.snapshot` per core. One `core.subscribe(listener)` per core. The snapshot is a frozen monolithic object: `{ model, translation, capabilities, currentLanguage, progress, ... }`.
+  - Each transition produces a new top-level snapshot reference via structural sharing: untouched slices keep their prior reference. A `translation.progress` tick changes `snapshot` and `snapshot.translation` but `snapshot.model`, `snapshot.capabilities`, `snapshot.currentLanguage` MUST retain reference equality with the prior snapshot.
+  - `subscribe` has no selector argument. No per-slice subscribe methods. Selectors are a binding concern — React gets `useSyncExternalStoreWithSelector` on top; Vue/Svelte use native reactivity.
+  - No spurious notifications: a method call that doesn't change state (e.g. `restore()` from an already-idle snapshot) MUST NOT invoke subscribers.
+
+  **4.3 Cancellation — AbortSignal + imperative shortcut (Q9):**
+  - Every async method accepts an optional `{ signal?: AbortSignal }`. Contract signatures:
+    ```ts
+    type TranslateOptions = { readonly signal?: AbortSignal; readonly root?: ParentNode | Document }
+
+    interface BabulfishCore {
+      readonly snapshot: Snapshot
+      subscribe(listener: (s: Snapshot) => void): () => void
+      loadModel(opts?: { signal?: AbortSignal }): Promise<void>
+      translateTo(lang: string, opts?: TranslateOptions): Promise<void>
+      translateText(text: string, lang: string, opts?: { signal?: AbortSignal }): Promise<string>
+      restore(opts?: { root?: ParentNode | Document }): void
+      abort(): void
+      dispose(): Promise<void>
+      readonly languages: ReadonlyArray<Language>
+    }
+    ```
+    The two verbs pair cleanly: `translateText` returns a string (tooltip, hotkey, one-off inference); `translateTo` targets a language for a DOM root (page-level state). The DOM module file is still named `src/dom/translator.ts` — that name is namespaced, not part of the public API.
+  - On cancellation, Promises reject with `DOMException("...", "AbortError")` — use `signal.throwIfAborted()` / `signal.reason`. Never a custom `CancelledError`, never a tagged `{ cancelled: true }` resolved value.
+  - **Last-caller-wins on `translateTo`:** starting a new `translateTo` aborts the prior controller; the prior Promise rejects with `AbortError`. This REPLACES the ad-hoc run-ID counter at the React layer. `progress.ts` owns the per-translation `AbortController` lifecycle.
+  - `core.abort()` is a zero-arg shortcut equivalent to aborting the currently-active translation's controller. It does NOT abort `loadModel` (transformers.js has no download cancellation primitive; aborting just forces a re-download).
+  - `core.dispose()` returns `Promise<void>`. Synchronously flips an internal `disposed` flag, aborts in-flight ops (their Promises reject with `AbortError`), detaches subscribers, and awaits pipeline teardown. WC's `disconnectedCallback` calls it fire-and-forget.
+  - **Engine cancellation mechanics:**
+    - Generation: construct `InterruptableStoppingCriteria` (from `@huggingface/transformers`) per call, pass via `stopping_criteria` to `generator(messages, ...)`. Wire `signal.addEventListener("abort", () => criteria.interrupt())`. The generator polls per-token. After `await generator(...)`, call `signal.throwIfAborted()` — the pipeline resolves with partial output after interrupt, so the post-await check is what actually honors the contract. (The exact internal source paths in transformers.js may drift; behavior is the contract, line numbers are orientation only.)
+    - Download: race `loadPipeline` against `signal` via `Promise.race`. On abort, the caller's Promise rejects with `AbortError`; background download continues and populates the cache for the next `loadModel`.
+
+  **4.4 Root lifetime — set-once default + per-call override (Q10):**
+  - `createBabulfish({ dom: { root } })` sets the default DOM root. Default: `document`.
+  - `translateTo(lang, { root })` and `restore({ root })` accept per-call root overrides for portaled dialogs and multi-region pages.
+  - `translateText(text, lang)` is root-free — it returns a translated string with no DOM side effects.
+  - `BabulfishConfig` shape:
+    ```ts
+    type BabulfishConfig = {
+      readonly engine?: EngineConfig
+      readonly dom?: Omit<DOMTranslatorConfig, "translate" | "root"> & {
+        readonly root?: ParentNode | Document  // default: document
+      }
+      readonly languages?: readonly Language[]
+    }
+    ```
+  - NO top-level `root` on `BabulfishConfig` — nest it under `dom`; it's a DOM-translator concern, not an engine one.
+
+  **4.5 `translateText` snapshot purity (new — pairs translateText and translateTo cleanly):**
+  - `core.translateText(text, lang, opts?)` routes through the shared engine (respects `loadModel` readiness, uses the same inference pipeline) BUT MUST NOT mutate `snapshot.translation.*`, `snapshot.currentLanguage`, or any slot `translateTo` owns.
+  - Rationale: the two verbs must not fight over the same snapshot slot. A tooltip calling `translateText` while the page translates via `translateTo` must not cause the page's `snapshot.translation.status` to flicker.
+  - Test (in `contract.smoke.test.ts`): call `translateText(text, lang)` while `snapshot.translation.status === "idle"`; assert (i) the Promise resolves with the translated string, (ii) `snapshot.translation` retains reference equality with the prior snapshot, (iii) `snapshot.currentLanguage` is unchanged, (iv) no subscriber invocation occurred during the call.
 - **Acceptance:**
-  - `pnpm -r install && pnpm -r build && pnpm -r test` all green.
-  - `import { createBabulfish, type Snapshot } from "@babulfish/core"` resolves; `createBabulfish(config).snapshot` is `Object.isFrozen`.
-  - `createBabulfish(config)` produces a store whose snapshot changes ONLY via `subscribe` notifications; `dispose()` detaches all subscribers.
-  - Two overlapping `translateTo("a")` then `translateTo("b")` calls end with `currentLanguage === "b"` regardless of completion order.
+  - `import { createBabulfish, type Snapshot } from "@babulfish/core"` resolves. `createBabulfish(config).snapshot` is `Object.isFrozen`.
+  - All invariants 4.1–4.5 pass in `contract.smoke.test.ts`.
+  - `packages/core/src/engine/pipeline-loader.ts` is the ONLY file importing `@huggingface/transformers`. Verify with `grep -r 'from "@huggingface/transformers"' packages/` — exactly one match. ESLint rule catches future regressions.
+  - `__resetEngineForTests()` from `@babulfish/core/engine/testing` nullifies the module-level singleton (next `acquireEngine()` reconstructs), clears any in-flight `loadPromise`, zeroes the ref-counter, and clears every cross-core listener set.
+  - Two sequential `createBabulfish` calls share the same engine (probe via `getEngineIdentity` from `@babulfish/core/engine/testing`).
+  - `core.dispose()` on core A does NOT disrupt core B: engine stays alive, B's listeners intact, B's in-flight `translateTo` resolves normally, B's snapshot unchanged.
+  - Concurrent `loadModel()` from two cores in the same tick triggers exactly ONE `loadPipeline(...)` call (spy via `vi.mock("@babulfish/core/engine/pipeline-loader")`).
+  - `translateText` is snapshot-pure per 4.5.
   - SSR-style first render (no `window`, no `navigator`) resolves `snapshot.capabilities.ready === false` without throwing.
-  - **Engine singleton invariant holds:** the `@huggingface/transformers` runtime lives in a single module-level lazy singleton in `packages/core/src/engine/`. `createBabulfish` calls `acquireEngine()` / `releaseEngine()` from `packages/core/src/core/engine-handle.ts` (a ref-counted handle). Two sequential `createBabulfish` calls share the same engine instance. A smoke test asserts this by constructing two cores and checking `engine.getDebugIdentity()` (or an equivalent reference-equality probe) matches.
-  - **Multi-instance isolation (Q8):** two cores (A and B) coexist sharing one engine. `core.dispose()` on A does NOT disrupt B — B's listeners remain attached, B's active `translateTo` resolves normally, B's snapshot is unchanged. `releaseEngine()` is FORBIDDEN from calling `listeners.clear()` on the engine (today's `engine/model.ts:204-205` does; the T-3 implementation removes that behavior). Each core owns the unsubscribe thunks `engine.on()` returned to it and calls them on its own dispose.
-  - **Concurrent loadModel dedup:** two cores calling `loadModel()` in parallel within the same tick trigger exactly ONE `pipeline(...)` call to `@huggingface/transformers`. Preserve the `if (loadPromise) await loadPromise; return` guard at `engine/model.ts:121-123`. Spy the mocked import to verify `.calls.length === 1`.
-  - **Snapshot granularity (Q7):** a single monolithic frozen `Snapshot` is emitted through `core.subscribe`. Untouched slices retain reference equality between transitions — a `translation.progress` tick produces a new top-level `snapshot` reference but `snapshot.model`, `snapshot.capabilities`, and `snapshot.currentLanguage` keep their prior reference (structural sharing). `subscribe` has no selector argument; there are no per-slice subscribe methods. No spurious notifications: a method call that doesn't change state does NOT invoke subscribers.
-  - **Cancellation contract (Q9):** `loadModel`, `translateTo`, and `translate` accept an optional `{ signal?: AbortSignal }`. A new `translateTo(lang)` aborts the previous (last-caller-wins); the prior Promise rejects with `DOMException("...", "AbortError")`. `core.abort()` is a zero-arg shortcut that aborts the active translation only (NOT model load — transformers.js has no download cancel hook). `core.dispose()` returns `Promise<void>` and rejects all in-flight ops with `AbortError`.
-  - **Engine cancellation mechanics:** generation is cancelled via `InterruptableStoppingCriteria` (transformers.js; see `@huggingface/transformers`'s `generation/stopping_criteria.js:136-153` and the per-token poll at `modeling_utils.js:1016`) wired to the composed signal. Download is cancelled via `Promise.race` against the signal — the background download still completes and caches, so the next `loadModel` is instant.
-  - **Root lifetime (Q10):** `createBabulfish({ dom: { root } })` sets the default root (defaults to `document`). `translateTo(lang, opts?)` and `restore(opts?)` accept a per-call `{ root?: ParentNode | Document }` override. `translate(text, lang)` is root-free (pure string output, no DOM side effects). `root` lives under `config.dom`, not at the top level of `BabulfishConfig`.
-  - **No `"restore"` in core data:** `DEFAULT_LANGUAGES` does not contain `{ code: "restore" }`. `translateTo("restore")` throws: `Unknown language code: restore. Use core.restore() to restore the original DOM.`
+  - `translateTo("restore")` throws: `Unknown language code: restore. Use core.restore() to restore the original DOM.`
+  - `DEFAULT_LANGUAGES` does not contain `{ code: "restore" }`.
   - `packages/core/dist/` has zero `react` string references.
-  - `packages/react/dist/` does not bundle `@babulfish/core` (it is external).
-  - `packages/demo` boots: `pnpm --filter demo dev` renders the page.
-  - `packages/babulfish/` directory no longer exists.
+  - React binding still works as-is (not slimmed — T-5 owns that).
+  - `pnpm -r build && pnpm -r test && pnpm --filter demo dev` all green.
 - **Dispatch template:**
   ```
-  [Artisan] T-3 — Scaffold @babulfish/{core,react,styles} + implement core
+  [Artisan] T-3b — Implement createBabulfish + pipeline-loader seam + engine/testing subpath
 
-  Goal: move the whole repo from one fat `packages/babulfish/` package into the final three-package topology AND introduce the framework-neutral createBabulfish contract in a single PR. Big but mechanical — the only net-new code is the `packages/core/src/core/` module.
+  Goal: add the framework-neutral contract on top of the topology T-3a landed. Net-new code only; T-3a already moved everything and kept the workspace green.
 
-  Context: the library is unshipped. There is no compat meta-package in this PR (deferred to ui-agnostic-polish.md P-1 for publish time). packages/babulfish/ is deleted outright. All callers inside the repo — just packages/demo/ — are migrated in the same PR so the workspace never leaves green.
+  Context: this PR introduces createBabulfish, BUT does NOT rewrite the React provider to consume it (T-5 owns that). It DOES add two seams that matter downstream:
+  - packages/core/src/engine/pipeline-loader.ts: the SINGLE chokepoint for @huggingface/transformers. T-4 mocks this module path.
+  - packages/core/src/engine/testing/__resetEngineForTests(): the test-mode teardown that restores singleton + listener + ref-counter state between scenarios.
 
   Inputs to read first:
   - docs/ui-agnostic-core.md §2.2 (BabulfishCore contract), §4.1 (module sketch), §6.2 (invariants), §6.1 (CSS contract).
-  - docs/plans/ui-agnostic-core.md (this file) — the T-3 section and the engine-singleton invariant below.
-  - packages/babulfish/src/react/provider.tsx (source of the run-ID race guard ~lines 92-171 and DEFAULT_LANGUAGES ~lines 35-50).
-  - packages/babulfish/src/react/use-translator.ts (post-T-1: reads real error from engine event).
-  - packages/babulfish/src/engine/detect.ts (capability snapshot source).
-  - packages/babulfish/src/engine/model.ts (post-T-1 status-change shape with `error?: unknown`).
-  - packages/babulfish/src/dom/translator.ts (post-T-2: accepts `root: ParentNode | Document`).
-  - packages/babulfish/src/translator.ts (27-line convenience factory; moves to packages/core/src/translator.ts as-is).
-  - packages/babulfish/package.json, tsup.config.ts, tsconfig.json (sources of scaffolding).
-  - packages/demo/package.json + packages/demo/src/ (imports to rewrite).
+  - docs/plans/ui-agnostic-core.md T-3b section — core contract invariants 4.1–4.5, especially the NEW 4.5 (translateText snapshot purity).
+  - packages/react/src/provider.tsx — source of the run-ID race guard ~lines 92-171 (you're lifting it into core/progress.ts as pure logic).
+  - packages/core/src/engine/model.ts (post-T-3a) — has the blanket `listeners.clear()` at ~lines 204-205 that must go away.
+  - packages/core/src/engine/detect.ts (capability snapshot source).
+  - packages/core/src/dom/translator.ts (post-T-2 accepts `root: ParentNode | Document`; its file name is namespaced, not public API — stays as-is).
 
   Task:
-  1. Create packages/core/, packages/react/, packages/styles/ directory skeletons. Mirror existing tsconfig/tsup styles.
-  2. **Move**, don't copy (use git mv):
-     - packages/babulfish/src/engine/ → packages/core/src/engine/
-     - packages/babulfish/src/dom/ → packages/core/src/dom/
-     - packages/babulfish/src/translator.ts → packages/core/src/translator.ts
-     - packages/babulfish/src/react/ → packages/react/src/
-     - packages/babulfish/src/css/babulfish.css → packages/styles/src/babulfish.css
-     - packages/babulfish/src/__tests__/ → split between core and react based on what each test imports.
-  3. Write packages/core/src/core/ as the new UI-agnostic contract:
-     - index.ts — public barrel exporting createBabulfish, types from store.ts, DEFAULT_LANGUAGES (restore-free).
-     - babulfish.ts — `createBabulfish(config): BabulfishCore` factory. Acquires an engine handle via acquireEngine(). Builds the store. Returns snapshot + subscribe + loadModel + translateTo + restore + translate + abort + dispose.
-     - store.ts — frozen-snapshot pub/sub. Every transition calls Object.freeze on the new snapshot. subscribe returns () => void.
-     - progress.ts — run-ID race guard lifted from src/react/provider.tsx:92-171 as a pure class/function.
-     - languages.ts — DEFAULT_LANGUAGES without the `"restore"` sentinel (Q3 decision). Do NOT emit a "restore" entry.
-     - capabilities.ts — wraps src/engine/detect.ts with SSR-safe defaults (`ready: false` until detection completes).
-     - engine-handle.ts — **ENGINE SINGLETON INVARIANT** (see below).
-     - __tests__/contract.smoke.test.ts — four invariants from design doc §6.2 plus engine-singleton sharing.
-  4. CORE CONTRACT INVARIANTS — the four non-negotiables the new `packages/core/src/core/` module bakes in. Each is tested by T-4 conformance scenarios.
+  1. Extract `@huggingface/transformers` import into packages/core/src/engine/pipeline-loader.ts. Export a single function `loadPipeline(task, model, opts)`. Update packages/core/src/engine/model.ts to import `loadPipeline` from `./pipeline-loader`. Add an ESLint `no-restricted-imports` rule (in the repo's existing ESLint config) forbidding `@huggingface/transformers` everywhere except `packages/core/src/engine/pipeline-loader.ts`.
+  2. Write packages/core/src/core/:
+     - index.ts — barrel (createBabulfish, types from store.ts, DEFAULT_LANGUAGES restore-free).
+     - babulfish.ts — createBabulfish factory: acquires engine via engine-handle, builds store, returns { snapshot, subscribe, loadModel, translateTo, translateText, restore, abort, dispose, languages }.
+     - store.ts — frozen-snapshot pub/sub with structural sharing; each transition produces a new top-level snapshot while untouched slices retain reference equality.
+     - progress.ts — run-ID race guard lifted from React provider as pure logic; owns per-translation AbortController; implements last-caller-wins.
+     - languages.ts — DEFAULT_LANGUAGES without "restore".
+     - capabilities.ts — SSR-safe wrapper around engine/detect.ts.
+     - engine-handle.ts — ref-counted acquireEngine/releaseEngine; on ref-count zero, engine stays alive (HMR-friendly). releaseEngine MUST NOT call engine.listeners.clear(). Remove the blanket-clear at engine/model.ts:204-205 if it's still there.
+     - __tests__/contract.smoke.test.ts — invariants 4.1–4.5 including the translateText snapshot-purity test (4.5).
+  3. Write packages/core/src/engine/testing/index.ts (`@experimental — test-only; subject to change`):
+     - __resetEngineForTests(): nullifies the module-level singleton, clears loadPromise, zeroes ref-counter, clears ALL cross-core listener sets. Designed for afterEach / beforeEach hooks in unit + conformance tests.
+     - getEngineIdentity(core): opaque engine-identity probe for singleton-sharing assertions.
+  4. Write packages/core/src/testing/index.ts as a scaffold barrel (empty-ish; T-4 populates with scenarios + drivers). The package.json "./testing" export must resolve.
+  5. Extend packages/core/package.json exports: add "./testing" and "./engine/testing".
+  6. Update packages/core/src/index.ts to re-export ./core at the top (replacing the T-3a TODO comment).
+  7. Implement contract invariants 4.1–4.5 per the plan spec. Key points:
+     - translateText is snapshot-pure: routes through engine but NEVER writes to snapshot.translation.* or snapshot.currentLanguage; no subscriber notification during the call.
+     - translateTo is last-caller-wins; prior Promise rejects with DOMException("...", "AbortError").
+     - translateTo("restore") throws with the specified error message.
+     - Generation cancellation via InterruptableStoppingCriteria + post-await signal.throwIfAborted().
+  8. DO NOT rewrite React provider. DO NOT add conformance scenarios (T-4). DO NOT slim the binding (T-5).
+  9. Verify: `grep -r 'from "@huggingface/transformers"' packages/` returns exactly one match (pipeline-loader.ts).
+  10. Run `pnpm -r build`, `pnpm -r test`, `pnpm --filter demo dev`. Green across the board.
+  11. Grep packages/core/dist/ for "react" — zero matches.
 
-     4.1 ENGINE SINGLETON + MULTI-INSTANCE (Q8):
-     - `packages/core/src/engine/` exports a module-level lazy singleton that owns the `@huggingface/transformers` runtime state (WASM/WebGPU contexts, model cache). Never construct it eagerly.
-     - `packages/core/src/core/engine-handle.ts` exposes `acquireEngine()` → handle + ref-count increment; `releaseEngine(handle)` → ref-count decrement. When ref-count hits zero, DO NOT tear down synchronously — leave the engine alive (tear-down is async and expensive; HMR remounts would otherwise thrash).
-     - `createBabulfish` calls `acquireEngine` on construction and `releaseEngine` on `dispose`.
-     - **`releaseEngine()` MUST NOT clear cross-core listeners.** Each core owns the unsubscribe thunks `engine.on()` returned to it and calls them on its own dispose. The singleton NEVER blanket-clears `listeners[event]` — otherwise disposing core A rips the rug out from under core B. (Today's `engine/model.ts:204-205` calls `listeners.clear()`; the T-3 implementation removes that behavior.)
-     - **Concurrent `loadModel()` from N cores MUST share one in-flight `pipeline()` call.** Preserve the `if (loadPromise) await loadPromise; return` guard at `engine/model.ts:121-123`. Two cores constructed in parallel, both calling `loadModel()`, trigger exactly one `pipeline(...)` call.
-     - Result: multiple `createBabulfish` instances in the same process share one engine. Next dev-HMR remounts, Storybook mounts, and two-element WC demos don't double-load. Subpath imports (`@babulfish/core` + `@babulfish/core/engine`) resolve to the same module instance — bundlers handle that for us, but document the expectation.
+  Deliverable: a single PR titled `T-3b — Implement core module`.
 
-     4.2 SNAPSHOT — monolithic + structural sharing (Q7):
-     - One `core.snapshot` per core. One `core.subscribe(listener)` per core. The snapshot is a frozen monolithic object: `{ model, translation, capabilities, currentLanguage, progress, ... }`.
-     - Each transition produces a new top-level snapshot reference via structural sharing: untouched slices keep their prior reference. A `translation.progress` tick changes `snapshot` and `snapshot.translation` but `snapshot.model`, `snapshot.capabilities`, `snapshot.currentLanguage` MUST retain reference equality with the prior snapshot.
-     - `subscribe` has no selector argument. No per-slice subscribe methods (`core.model.subscribe`, etc.). Selectors are a binding concern — React gets `useSyncExternalStoreWithSelector` on top; Vue/Svelte use their native reactivity.
-     - No spurious notifications: a method call that doesn't change state (e.g. `restore()` from an already-idle snapshot) MUST NOT invoke subscribers.
-
-     4.3 CANCELLATION — AbortSignal + imperative shortcut (Q9):
-     - Every async method accepts an optional `{ signal?: AbortSignal }`. Contract signatures:
-       ```ts
-       type TranslateOptions = { readonly signal?: AbortSignal; readonly root?: ParentNode | Document }
-
-       interface BabulfishCore {
-         readonly snapshot: Snapshot
-         subscribe(listener: (s: Snapshot) => void): () => void
-         loadModel(opts?: { signal?: AbortSignal }): Promise<void>
-         translateTo(lang: string, opts?: TranslateOptions): Promise<void>
-         translate(text: string, lang: string, opts?: { signal?: AbortSignal }): Promise<string>
-         restore(opts?: { root?: ParentNode | Document }): void
-         abort(): void
-         dispose(): Promise<void>
-         readonly languages: ReadonlyArray<Language>
-       }
-       ```
-     - On cancellation, Promises reject with `DOMException("...", "AbortError")` — use `signal.throwIfAborted()` / `signal.reason`. Never a custom `CancelledError`, never a tagged `{ cancelled: true }` resolved value.
-     - **Last-caller-wins on `translateTo`:** starting a new `translateTo` aborts the prior controller; the prior Promise rejects with `AbortError`. This REPLACES the ad-hoc run-ID counter at the React layer. `progress.ts` owns the per-translation `AbortController` lifecycle.
-     - `core.abort()` is a zero-arg shortcut equivalent to aborting the currently-active translation's controller. It does NOT abort `loadModel` (transformers.js has no download cancellation primitive; aborting just forces a re-download).
-     - `core.dispose()` returns `Promise<void>`. Synchronously flips an internal `disposed` flag, aborts in-flight ops (their Promises reject with `AbortError`), detaches subscribers, and awaits pipeline teardown. WC's `disconnectedCallback` calls it fire-and-forget.
-     - **Engine cancellation mechanics:**
-       - Generation: construct `InterruptableStoppingCriteria` (from `@huggingface/transformers`, `.../generation/stopping_criteria.js:136-153`) per call, pass via `stopping_criteria` to `generator(messages, ...)` at `engine/model.ts:177`. Wire `signal.addEventListener("abort", () => criteria.interrupt())`. The generate loop polls each token at `.../modeling_utils.js:1016`. After `await generator(...)`, call `signal.throwIfAborted()` — the pipeline resolves even after interrupt with partial output, so the post-await check is what actually honors the contract.
-       - Download: race `pipelinePromise` against `signal` via `Promise.race`. On abort, the caller's Promise rejects with `AbortError`, but the background download continues and populates the cache; next `loadModel` hits that cache.
-
-     4.4 ROOT LIFETIME — set-once default + per-call override (Q10):
-     - `createBabulfish({ dom: { root } })` sets the default DOM root. Default: `document`.
-     - `translateTo(lang, { root })` and `restore({ root })` accept per-call root overrides for portaled dialogs and multi-region pages.
-     - `translate(text, lang)` is root-free — it returns a translated string with no DOM side effects.
-     - `BabulfishConfig` shape:
-       ```ts
-       type BabulfishConfig = {
-         readonly engine?: EngineConfig
-         readonly dom?: Omit<DOMTranslatorConfig, "translate" | "root"> & {
-           readonly root?: ParentNode | Document  // default: document
-         }
-         readonly languages?: readonly Language[]
-       }
-       ```
-     - NO top-level `root` on `BabulfishConfig` — nest it under `dom`; it's a DOM-translator concern, not an engine one.
-  5. Rewrite imports in packages/react/src/: `../core/*` → `@babulfish/core`; `../engine/*` → `@babulfish/core/engine`; `../dom/*` → `@babulfish/core/dom`; `../translator.js` → `@babulfish/core`.
-  6. Keep the React binding fat in this PR. Provider still holds the run-ID race guard inline from src/react/provider.tsx:92-171 and the inline DEFAULT_LANGUAGES with "restore" still present. T-5 slims the binding and removes the sentinel. The only goal here is "existing React tests still pass".
-  7. Write packages/core/package.json: name "@babulfish/core", exports ".", "./engine", "./dom", "./testing" (testing entry points at src/testing/index.ts which is currently an empty-ish scaffold for T-4 to fill).
-  8. Write packages/react/package.json: name "@babulfish/react", peerDependencies { react: "^18 || ^19" }, dependencies { "@babulfish/core": "workspace:^", "@babulfish/styles": "workspace:^" }, exports ".", "./css" (re-export from @babulfish/styles/css).
-  9. Write packages/styles/package.json: name "@babulfish/styles", exports "./css", files ["src/babulfish.css"]. No build step needed; CSS ships as-is.
-  10. Write packages/styles/README.md listing every `--babulfish-*` custom property the stylesheet relies on.
-  11. Delete packages/babulfish/ entirely. It has no job in the unshipped state.
-  12. Update packages/demo/: package.json dep swap, grep-replace all `from "babulfish"` → `from "@babulfish/react"`, `"babulfish/css"` → `"@babulfish/react/css"`.
-  13. Run `pnpm install`, `pnpm -r build`, `pnpm -r test`, `pnpm --filter demo build`, `pnpm --filter demo dev`. Confirm green across the board.
-  14. Grep packages/core/dist/ for the string `react` — should return zero matches.
-
-  Deliverable: a single PR titled `T-3 — Scaffold @babulfish/{core,react,styles} + implement core`.
+  When you finish T-3b: STOP. Report completion and prompt a rerun on docs/plans/ui-agnostic-core.md. T-4 / T-5 / T-7 / T-8 can now run in parallel.
 
   Constraints:
-  - Do NOT add a packages/babulfish/ compat shim. That is ui-agnostic-polish.md P-1, at publish time.
-  - Do NOT slim the React provider in this PR. T-5 owns that. Keep existing React tests passing unchanged.
-  - Do NOT export framework-typed values from packages/core/. Pure TS data + functions only.
-  - Do NOT include "restore" in DEFAULT_LANGUAGES — T-5 is the cleanup PR for the sentinel in the React UI; the core-side data is born clean.
-  - Do NOT introduce a second engine instance anywhere. `new Engine()` or equivalent happens exactly once in the repo, inside the module-level lazy singleton.
+  - Do NOT add a packages/babulfish/ compat shim (already deleted in T-3a).
+  - Do NOT slim the React provider (T-5 owns that).
+  - Do NOT export framework-typed values from @babulfish/core.
+  - Do NOT include "restore" in DEFAULT_LANGUAGES.
+  - Do NOT introduce a second `@huggingface/transformers` import site anywhere in the repo. pipeline-loader.ts is the ONLY one — enforce via ESLint rule.
+  - Do NOT name the core method `translate()` — it is `translateText()`. The old `packages/babulfish/src/translator.ts` factory is gone (T-3a deleted it).
+  - Cross-plan coherence: if any decision here diverges from docs/plans/ui-agnostic-polish.md, update both files in this PR.
   ```
 
 ---
@@ -329,7 +425,7 @@ The dispatch templates below assume these constraints — they are not repeated 
 - **Owner:** `[Test Maven]`
 - **Phase:** 1
 - **Blocks:** T-6
-- **Blocked by:** T-3
+- **Blocked by:** T-3b
 - **Files:**
   - New: `packages/core/src/testing/index.ts` — public barrel for scenarios + driver interface (`@experimental` JSDoc)
   - New: `packages/core/src/testing/scenarios.ts` — framework-neutral scenarios as data + runner
@@ -348,7 +444,7 @@ The dispatch templates below assume these constraints — they are not repeated 
   - **Lifecycle / multi-instance scenarios (Q8):**
     - `dispose()` detaches subscribers; subsequent `subscribe()` returns a no-op unsubscriber.
     - SSR-style first render has `capabilities.ready === false` without throwing.
-    - **Engine-singleton sharing** — two cores share one engine via the `getEngineIdentity(core)` probe exported from `@babulfish/core/testing`.
+    - **Engine-singleton sharing** — two cores share one engine via the `getEngineIdentity(core)` probe exported from `@babulfish/core/engine/testing`.
     - **Mount → dispose → remount** — engine identity is preserved across a full cycle; new core's state is clean (no listener carryover).
     - **Concurrent loadModel dedup** — two cores both call `loadModel()` in the same tick; the mocked `pipeline(...)` is invoked exactly once.
     - **Cross-core dispose safety** — start a `translateTo` on core B, dispose core A mid-flight; B's Promise resolves normally, B's snapshot unchanged.
@@ -359,6 +455,9 @@ The dispatch templates below assume these constraints — they are not repeated 
     - `abort()` mid-translation returns state to `translation.idle`; no listener receives a stale completion.
   - **Root override scenario (Q10):**
     - `translateTo(lang, { root: fragment })` translates inside the fragment; the global `document` and the default root are untouched (verified via a spy on `document.querySelector`).
+  - **`translateText` scenario (invariant 4.5):**
+    - `translateText(text, lang)` called while `snapshot.translation.status === "idle"` resolves with a translated string AND leaves `snapshot.translation` reference-equal to the prior snapshot AND leaves `snapshot.currentLanguage` unchanged AND does not invoke any subscriber during the call.
+  - **Scenario isolation:** every scenario runs through a `beforeEach` (or `afterEach`) that calls `__resetEngineForTests()` from `@babulfish/core/engine/testing`. Without this, scenario order would mutate the module-level engine singleton and fail deterministically.
   - Both conformance test files (`conformance.direct.test.ts` and `conformance.vanilla-dom.test.ts`) are green.
   - Every public symbol in `packages/core/src/testing/index.ts` carries an `@experimental — subject to change` JSDoc banner.
 - **Dispatch template:**
@@ -367,7 +466,11 @@ The dispatch templates below assume these constraints — they are not repeated 
 
   Goal: produce a reusable conformance suite that any binding (React today, Web Component tomorrow, Vue whenever) can run against itself to prove it honors the BabulfishCore contract. Ship a direct driver AND a vanilla DOM driver to prove the core works outside any framework.
 
-  Context: the contract was implemented in T-3 at packages/core/src/core/. Decision Q4=A makes the conformance suite a public subpath export (@babulfish/core/testing). The vanilla DOM driver is the proof-of-agnosticism — if scenarios run green through a zero-framework driver, the contract really is UI-neutral. The React driver (T-6) then has to run the same scenarios.
+  Context: the contract was implemented in T-3b at packages/core/src/core/. Decision Q4=A makes the conformance suite a public subpath export (@babulfish/core/testing). The vanilla DOM driver is the proof-of-agnosticism — if scenarios run green through a zero-framework driver, the contract really is UI-neutral. The React driver (T-6) then has to run the same scenarios.
+
+  Two test-only primitives from T-3b are central to this task:
+  - `vi.mock("@babulfish/core/engine/pipeline-loader")` — the SINGLE chokepoint for @huggingface/transformers. Mock this module path to stub model loads across all scenarios.
+  - `__resetEngineForTests()` from `@babulfish/core/engine/testing` — nukes the module-level engine singleton + cross-core listeners + ref-counter. Call it in `beforeEach` so scenarios don't leak singleton state into each other.
 
   Inputs to read first:
   - docs/ui-agnostic-core.md §6.2 invariants.
@@ -397,7 +500,7 @@ The dispatch templates below assume these constraints — they are not repeated 
      Lifecycle / multi-instance (Q8):
      e. dispose detaches subscribers; subsequent subscribe returns a no-op unsubscriber.
      f. SSR-style first render has capabilities.ready === false without throwing.
-     g. Engine singleton sharing — create two cores via driver; use `getEngineIdentity(core)` probe (exported from `@babulfish/core/testing`) to assert both reference the same engine.
+     g. Engine singleton sharing — create two cores via driver; use `getEngineIdentity(core)` probe (exported from `@babulfish/core/engine/testing`) to assert both reference the same engine.
      h. Mount → dispose → remount — engine identity is preserved; new core's state is clean.
      i. Concurrent loadModel dedup — construct two cores, both call loadModel in the same tick; assert the mocked `pipeline(...)` was invoked exactly once (`.mock.calls.length === 1`).
      j. Cross-core dispose safety — start a translateTo on core B, dispose core A mid-flight, assert B's Promise resolves normally and B's snapshot is unaffected.
@@ -410,12 +513,15 @@ The dispatch templates below assume these constraints — they are not repeated 
 
      Root override (Q10):
      o. translateTo(lang, { root: fragment }) — text inside the fragment is translated; global `document` and the default root are untouched (verify via `vi.spyOn(document, "querySelector")` reporting zero calls).
+
+     translateText snapshot purity (invariant 4.5):
+     p. translateText while idle — call `translateText(text, lang)` while `snapshot.translation.status === "idle"`. Assert (i) the Promise resolves with a translated string, (ii) `snapshot.translation` is reference-equal before and after, (iii) `snapshot.currentLanguage` is unchanged, (iv) no subscriber was invoked during the call. This proves `translateText` and `translateTo` don't fight over the same snapshot slot.
   4. Write packages/core/src/testing/drivers/direct.ts: `ConformanceDriver` that calls createBabulfish directly.
   5. Write packages/core/src/testing/drivers/vanilla-dom.ts: `ConformanceDriver` that accepts a `root: ParentNode | Document` (default: fresh `JSDOM` document in tests) and creates createBabulfish wired to that root. For scenarios that assert DOM state, the driver exposes its root.
-  6. Write packages/core/src/testing/index.ts exporting: scenarios, ConformanceDriver interface, DirectDriver, VanillaDomDriver, getEngineIdentity. Every export carries `@experimental` JSDoc.
-  7. Write packages/core/src/__tests__/conformance.direct.test.ts — iterates scenarios, runs each through DirectDriver, uses vitest it.each so failures name the scenario id.
-  8. Write packages/core/src/__tests__/conformance.vanilla-dom.test.ts — same, via VanillaDomDriver. Uses JSDOM or `@happy-dom/jest-environment` (match repo convention).
-  9. Stub the @huggingface/transformers import across tests so scenarios don't require a real model load. The engine module exposes a test-seam for this under `@babulfish/core/engine/testing` or via a vitest mock.
+  6. Write packages/core/src/testing/index.ts exporting: scenarios, ConformanceDriver interface, DirectDriver, VanillaDomDriver. Every export carries `@experimental` JSDoc. (NOTE: `getEngineIdentity` and `__resetEngineForTests` live in `@babulfish/core/engine/testing`, NOT here. Re-import them from that subpath when scenarios need them.)
+  7. Write packages/core/src/__tests__/conformance.direct.test.ts — iterates scenarios, runs each through DirectDriver, uses vitest it.each so failures name the scenario id. Wrap the suite in `beforeEach(() => __resetEngineForTests())` — otherwise the module-level engine singleton leaks state between scenarios and ordering matters.
+  8. Write packages/core/src/__tests__/conformance.vanilla-dom.test.ts — same, via VanillaDomDriver (same `beforeEach` reset). Uses JSDOM or `@happy-dom/jest-environment` (match repo convention).
+  9. Stub model loads via `vi.mock("@babulfish/core/engine/pipeline-loader", ...)` at the top of each conformance test file — T-3b's `pipeline-loader.ts` is the SINGLE chokepoint for `@huggingface/transformers`. The ESLint rule from T-3b prevents any other mock target from being valid. The mock should resolve `loadPipeline(...)` with a fake pipeline that returns scripted translations for the scenarios.
   10. Run `pnpm --filter @babulfish/core test`. Both conformance files green.
 
   Deliverable: a single PR titled `T-4 — Conformance scenarios + drivers`.
@@ -425,7 +531,8 @@ The dispatch templates below assume these constraints — they are not repeated 
   - Scenarios must NOT depend on a real model load. Stub the engine.
   - The vanilla DOM driver must use a real DOM (JSDOM in tests) — no fake DOM. The whole point is to prove real-DOM compatibility.
   - Do NOT export internal helpers from testing/index.ts; only the public conformance API.
-  - The engine-identity probe is deliberately in @babulfish/core/testing, not in the main barrel. It is a debugging/conformance primitive, not a runtime API.
+  - The engine-identity probe and `__resetEngineForTests()` live in `@babulfish/core/engine/testing` (NOT in `@babulfish/core/testing`, NOT in the main barrel). They are test-only debugging/conformance primitives, not runtime APIs.
+  - Do NOT mock `@huggingface/transformers` directly. The only valid mock target is `@babulfish/core/engine/pipeline-loader`; the ESLint rule from T-3b makes this enforceable.
   ```
 
 ---
@@ -435,7 +542,7 @@ The dispatch templates below assume these constraints — they are not repeated 
 - **Owner:** `[Artisan]`
 - **Phase:** 1
 - **Blocks:** T-6, T-9
-- **Blocked by:** T-3
+- **Blocked by:** T-3b
 - **Files:**
   - Rewrite: `packages/react/src/provider.tsx` — ≤ 50 non-comment/non-import lines: create core, put in context, dispose on unmount
   - Rewrite: `packages/react/src/use-translator.ts` — `useSyncExternalStore(core.subscribe, () => core.snapshot, () => core.snapshot)` + stable method refs
@@ -444,7 +551,7 @@ The dispatch templates below assume these constraints — they are not repeated 
   - Update: `packages/react/src/translate-dropdown.tsx` — render an "Original" UI affordance locally (NOT a `Language`) that calls `core.restore()` when selected
   - Update: `packages/react/src/translate-button.tsx` — verify no dependency on the sentinel
   - New/update: tests asserting the dropdown shows an "Original" entry and selecting it triggers restore
-  - Update (if still present): `packages/core/src/core/babulfish.ts` — `translateTo("restore")` throws with a clear error (core was born clean in T-3, so this may already be the case — verify)
+  - Update (if still present): `packages/core/src/core/babulfish.ts` — `translateTo("restore")` throws with a clear error (core was born clean in T-3b, so this may already be the case — verify)
 - **Acceptance:**
   - `provider.tsx` body is ≤ 50 non-comment, non-import lines.
   - `useSyncExternalStore` is the only subscription primitive in `use-translator.ts` and `use-translate-dom.ts`.
@@ -459,7 +566,7 @@ The dispatch templates below assume these constraints — they are not repeated 
 
   Goal: collapse the React provider to wiring-only by projecting `core.snapshot` via useSyncExternalStore. Remove the "restore" control code from DEFAULT_LANGUAGES and relocate the "Original" UI affordance to the binding. No state should live in React that also lives in core.
 
-  Context: T-3 landed createBabulfish and moved the React binding into packages/react/ with its imports rewritten, but kept the provider fat and left DEFAULT_LANGUAGES untouched in the React tree. This PR finishes the job: the provider becomes wiring-only, and the "restore" sentinel is replaced by a binding-local UI primitive.
+  Context: T-3a moved the React binding into packages/react/ with its imports rewritten; T-3b landed createBabulfish in packages/core/src/core/. Both kept the provider fat and left DEFAULT_LANGUAGES untouched in the React tree. This PR finishes the job: the provider becomes wiring-only consuming createBabulfish via useSyncExternalStore, and the "restore" sentinel is replaced by a binding-local UI primitive.
 
   Inputs to read first:
   - packages/core/src/core/index.ts (the contract you're projecting).
@@ -475,7 +582,7 @@ The dispatch templates below assume these constraints — they are not repeated 
   4. Delete any React-local DEFAULT_LANGUAGES. Re-export from @babulfish/core.
   5. In packages/react/src/translate-dropdown.tsx: render the consumer-supplied languages list as-is, then render an extra "Original" item ABOVE the list. The "Original" item is a UI primitive owned by the binding — NOT a Language. Selecting it calls core.restore() via the hook API.
   6. Update existing dropdown tests (or add one if none) to assert (a) "Original" appears, (b) clicking it triggers restore, (c) the consumer's languages list is unchanged.
-  7. Verify packages/core/src/core/babulfish.ts's translateTo throws on unknown codes including "restore" (it was born clean in T-3; just confirm the error message is the one specified in Acceptance).
+  7. Verify packages/core/src/core/babulfish.ts's translateTo throws on unknown codes including "restore" (it was born clean in T-3b; just confirm the error message is the one specified in Acceptance).
   8. Run `pnpm --filter @babulfish/react test` and `pnpm --filter @babulfish/core test`. Green.
   9. Run `pnpm --filter demo build` and `pnpm --filter demo dev`. Page renders; "Original" entry works.
   10. Confirm provider.tsx is ≤ 50 non-comment, non-import lines.
@@ -543,13 +650,13 @@ The dispatch templates below assume these constraints — they are not repeated 
 - **Owner:** `[Artisan]`
 - **Phase:** 2
 - **Blocks:** T-9
-- **Blocked by:** T-3
+- **Blocked by:** T-3b
 - **Files:**
   - New directory: `packages/demo-vanilla/`
   - New: `packages/demo-vanilla/package.json` (name `@babulfish/demo-vanilla`, `private: true`, deps `@babulfish/core` + `@babulfish/styles`)
   - New: `packages/demo-vanilla/index.html` (static HTML, `<link rel="stylesheet" href="./style.css">`, an `<article>` of sample text, a `<select>` for language, a `<button>` for Original, a `<div>` for status)
   - New: `packages/demo-vanilla/src/main.ts` (ESM `<script type="module" src="./src/main.ts">` entry — imports createBabulfish, loads model, subscribes to snapshot, wires button + select to translateTo / restore)
-  - New: `packages/demo-vanilla/vite.config.ts` (or equivalent dev server config — match repo convention; the other demo uses Next, so pick a minimal dev server such as Vite in plain HTML mode)
+  - New: `packages/demo-vanilla/vite.config.ts` (Vite in plain-HTML mode — the demo is zero-framework so Vite's bare HTML dev server is the right fit)
   - New: `packages/demo-vanilla/README.md` (one-paragraph "zero-framework translation demo; run `pnpm --filter @babulfish/demo-vanilla dev`")
 - **Acceptance:**
   - `pnpm --filter @babulfish/demo-vanilla dev` serves a static HTML page with functional translation.
@@ -571,7 +678,7 @@ The dispatch templates below assume these constraints — they are not repeated 
   - @babulfish/styles/css — the stylesheet is binding-agnostic; use it.
 
   Task:
-  1. Create packages/demo-vanilla/ scaffolding. Minimal dev server (Vite in SPA/HTML mode recommended for lowest ceremony).
+  1. Create packages/demo-vanilla/ scaffolding. Use Vite in plain-HTML mode as the dev server — not Next, not Webpack, not a custom script. This demo is zero-framework; Vite's bare HTML entry point is the right fit.
   2. index.html: a header, an <article> with 2-3 paragraphs of sample text, a <select> for target language populated from DEFAULT_LANGUAGES imported via the ESM script, a "Restore original" button, a status region showing model loading progress and translation status.
   3. src/main.ts:
      - Import { createBabulfish, DEFAULT_LANGUAGES } from "@babulfish/core".
@@ -601,7 +708,7 @@ The dispatch templates below assume these constraints — they are not repeated 
 - **Owner:** `[Artisan]`
 - **Phase:** 2
 - **Blocks:** T-9
-- **Blocked by:** T-3
+- **Blocked by:** T-3b
 - **Stretch:** cut if schedule pressure appears — T-4's vanilla DOM driver and T-7's vanilla demo already prove agnosticism. This task additionally proves the Shadow DOM story from T-2.
 - **Files:**
   - New directory: `packages/demo-webcomponent/`
@@ -659,7 +766,7 @@ The dispatch templates below assume these constraints — they are not repeated 
   - Update: root `README.md` with "Pick your binding" matrix, repo overview, links to per-package READMEs, links to all demos
   - Expand: `packages/core/README.md` — quick-start (`createBabulfish` + vanilla DOM), API summary, link to design doc, link to `@babulfish/core/testing`
   - Expand: `packages/react/README.md` — quick-start (install, `<TranslatorProvider>`, `useTranslator`), components, link to `packages/demo`
-  - Expand: `packages/styles/README.md` — custom-property contract (already drafted in T-3)
+  - Expand: `packages/styles/README.md` — custom-property contract (already drafted in T-3a)
   - Expand: `packages/demo-vanilla/README.md` and (if shipped) `packages/demo-webcomponent/README.md` — runnable instructions
   - Update: `docs/ui-agnostic-core.md` if any decision changed during execution (probably not)
 - **Acceptance:**
@@ -676,7 +783,7 @@ The dispatch templates below assume these constraints — they are not repeated 
 
   Inputs to read first:
   - docs/ui-agnostic-core.md §3.1 (Pick-your-surface matrix), §6.3 (doc strategy), §8 (architecture diagrams).
-  - Each new package README stub from T-3 / T-7 / T-8.
+  - Each new package README stub from T-3a / T-7 / T-8.
   - packages/demo (the React demo; its README may need updating too).
 
   Task:
@@ -689,7 +796,7 @@ The dispatch templates below assume these constraints — they are not repeated 
      - Links to design doc and plan.
   2. Expand packages/core/README.md: quick-start using createBabulfish + vanilla DOM (copy the essence of T-7's main.ts); API summary referencing design doc §2.2; "for binding authors: see @babulfish/core/testing"; link to docs/ui-agnostic-core.md.
   3. Expand packages/react/README.md: quick-start (npm install, TranslatorProvider, useTranslator); components reference (TranslateButton, TranslateDropdown); link to packages/demo; CSS instructions (`import "@babulfish/react/css"`).
-  4. Expand packages/styles/README.md: confirm the custom-property contract list from T-3 is comprehensive; add usage examples for theming.
+  4. Expand packages/styles/README.md: confirm the custom-property contract list from T-3a is comprehensive; add usage examples for theming.
   5. Expand packages/demo-vanilla/README.md: one paragraph + link to root README + `pnpm --filter @babulfish/demo-vanilla dev` instructions.
   6. If T-8 shipped, same for packages/demo-webcomponent/README.md.
   7. Cross-link: every README has a section linking to siblings.
