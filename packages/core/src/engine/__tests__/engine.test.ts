@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import type {
   Message,
+  PipelineOptions,
   TextGenerationChatOutput,
   TextGenerationPipeline,
   TextGenerationStringOutput,
@@ -12,6 +13,7 @@ import type {
 
 function createMockTextGenerationPipeline() {
   const generate = vi.fn<TextGenerationPipeline["_call"]>()
+  const dispose = vi.fn(async () => {})
   type GenerateOptions = Parameters<TextGenerationPipeline["_call"]>[1]
 
   function mockGenerator(
@@ -39,12 +41,13 @@ function createMockTextGenerationPipeline() {
 
   return {
     generate,
+    dispose,
     generator: Object.assign(mockGenerator, {
       _call: generate,
       task: "text-generation",
       model: {} as TextGenerationPipeline["model"],
       tokenizer: {} as TextGenerationPipeline["tokenizer"],
-      dispose: vi.fn(async () => {}),
+      dispose,
     }) satisfies TextGenerationPipeline,
   }
 }
@@ -53,7 +56,7 @@ function resolveMockPipeline(): Promise<TextGenerationPipeline> {
   return Promise.resolve(mockGenerator)
 }
 
-const { generate: mockGenerate, generator: mockGenerator } =
+const { generate: mockGenerate, dispose: mockDispose, generator: mockGenerator } =
   createMockTextGenerationPipeline()
 
 vi.mock("../pipeline-loader.js", () => ({
@@ -79,17 +82,30 @@ function statusChanges(engine: ReturnType<typeof createEngine>) {
   return changes
 }
 
+type ProgressCallback = NonNullable<PipelineOptions["progress_callback"]>
+
+function captureProgressCallback() {
+  let callback: ProgressCallback | undefined
+
+  mockLoadPipeline.mockImplementation((_task, _model, opts) => {
+    callback = opts?.progress_callback
+    return resolveMockPipeline()
+  })
+
+  return () => callback
+}
+
+beforeEach(() => {
+  vi.clearAllMocks()
+  mockGenerate.mockReset()
+  mockLoadPipeline.mockImplementation(resolveMockPipeline)
+})
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
 describe("createEngine", () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-    mockGenerate.mockReset()
-    mockLoadPipeline.mockImplementation(resolveMockPipeline)
-  })
-
   it("returns idle status initially", () => {
     const engine = createEngine()
     expect(engine.status).toBe("idle")
@@ -105,12 +121,6 @@ describe("createEngine", () => {
 })
 
 describe("load", () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-    mockGenerate.mockReset()
-    mockLoadPipeline.mockImplementation(resolveMockPipeline)
-  })
-
   it("transitions idle -> downloading -> ready", async () => {
     const engine = createEngine()
     const changes = statusChanges(engine)
@@ -192,12 +202,6 @@ describe("load", () => {
 })
 
 describe("translate", () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-    mockGenerate.mockReset()
-    mockLoadPipeline.mockImplementation(resolveMockPipeline)
-  })
-
   it("throws if model not loaded", async () => {
     const engine = createEngine()
     await expect(engine.translate("hello", "es")).rejects.toThrow(
@@ -267,22 +271,15 @@ describe("translate", () => {
 })
 
 describe("dispose", () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-    mockGenerate.mockReset()
-    mockLoadPipeline.mockImplementation(resolveMockPipeline)
-  })
-
-  it("resets status to idle and removes listeners", async () => {
+  it("resets status to idle and disposes the loaded pipeline", async () => {
     const engine = createEngine()
-    const changes = statusChanges(engine)
     await engine.load()
 
-    changes.length = 0
     engine.dispose()
 
-    // dispose fires status-change to idle, then clears listeners
     expect(engine.status).toBe("idle")
+    await Promise.resolve()
+    expect(mockDispose).toHaveBeenCalledTimes(1)
   })
 
   it("requires re-loading after dispose", async () => {
@@ -297,12 +294,6 @@ describe("dispose", () => {
 })
 
 describe("event emitter", () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-    mockGenerate.mockReset()
-    mockLoadPipeline.mockImplementation(resolveMockPipeline)
-  })
-
   it("on() returns unsubscribe function", async () => {
     const engine = createEngine()
     const changes: TranslatorStatus[] = []
@@ -317,27 +308,20 @@ describe("event emitter", () => {
   })
 
   it("emits progress events during download", async () => {
-    let capturedCallback: ((event: unknown) => void) | undefined
-
-    mockLoadPipeline.mockImplementation((_task, _model, opts) => {
-      capturedCallback = (opts as { progress_callback: (e: unknown) => void }).progress_callback
-      return resolveMockPipeline()
-    })
-
+    const getProgressCallback = captureProgressCallback()
     const engine = createEngine()
     const progressEvents: Array<{ loaded: number; total: number }> = []
     engine.on("progress", (e) => progressEvents.push(e))
 
     await engine.load()
 
-    // Simulate progress events
-    capturedCallback?.({
+    getProgressCallback()?.({
       status: "progress",
       file: "model.bin",
       loaded: 500,
       total: 1000,
     })
-    capturedCallback?.({
+    getProgressCallback()?.({
       status: "progress",
       file: "tokenizer.json",
       loaded: 100,
@@ -358,33 +342,21 @@ describe("event emitter", () => {
   })
 
   it("ignores non-progress status events", async () => {
-    let capturedCallback: ((event: unknown) => void) | undefined
-
-    mockLoadPipeline.mockImplementation((_task, _model, opts) => {
-      capturedCallback = (opts as { progress_callback: (e: unknown) => void }).progress_callback
-      return resolveMockPipeline()
-    })
-
+    const getProgressCallback = captureProgressCallback()
     const engine = createEngine()
     const progressEvents: unknown[] = []
     engine.on("progress", (e) => progressEvents.push(e))
 
     await engine.load()
 
-    capturedCallback?.({ status: "initiate", file: "model.bin", name: "m" })
-    capturedCallback?.({ status: "done", file: "model.bin", name: "m" })
+    getProgressCallback()?.({ status: "initiate", file: "model.bin", name: "m" })
+    getProgressCallback()?.({ status: "done", file: "model.bin", name: "m" })
 
     expect(progressEvents).toHaveLength(0)
   })
 })
 
 describe("error propagation", () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-    mockGenerate.mockReset()
-    mockLoadPipeline.mockImplementation(resolveMockPipeline)
-  })
-
   it("surfaces the exact error from a rejected pipeline import", async () => {
     const forced = new Error("forced failure for test")
     mockLoadPipeline.mockImplementation(() => Promise.reject(forced))
@@ -414,12 +386,6 @@ describe("error propagation", () => {
 })
 
 describe("multiple instances", () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-    mockGenerate.mockReset()
-    mockLoadPipeline.mockImplementation(resolveMockPipeline)
-  })
-
   it("instances are fully independent", async () => {
     const a = createEngine({ modelId: "model-a" })
     const b = createEngine({ modelId: "model-b" })
