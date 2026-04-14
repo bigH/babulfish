@@ -68,4 +68,9 @@ pnpm --filter @babulfish/demo-webcomponent build
 
 Produces a static `dist/` folder servable with `pnpm --filter @babulfish/demo-webcomponent preview`.
 
-See the root [README](../../README.md) for the "Pick your binding" overview.
+## Related packages
+
+- [`@babulfish/core`](../core/README.md) — the engine this demo uses directly
+- [`@babulfish/styles`](../styles/README.md) — CSS custom properties
+- [`@babulfish/demo-vanilla`](../demo-vanilla/README.md) — Zero-framework vanilla DOM demo
+- [Root README](../../README.md) — "Pick your binding" overview
