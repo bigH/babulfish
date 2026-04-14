@@ -1,5 +1,3 @@
-"use client"
-
 import { ModelStatus } from "./model-status"
 
 export default function Home() {
