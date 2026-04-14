@@ -182,6 +182,43 @@ describe("4.3 — cancellation", () => {
     await expect(core.translateText("hi", "es")).rejects.toThrow("Core is disposed")
     await expect(core.translateTo("es")).rejects.toThrow("Core is disposed")
   })
+
+  it("loadModel rejects when signal is pre-aborted", async () => {
+    setupPipelineMock()
+    const core = createBabulfish()
+    const controller = new AbortController()
+    controller.abort()
+    await expect(core.loadModel({ signal: controller.signal })).rejects.toThrow()
+  })
+})
+
+// ---- 4.4 Root lifetime — set-once default + per-call override ------------
+
+describe("4.4 — root lifetime", () => {
+  it("translateText is root-free (works without dom config)", async () => {
+    const { generate } = setupPipelineMock()
+    generate.mockResolvedValueOnce([
+      {
+        generated_text: [
+          { role: "user", content: "hello" },
+          { role: "assistant", content: "hola" },
+        ],
+      },
+    ])
+    const core = createBabulfish()
+    await core.loadModel()
+    const result = await core.translateText("hello", "es")
+    expect(result).toBe("hola")
+  })
+
+  it("restore and translateTo work without dom config", async () => {
+    setupPipelineMock()
+    const core = createBabulfish()
+    await core.loadModel()
+    core.restore()
+    await core.translateTo("es")
+    expect(core.snapshot.translation.status).toBe("idle")
+  })
 })
 
 // ---- 4.5 translateText snapshot purity -----------------------------------
