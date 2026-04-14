@@ -12,15 +12,63 @@ function mockTranslate() {
 
 type MockTranslate = ReturnType<typeof mockTranslate>
 
-/** Build a <main> with child elements (test-only static content). */
-function setUpMain(
-  children: Array<{ tag: string; text: string }>,
+type MainChild =
+  | Node
+  | {
+    tag: keyof HTMLElementTagNameMap
+    text?: string
+    attrs?: Record<string, string>
+  }
+
+function createElement<K extends keyof HTMLElementTagNameMap>(
+  tag: K,
+  options?: {
+    text?: string
+    attrs?: Record<string, string>
+  },
+): HTMLElementTagNameMap[K]
+function createElement(
+  tag: string,
+  options?: {
+    text?: string
+    attrs?: Record<string, string>
+  },
+): HTMLElement
+function createElement(
+  tag: string,
+  {
+    text,
+    attrs = {},
+  }: {
+    text?: string
+    attrs?: Record<string, string>
+  } = {},
 ): HTMLElement {
-  const main = document.createElement("main")
-  for (const { tag, text } of children) {
-    const el = document.createElement(tag)
+  const el = document.createElement(tag)
+  if (text !== undefined) {
     el.textContent = text
-    main.appendChild(el)
+  }
+  for (const [name, value] of Object.entries(attrs)) {
+    el.setAttribute(name, value)
+  }
+  return el
+}
+
+/** Build a <main> fixture with test-only static content. */
+function setUpMain(
+  children: MainChild[],
+): HTMLElement {
+  const main = createElement("main")
+  for (const child of children) {
+    if (child instanceof Node) {
+      main.appendChild(child)
+      continue
+    }
+
+    main.appendChild(createElement(child.tag, {
+      text: child.text,
+      attrs: child.attrs,
+    }))
   }
   document.body.appendChild(main)
   return main
@@ -31,14 +79,40 @@ function setUpRichSpan(
   mdSource: string,
   staticHtml: string,
 ): HTMLSpanElement {
-  const span = document.createElement("span")
-  span.setAttribute("data-md", mdSource)
+  const span = createElement("span", {
+    attrs: { "data-md": mdSource },
+  })
   // Safe: test-only static HTML to simulate rendered markdown
   span.textContent = ""
   const template = document.createElement("template")
   template.innerHTML = staticHtml // eslint-disable-line no-unsanitized/property -- test-only static fixture
   span.appendChild(template.content)
   return span
+}
+
+function setUpRichTextMain(
+  mdSource: string,
+  staticHtml: string,
+): { main: HTMLElement; span: HTMLSpanElement } {
+  const span = setUpRichSpan(mdSource, staticHtml)
+  const main = setUpMain([span])
+  return { main, span }
+}
+
+function setUpLinkedMain(
+  key: string,
+  [firstText, secondText]: readonly [string, string],
+): { main: HTMLElement; first: HTMLSpanElement; second: HTMLSpanElement } {
+  const first = createElement("span", {
+    text: firstText,
+    attrs: { "data-section-title": key },
+  })
+  const second = createElement("span", {
+    text: secondText,
+    attrs: { "data-section-title": key },
+  })
+  const main = setUpMain([first, second])
+  return { main, first, second }
 }
 
 function textContents(root: Element): string[] {
@@ -196,13 +270,12 @@ describe("DOM translator", () => {
   // 5. Abort — second translate aborts the first
   // -----------------------------------------------------------------------
   it("aborts a prior translation when translate is called again", async () => {
-    const main = document.createElement("main")
-    for (let i = 0; i < 4; i++) {
-      const p = document.createElement("p")
-      p.textContent = `Paragraph ${i} ${"x".repeat(500)}`
-      main.appendChild(p)
-    }
-    document.body.appendChild(main)
+    setUpMain(
+      Array.from({ length: 4 }, (_, i) => ({
+        tag: "p",
+        text: `Paragraph ${i} ${"x".repeat(500)}`,
+      })),
+    )
 
     let slowResolve: ((v: string) => void) | null = null
     const slowPromise = new Promise<string>((resolve) => {
@@ -271,13 +344,10 @@ describe("DOM translator", () => {
   // 8. Progress hook
   // -----------------------------------------------------------------------
   it("calls onProgress with (done, total) for each batch", async () => {
-    const main = document.createElement("main")
-    for (let i = 0; i < 2; i++) {
-      const p = document.createElement("p")
-      p.textContent = "x".repeat(501)
-      main.appendChild(p)
-    }
-    document.body.appendChild(main)
+    setUpMain([
+      { tag: "p", text: "x".repeat(501) },
+      { tag: "p", text: "x".repeat(501) },
+    ])
 
     translate
       .mockResolvedValueOnce("batch1")
@@ -425,10 +495,10 @@ describe("DOM translator", () => {
   // 15. Rich text (markdown) translation
   // -----------------------------------------------------------------------
   it("translates rich text elements as full markdown strings", async () => {
-    const main = document.createElement("main")
-    const span = setUpRichSpan("hello **world**", "hello <strong>world</strong>")
-    main.appendChild(span)
-    document.body.appendChild(main)
+    const { span } = setUpRichTextMain(
+      "hello **world**",
+      "hello <strong>world</strong>",
+    )
 
     translate.mockResolvedValueOnce("hola **mundo**")
 
@@ -442,13 +512,11 @@ describe("DOM translator", () => {
   // 16. Text nodes inside rich text elements are skipped
   // -----------------------------------------------------------------------
   it("skips text nodes inside rich text elements in the text walker", async () => {
-    const main = document.createElement("main")
-    const p = document.createElement("p")
-    p.textContent = "Normal text"
     const span = setUpRichSpan("**bold**", "<strong>bold</strong>")
-    main.appendChild(p)
-    main.appendChild(span)
-    document.body.appendChild(main)
+    setUpMain([
+      { tag: "p", text: "Normal text" },
+      span,
+    ])
 
     translate
       .mockResolvedValueOnce("**negrita**")
@@ -466,10 +534,10 @@ describe("DOM translator", () => {
   // 17. Dropped markers: plain text fallback
   // -----------------------------------------------------------------------
   it("renders plain text when model drops all markers", async () => {
-    const main = document.createElement("main")
-    const span = setUpRichSpan("hello **world**", "hello <strong>world</strong>")
-    main.appendChild(span)
-    document.body.appendChild(main)
+    const { span } = setUpRichTextMain(
+      "hello **world**",
+      "hello <strong>world</strong>",
+    )
 
     translate.mockResolvedValueOnce("hola mundo")
 
@@ -484,13 +552,10 @@ describe("DOM translator", () => {
   // 18. Merged bold spans preserved
   // -----------------------------------------------------------------------
   it("preserves bold when model merges multiple spans into one", async () => {
-    const main = document.createElement("main")
-    const span = setUpRichSpan(
+    const { span } = setUpRichTextMain(
       "build **scalable** and **reliable** systems",
       "build <strong>scalable</strong> and <strong>reliable</strong> systems",
     )
-    main.appendChild(span)
-    document.body.appendChild(main)
 
     translate.mockResolvedValueOnce(
       "construire des systemes **evolutifs et fiables**",
@@ -507,10 +572,10 @@ describe("DOM translator", () => {
   // 19. Unclosed markers: plain text fallback
   // -----------------------------------------------------------------------
   it("falls back to plain text when translated markdown has unclosed markers", async () => {
-    const main = document.createElement("main")
-    const span = setUpRichSpan("hello **world**", "hello <strong>world</strong>")
-    main.appendChild(span)
-    document.body.appendChild(main)
+    const { span } = setUpRichTextMain(
+      "hello **world**",
+      "hello <strong>world</strong>",
+    )
 
     translate.mockResolvedValueOnce("hola **mundo")
 
@@ -525,13 +590,10 @@ describe("DOM translator", () => {
   // 20. Preserve matchers (string)
   // -----------------------------------------------------------------------
   it("replaces preserved strings with placeholders in rich text", async () => {
-    const main = document.createElement("main")
-    const span = setUpRichSpan(
+    const { span } = setUpRichTextMain(
       "Working at **Chime** on infrastructure",
       "Working at <strong>Chime</strong> on infrastructure",
     )
-    main.appendChild(span)
-    document.body.appendChild(main)
 
     translate.mockImplementation(async (text: string) => {
       expect(text).toContain("\u27EA0\u27EB")
@@ -553,13 +615,9 @@ describe("DOM translator", () => {
   // 21. Restore restores rich text elements
   // -----------------------------------------------------------------------
   it("restores both rich text and text elements on restore", async () => {
-    const main = document.createElement("main")
     const span = setUpRichSpan("hello **world**", "hello <strong>world</strong>")
-    const p = document.createElement("p")
-    p.textContent = "Normal text"
-    main.appendChild(span)
-    main.appendChild(p)
-    document.body.appendChild(main)
+    const p = createElement("p", { text: "Normal text" })
+    setUpMain([span, p])
 
     const originalHtml = span.innerHTML
 
@@ -583,13 +641,9 @@ describe("DOM translator", () => {
   // 22. Progress includes rich text
   // -----------------------------------------------------------------------
   it("includes rich text elements in progress total", async () => {
-    const main = document.createElement("main")
     const span = setUpRichSpan("hello **world**", "hello <strong>world</strong>")
-    const p = document.createElement("p")
-    p.textContent = "Normal text"
-    main.appendChild(span)
-    main.appendChild(p)
-    document.body.appendChild(main)
+    const p = createElement("p", { text: "Normal text" })
+    setUpMain([span, p])
 
     translate
       .mockResolvedValueOnce("hola **mundo**")
@@ -674,13 +728,10 @@ describe("DOM translator", () => {
   // NEW: Preserve matchers — RegExp
   // -----------------------------------------------------------------------
   it("supports RegExp preserve matchers", async () => {
-    const main = document.createElement("main")
-    const span = setUpRichSpan(
+    const { span } = setUpRichTextMain(
       "Version **v2.1.0** is out",
       "Version <strong>v2.1.0</strong> is out",
     )
-    main.appendChild(span)
-    document.body.appendChild(main)
 
     translate.mockImplementation(async (text: string) => {
       expect(text).not.toMatch(/v\d+\.\d+\.\d+/)
@@ -700,13 +751,10 @@ describe("DOM translator", () => {
   // NEW: Preserve matchers — function
   // -----------------------------------------------------------------------
   it("supports function preserve matchers", async () => {
-    const main = document.createElement("main")
-    const span = setUpRichSpan(
+    const { span } = setUpRichTextMain(
       "Contact **support@co.com** for help",
       "Contact <strong>support@co.com</strong> for help",
     )
-    main.appendChild(span)
-    document.body.appendChild(main)
 
     const emailMatcher = (text: string) => {
       const matches = text.match(/[\w.]+@[\w.]+/g)
@@ -731,16 +779,10 @@ describe("DOM translator", () => {
   // NEW: LinkedBy config
   // -----------------------------------------------------------------------
   it("translates linked elements once per key", async () => {
-    const main = document.createElement("main")
-    const a = document.createElement("span")
-    a.setAttribute("data-section-title", "intro")
-    a.textContent = "Introduction"
-    const b = document.createElement("span")
-    b.setAttribute("data-section-title", "intro")
-    b.textContent = "Introduction"
-    main.appendChild(a)
-    main.appendChild(b)
-    document.body.appendChild(main)
+    const { first: a, second: b } = setUpLinkedMain("intro", [
+      "Introduction",
+      "Introduction",
+    ])
 
     translate.mockResolvedValueOnce("Introduccion")
 
@@ -759,15 +801,10 @@ describe("DOM translator", () => {
   })
 
   it("restores linked groups after translate -> translate -> restore", async () => {
-    const main = document.createElement("main")
-    const a = document.createElement("span")
-    a.setAttribute("data-section-title", "intro")
-    a.textContent = "Introduction"
-    const b = document.createElement("span")
-    b.setAttribute("data-section-title", "intro")
-    b.textContent = "Introduction"
-    main.append(a, b)
-    document.body.appendChild(main)
+    const { first: a, second: b } = setUpLinkedMain("intro", [
+      "Introduction",
+      "Introduction",
+    ])
 
     translate
       .mockResolvedValueOnce("2024")
@@ -795,15 +832,10 @@ describe("DOM translator", () => {
   })
 
   it("treats the current linked text as a new source after restore and DOM mutation", async () => {
-    const main = document.createElement("main")
-    const a = document.createElement("span")
-    a.setAttribute("data-section-title", "intro")
-    a.textContent = "Introduction"
-    const b = document.createElement("span")
-    b.setAttribute("data-section-title", "intro")
-    b.textContent = "Introduction"
-    main.append(a, b)
-    document.body.appendChild(main)
+    const { first: a, second: b } = setUpLinkedMain("intro", [
+      "Introduction",
+      "Introduction",
+    ])
 
     translate
       .mockResolvedValueOnce("Introduccion")
@@ -831,15 +863,10 @@ describe("DOM translator", () => {
   })
 
   it("restores remounted linked nodes from the keyed original source", async () => {
-    const main = document.createElement("main")
-    const a = document.createElement("span")
-    a.setAttribute("data-section-title", "intro")
-    a.textContent = "Introduction"
-    const b = document.createElement("span")
-    b.setAttribute("data-section-title", "intro")
-    b.textContent = "Introduction"
-    main.append(a, b)
-    document.body.appendChild(main)
+    const { first: a, second: b } = setUpLinkedMain("intro", [
+      "Introduction",
+      "Introduction",
+    ])
 
     translate
       .mockResolvedValueOnce("Introduccion")
@@ -914,13 +941,14 @@ describe("DOM translator", () => {
   // NEW: translateAttributes
   // -----------------------------------------------------------------------
   it("translates configured attributes", async () => {
-    const main = document.createElement("main")
-    const a = document.createElement("a")
-    a.textContent = "Click me"
-    a.setAttribute("title", "Go home")
-    a.setAttribute("aria-label", "Navigate home")
-    main.appendChild(a)
-    document.body.appendChild(main)
+    const a = createElement("a", {
+      text: "Click me",
+      attrs: {
+        title: "Go home",
+        "aria-label": "Navigate home",
+      },
+    })
+    setUpMain([a])
 
     translate
       .mockResolvedValueOnce("Haz clic")
@@ -937,12 +965,11 @@ describe("DOM translator", () => {
   })
 
   it("restores translated attributes on restore", async () => {
-    const main = document.createElement("main")
-    const a = document.createElement("a")
-    a.textContent = "Click"
-    a.setAttribute("title", "Go home")
-    main.appendChild(a)
-    document.body.appendChild(main)
+    const a = createElement("a", {
+      text: "Click",
+      attrs: { title: "Go home" },
+    })
+    setUpMain([a])
 
     translate
       .mockResolvedValueOnce("Clic")
@@ -957,11 +984,10 @@ describe("DOM translator", () => {
   })
 
   it("restores translated attributes after translate -> translate -> restore", async () => {
-    const main = document.createElement("main")
-    const a = document.createElement("a")
-    a.setAttribute("title", "Go home")
-    main.appendChild(a)
-    document.body.appendChild(main)
+    const a = createElement("a", {
+      attrs: { title: "Go home" },
+    })
+    setUpMain([a])
 
     translate
       .mockResolvedValueOnce("1")
@@ -1076,11 +1102,8 @@ describe("DOM translator", () => {
   // NEW: abort()
   // -----------------------------------------------------------------------
   it("abort() stops translation and clears isTranslating", async () => {
-    const main = document.createElement("main")
-    const p = document.createElement("p")
-    p.textContent = "Hello world content here"
-    main.appendChild(p)
-    document.body.appendChild(main)
+    const main = setUpMain([{ tag: "p", text: "Hello world content here" }])
+    const p = main.querySelector("p")!
 
     let resolveTranslation: ((v: string) => void) | null = null
     translate.mockReturnValueOnce(
@@ -1139,14 +1162,9 @@ describe("DOM translator", () => {
   // NEW: Custom skipTags
   // -----------------------------------------------------------------------
   it("respects custom skipTags", async () => {
-    const main = document.createElement("main")
-    const custom = document.createElement("my-widget")
-    custom.textContent = "Skip me"
-    const p = document.createElement("p")
-    p.textContent = "Translate me"
-    main.appendChild(custom)
-    main.appendChild(p)
-    document.body.appendChild(main)
+    const custom = createElement("my-widget", { text: "Skip me" })
+    const p = createElement("p", { text: "Translate me" })
+    setUpMain([custom, p])
 
     translate.mockResolvedValueOnce("Traduceme")
 
