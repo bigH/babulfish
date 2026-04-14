@@ -1,17 +1,36 @@
+import type { Snapshot } from "@babulfish/core"
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 
-type SnapshotListener = (s: Record<string, unknown>) => void
+type SnapshotListener = (snapshot: Snapshot) => void
+type SnapshotOverrides = {
+  readonly model?: Snapshot["model"]
+  readonly translation?: Snapshot["translation"]
+  readonly currentLanguage?: Snapshot["currentLanguage"]
+  readonly capabilities?: Snapshot["capabilities"]
+}
+
+const DEFAULT_CAPABILITIES = {
+  ready: false,
+  hasWebGPU: false,
+  canTranslate: false,
+  device: null,
+  isMobile: false,
+} satisfies Snapshot["capabilities"]
+
+function createSnapshot(overrides: SnapshotOverrides = {}): Snapshot {
+  return {
+    model: overrides.model ?? { status: "idle" },
+    translation: overrides.translation ?? { status: "idle" },
+    currentLanguage: overrides.currentLanguage ?? null,
+    capabilities: overrides.capabilities ?? DEFAULT_CAPABILITIES,
+  }
+}
 
 const { state, createMockCore } = vi.hoisted(() => {
   const state = { listener: null as SnapshotListener | null }
 
   const createMockCore = () => ({
-    snapshot: {
-      model: { status: "idle" as const },
-      translation: { status: "idle" as const },
-      currentLanguage: null,
-      capabilities: {},
-    },
+    snapshot: createSnapshot(),
     subscribe: vi.fn((l: SnapshotListener) => {
       state.listener = l
       return vi.fn()
@@ -53,27 +72,31 @@ describe("babulfish-translator", () => {
     el.remove()
   })
 
+  function connect(): ShadowRoot {
+    document.body.appendChild(el)
+    return el.shadowRoot!
+  }
+
   it("is registered as a custom element", () => {
     expect(customElements.get("babulfish-translator")).toBeDefined()
   })
 
   it("attaches an open shadow root on connect", () => {
-    document.body.appendChild(el)
-    expect(el.shadowRoot).not.toBeNull()
-    expect(el.shadowRoot!.mode).toBe("open")
+    const shadow = connect()
+    expect(shadow).not.toBeNull()
+    expect(shadow.mode).toBe("open")
   })
 
   it("renders toolbar, content, and status into shadow DOM", () => {
-    document.body.appendChild(el)
-    const shadow = el.shadowRoot!
+    const shadow = connect()
     expect(shadow.querySelector(".toolbar")).not.toBeNull()
     expect(shadow.querySelector(".content")).not.toBeNull()
     expect(shadow.querySelector(".status")).not.toBeNull()
   })
 
   it("populates language select from core.languages", () => {
-    document.body.appendChild(el)
-    const select = el.shadowRoot!.querySelector(".language") as HTMLSelectElement
+    const shadow = connect()
+    const select = shadow.querySelector(".language") as HTMLSelectElement
     const options = Array.from(select.querySelectorAll("option"))
     expect(options).toHaveLength(3)
     expect(options[1]!.value).toBe("es")
@@ -85,67 +108,57 @@ describe("babulfish-translator", () => {
   it("dispatches babulfish-status CustomEvent on snapshot changes", () => {
     const handler = vi.fn()
     el.addEventListener("babulfish-status", handler)
-    document.body.appendChild(el)
+    connect()
 
-    const readySnapshot = {
-      model: { status: "ready" as const },
-      translation: { status: "idle" as const },
-      currentLanguage: null,
-      capabilities: {},
-    }
+    const readySnapshot = createSnapshot({ model: { status: "ready" } })
     state.listener?.(readySnapshot)
 
     expect(handler).toHaveBeenCalledTimes(1)
     const event = handler.mock.calls[0]![0] as CustomEvent
     expect(event.type).toBe("babulfish-status")
-    expect(event.detail.model.status).toBe("ready")
+    expect(event.detail).toBe(readySnapshot)
     expect(event.bubbles).toBe(true)
     expect(event.composed).toBe(true)
   })
 
   it("calls dispose on disconnect", () => {
-    document.body.appendChild(el)
+    connect()
     const mock = latestMock
     el.remove()
     expect(mock.dispose).toHaveBeenCalledTimes(1)
   })
 
   it("exposes a public restore() method that delegates to core", () => {
-    document.body.appendChild(el)
+    connect()
     const mock = latestMock
     ;(el as unknown as { restore(): void }).restore()
     expect(mock.restore).toHaveBeenCalledTimes(1)
   })
 
   it("updates status text from snapshot", () => {
-    document.body.appendChild(el)
-    const statusEl = el.shadowRoot!.querySelector(".status-text") as HTMLElement
+    const shadow = connect()
+    const statusEl = shadow.querySelector(".status-text") as HTMLElement
     expect(statusEl.textContent).toBe("Model: Not loaded")
 
-    state.listener?.({
+    state.listener?.(createSnapshot({
       model: { status: "downloading", progress: 0.42 },
       translation: { status: "idle" },
-      currentLanguage: null,
-      capabilities: {},
-    })
+    }))
     expect(statusEl.textContent).toBe("Model: Downloading (42%)")
   })
 
   it("disables controls appropriately based on model state", () => {
-    document.body.appendChild(el)
-    const shadow = el.shadowRoot!
+    const shadow = connect()
     const select = shadow.querySelector(".language") as HTMLSelectElement
     const loadBtn = shadow.querySelector(".load-model") as HTMLButtonElement
 
     expect(select.disabled).toBe(true)
     expect(loadBtn.disabled).toBe(false)
 
-    state.listener?.({
+    state.listener?.(createSnapshot({
       model: { status: "ready" },
       translation: { status: "idle" },
-      currentLanguage: null,
-      capabilities: {},
-    })
+    }))
     expect(select.disabled).toBe(false)
     expect(loadBtn.disabled).toBe(true)
   })
