@@ -53,6 +53,19 @@ describe("public React API contract", () => {
       | { readonly status: "idle" }
       | { readonly status: "translating"; readonly progress: number }
     >()
+
+    expectTypeOf<ReturnType<typeof publicApi.useTranslator>>().toMatchTypeOf<{
+      readonly model: import("../index.js").ModelState
+      readonly translation: import("../index.js").TranslationState
+      readonly currentLanguage: string | null
+      readonly languages: readonly import("../index.js").TranslatorLanguage[]
+    }>()
+
+    expectTypeOf<ReturnType<typeof publicApi.useTranslateDOM>>().toMatchTypeOf<{
+      readonly progress: number | null
+      translatePage(lang: string): Promise<void>
+      restorePage(): void
+    }>()
   })
 })
 
