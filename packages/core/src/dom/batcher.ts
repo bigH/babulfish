@@ -1,40 +1,17 @@
 // Text node batching — groups nodes into translation-sized batches,
-// respecting block-element boundaries.
+// splitting whenever the parent element changes.
 
 import type { TaggedTextNode } from "./walker.js"
 
-const DEFAULT_BATCH_CHAR_LIMIT = 500
+export const DEFAULT_BATCH_CHAR_LIMIT = 500
 
-const BLOCK_TAGS: ReadonlySet<string> = new Set([
-  "ADDRESS", "ARTICLE", "ASIDE", "BLOCKQUOTE", "DD", "DETAILS", "DIALOG",
-  "DIV", "DL", "DT", "FIELDSET", "FIGCAPTION", "FIGURE", "FOOTER", "FORM",
-  "H1", "H2", "H3", "H4", "H5", "H6", "HEADER", "HGROUP", "HR", "LI",
-  "MAIN", "NAV", "OL", "P", "PRE", "SECTION", "TABLE", "UL",
-])
-
-function hitBlockBoundary(a: Text, b: Text): boolean {
-  if (a.parentElement === b.parentElement) return false
-
-  let cursor: Node | null = a.nextSibling
-  while (cursor && cursor !== b) {
-    if (
-      cursor.nodeType === Node.ELEMENT_NODE &&
-      BLOCK_TAGS.has((cursor as Element).tagName)
-    ) {
-      return true
-    }
-    cursor = cursor.nextSibling
-  }
-
-  // Different parents means a structural boundary
-  if (!cursor) return true
-
-  return false
+function crossesParentBoundary(a: Text, b: Text): boolean {
+  return a.parentElement !== b.parentElement
 }
 
 export function buildBatches(
   nodes: readonly TaggedTextNode[],
-  charLimit: number = DEFAULT_BATCH_CHAR_LIMIT,
+  charLimit: number,
 ): TaggedTextNode[][] {
   if (nodes.length === 0) return []
 
@@ -47,7 +24,7 @@ export function buildBatches(
     const prev = nodes[i - 1]!
     const curr = nodes[i]!
     const wouldExceed = length + curr.text.length > charLimit
-    const boundary = hitBlockBoundary(prev.node, curr.node)
+    const boundary = crossesParentBoundary(prev.node, curr.node)
 
     if (wouldExceed || boundary) {
       batches.push(batch)

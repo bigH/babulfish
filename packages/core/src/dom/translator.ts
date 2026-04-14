@@ -5,7 +5,11 @@
 import type { TaggedTextNode } from "./walker.js"
 import type { PreserveMatcher } from "./preserve.js"
 import { collectTextNodes, defaultShouldSkip, buildSkipTags } from "./walker.js"
-import { buildBatches, applyTranslation } from "./batcher.js"
+import {
+  applyTranslation,
+  buildBatches,
+  DEFAULT_BATCH_CHAR_LIMIT,
+} from "./batcher.js"
 import { insertPlaceholders, restorePlaceholders } from "./preserve.js"
 import { isWellFormedMarkdown } from "./markdown.js"
 
@@ -146,7 +150,7 @@ export function createDOMTranslator(config: DOMTranslatorConfig): DOMTranslator 
 
   const skipTags = buildSkipTags(config.skipTags)
   const rtlLangs = config.rtlLanguages ?? DEFAULT_RTL_LANGS
-  const charLimit = config.batchCharLimit ?? 500
+  const charLimit = config.batchCharLimit ?? DEFAULT_BATCH_CHAR_LIMIT
   const matchers = config.preserve?.matchers ?? []
   const attrNames = config.translateAttributes ?? ["title"]
 
