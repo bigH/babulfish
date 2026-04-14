@@ -67,6 +67,14 @@ export function TranslateDropdown({
 
   const hasOriginal = !!onRestore
   const isOriginalActive = value === null
+  const handleSelect = (code: string) => {
+    if (disabled) return
+    onSelect(code)
+  }
+  const handleRestore = () => {
+    if (disabled) return
+    onRestore?.()
+  }
 
   const itemStyle = (isActive: boolean): React.CSSProperties => ({
     display: "flex",
@@ -99,7 +107,7 @@ export function TranslateDropdown({
           tabIndex={-1}
           data-focused={focusedIndex === 0 || undefined}
           data-active={isOriginalActive || undefined}
-          onClick={onRestore}
+          onClick={handleRestore}
           style={itemStyle(isOriginalActive)}
         >
           Original
@@ -119,7 +127,7 @@ export function TranslateDropdown({
               role="option"
               aria-selected={isActive}
               tabIndex={-1}
-              onClick={() => onSelect(lang.code)}
+              onClick={() => handleSelect(lang.code)}
             >
               {renderOption(lang, isActive)}
             </li>
@@ -135,7 +143,7 @@ export function TranslateDropdown({
             tabIndex={-1}
             data-focused={isFocused || undefined}
             data-active={isActive || undefined}
-            onClick={() => onSelect(lang.code)}
+            onClick={() => handleSelect(lang.code)}
             style={itemStyle(isActive)}
           >
             {lang.label}

@@ -725,6 +725,22 @@ describe("TranslateDropdown", () => {
     expect(listbox.style.opacity).toBe("0.5")
   })
 
+  it("does not call onSelect when disabled", () => {
+    const onSelect = vi.fn()
+    renderDropdown({ disabled: true, onSelect })
+
+    fireEvent.click(screen.getByText("Spanish"))
+    expect(onSelect).not.toHaveBeenCalled()
+  })
+
+  it("does not call onRestore when disabled", () => {
+    const onRestore = vi.fn()
+    renderDropdown({ disabled: true, onRestore })
+
+    fireEvent.click(screen.getByText("Original"))
+    expect(onRestore).not.toHaveBeenCalled()
+  })
+
   it("uses custom renderOption", () => {
     renderDropdown({
       renderOption: (lang, active) => (
