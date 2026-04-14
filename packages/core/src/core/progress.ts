@@ -14,12 +14,14 @@ export function createProgressController(): ProgressController {
   let currentRunId = 0
   let currentController: AbortController | null = null
 
+  function abortCurrentWith(message: string): void {
+    currentController?.abort(new DOMException(message, "AbortError"))
+    currentController = null
+  }
+
   return {
     startRun() {
-      currentController?.abort(
-        new DOMException("Superseded by new translation", "AbortError"),
-      )
-
+      abortCurrentWith("Superseded by new translation")
       currentRunId++
       const controller = new AbortController()
       currentController = controller
@@ -30,16 +32,10 @@ export function createProgressController(): ProgressController {
       return currentRunId === runId
     },
     abortCurrent() {
-      currentController?.abort(
-        new DOMException("Translation aborted", "AbortError"),
-      )
-      currentController = null
+      abortCurrentWith("Translation aborted")
     },
     dispose() {
-      currentController?.abort(
-        new DOMException("Core disposed", "AbortError"),
-      )
-      currentController = null
+      abortCurrentWith("Core disposed")
     },
   }
 }
