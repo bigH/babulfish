@@ -1,4 +1,10 @@
-import type { BabulfishCore, Snapshot } from "@babulfish/core"
+import type { BabulfishCore, Language, Snapshot } from "@babulfish/core"
+
+const SSR_LANGUAGES: ReadonlyArray<Language> = Object.freeze([])
+const NOOP_UNSUBSCRIBE = () => {}
+const NOOP = () => {}
+const RESOLVE_VOID = async () => {}
+const RESOLVE_EMPTY_STRING = async () => ""
 
 export const SSR_SNAPSHOT: Snapshot = Object.freeze({
   model: Object.freeze({ status: "idle" as const }),
@@ -17,12 +23,12 @@ export const SSR_CORE: BabulfishCore = {
   get snapshot() {
     return SSR_SNAPSHOT
   },
-  subscribe: () => () => {},
-  loadModel: async () => {},
-  translateTo: async () => {},
-  translateText: async () => "",
-  restore: () => {},
-  abort: () => {},
-  dispose: async () => {},
-  languages: [],
+  subscribe: () => NOOP_UNSUBSCRIBE,
+  loadModel: RESOLVE_VOID,
+  translateTo: RESOLVE_VOID,
+  translateText: RESOLVE_EMPTY_STRING,
+  restore: NOOP,
+  abort: NOOP,
+  dispose: RESOLVE_VOID,
+  languages: SSR_LANGUAGES,
 }
