@@ -815,6 +815,29 @@ describe("DOM translator", () => {
     expect(b.textContent).toBe("Introduccion")
   })
 
+  it("counts linked groups as one progress unit per key", async () => {
+    setUpLinkedMain("intro", [
+      "Introduction",
+      "Introduction",
+    ])
+
+    translate.mockResolvedValueOnce("Introduccion")
+
+    const onProgress = vi.fn()
+    const t = makeTranslator(translate, {
+      linkedBy: {
+        selector: "[data-section-title]",
+        keyAttribute: "data-section-title",
+      },
+      hooks: { onProgress },
+    })
+    await t.translate("es-ES")
+
+    expect(translate).toHaveBeenCalledTimes(1)
+    expect(onProgress).toHaveBeenCalledTimes(1)
+    expect(onProgress).toHaveBeenNthCalledWith(1, 1, 1)
+  })
+
   it("restores linked groups after translate -> translate -> restore", async () => {
     const { first: a, second: b } = setUpLinkedMain("intro", [
       "Introduction",

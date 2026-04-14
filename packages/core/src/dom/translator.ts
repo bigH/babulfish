@@ -72,6 +72,17 @@ type TranslatableAttr = {
   readonly text: string
 }
 
+type LinkedTarget = {
+  readonly el: Element
+  readonly textNode: Text
+}
+
+type LinkedGroup = {
+  readonly key: string
+  readonly writableTargets: readonly LinkedTarget[]
+  readonly sourceText: string
+}
+
 type PhaseWork = {
   md: Element[]
   batches: TaggedTextNode[][]
@@ -199,53 +210,57 @@ export function createDOMTranslator(config: DOMTranslatorConfig): DOMTranslator 
   // Linked element sync (e.g. section titles)
   // -------------------------------------------------------------------------
 
-  function countLinkedGroups(roots: Element[]): number {
-    if (!config.linkedBy) return 0
-    const keys = new Set<string>()
+  function collectLinkedGroups(roots: Element[]): LinkedGroup[] {
+    if (!config.linkedBy) return []
+
     const { selector, keyAttribute } = config.linkedBy
+    const elementsByKey = new Map<string, Element[]>()
+
     for (const root of roots) {
       for (const el of root.querySelectorAll(selector)) {
-        keys.add(el.getAttribute(keyAttribute)!)
-      }
-    }
-    return keys.size
-  }
+        const key = el.getAttribute(keyAttribute)
+        if (key == null) continue
 
-  async function translateLinked(
-    roots: Element[],
-    targetLang: string,
-    signal: AbortSignal,
-    onUnit: () => void,
-  ): Promise<void> {
-    if (!config.linkedBy) return
-    const { selector, keyAttribute } = config.linkedBy
-
-    const groups = new Map<string, Element[]>()
-    for (const root of roots) {
-      for (const el of root.querySelectorAll(selector)) {
-        const key = el.getAttribute(keyAttribute)!
-        const list = groups.get(key) ?? []
-        list.push(el)
-        groups.set(key, list)
+        const group = elementsByKey.get(key)
+        if (group) {
+          group.push(el)
+        } else {
+          elementsByKey.set(key, [el])
+        }
       }
     }
 
-    for (const [key, elements] of groups) {
-      if (signal.aborted) return
-
+    return Array.from(elementsByKey, ([key, elements]) => {
       const writableTargets = elements.flatMap((el) => {
         const textNode = findDirectTextNode(el)
         return textNode ? [{ el, textNode }] : []
       })
+      const sourceText =
+        originalLinkedSources.get(key)
+        ?? writableTargets[0]?.textNode.textContent?.trim()
+        ?? ""
+
+      return {
+        key,
+        writableTargets,
+        sourceText,
+      }
+    })
+  }
+
+  async function translateLinked(
+    groups: readonly LinkedGroup[],
+    targetLang: string,
+    signal: AbortSignal,
+    onUnit: () => void,
+  ): Promise<void> {
+    for (const { key, writableTargets, sourceText } of groups) {
+      if (signal.aborted) return
       if (writableTargets.length === 0) {
         onUnit()
         continue
       }
 
-      const sourceText =
-        originalLinkedSources.get(key)
-        ?? writableTargets[0]!.textNode.textContent?.trim()
-        ?? ""
       if (!sourceText || shouldSkip(sourceText)) {
         onUnit()
         continue
@@ -352,7 +367,7 @@ export function createDOMTranslator(config: DOMTranslatorConfig): DOMTranslator 
       }
 
       // Collect all translatable units before mutation
-      const linkedCount = countLinkedGroups(roots)
+      const linkedGroups = collectLinkedGroups(roots)
 
       const allRich = config.richText
         ? roots.flatMap((r) =>
@@ -368,7 +383,7 @@ export function createDOMTranslator(config: DOMTranslatorConfig): DOMTranslator 
       const allAttrs = roots.flatMap(collectTranslatableAttrs)
 
       const total =
-        linkedCount + allRich.length + allBatches.length + allAttrs.length
+        linkedGroups.length + allRich.length + allBatches.length + allAttrs.length
       let done = 0
 
       const progress = () => {
@@ -397,14 +412,14 @@ export function createDOMTranslator(config: DOMTranslatorConfig): DOMTranslator 
         }
 
         // Linked elements first (like section titles)
-        await translateLinked(roots, targetLang, signal, progress)
+        await translateLinked(linkedGroups, targetLang, signal, progress)
 
         for (const phase of phases) {
           await translatePhaseWork(phase, targetLang, signal, progress)
         }
       } else {
         // No phases: linked first, then everything in one pass
-        await translateLinked(roots, targetLang, signal, progress)
+        await translateLinked(linkedGroups, targetLang, signal, progress)
 
         const singlePhase: PhaseWork = {
           md: allRich,
