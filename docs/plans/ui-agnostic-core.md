@@ -85,18 +85,18 @@ The dispatch templates below assume these constraints — they are not repeated 
 
 ## Phase 0 — Pre-work
 
-### T-1 — Engine `status-change` event carries error detail
+### T-1 — Engine `status-change` event carries error detail  ✅ complete
 
 - **Owner:** `[Artisan]`
 - **Phase:** 0
 - **Blocks:** T-3a
 - **Blocked by:** —
 - **Files:**
-  - `packages/babulfish/src/engine/model.ts` — emit `{ status, error }` on transition into `"error"`
+  - `packages/babulfish/src/engine/model.ts` — emit `{ from, to, error }` on transition into `"error"`
   - `packages/babulfish/src/engine/index.ts` — re-export updated `TranslatorEvents`
   - `packages/babulfish/src/react/use-translator.ts:106` — consume real error instead of `new Error("Model loading failed")`
 - **Acceptance:**
-  - `TranslatorEvents["status-change"]` payload type is `{ status: TranslatorStatus, error?: unknown }` (or equivalent — `error` only present when `status === "error"`).
+  - `TranslatorEvents["status-change"]` payload type is `{ from: TranslatorStatus; to: TranslatorStatus; error?: unknown }` (`error` only present when `to === "error"`).
   - Forced-failure test (mock the lazy `@huggingface/transformers` import to reject with a typed error) shows the same error object surfaces in `useTranslator`'s state.
   - No occurrence of `new Error("Model loading failed")` remains in the repo.
 - **Dispatch template:**
@@ -105,7 +105,7 @@ The dispatch templates below assume these constraints — they are not repeated 
 
   Goal: stop synthesizing errors at the React boundary; let the engine's status-change event carry the real failure.
 
-  Context: today engine/model.ts emits `status-change` with just a status string. The React provider at src/react/use-translator.ts:106 has to fabricate `new Error("Model loading failed")` because no error is available. This blocks the upcoming `BabulfishCore` contract — `Snapshot.model.error` must carry the real cause.
+  Context: engine/model.ts emitted `status-change` with `{ from, to }` but no error detail. The React provider at src/react/use-translator.ts:106 fabricated `new Error("Model loading failed")` because no error was available. This blocked the upcoming `BabulfishCore` contract — `Snapshot.model.error` must carry the real cause.
 
   Task:
   1. Update the `TranslatorEvents` shape in src/engine/model.ts so that the `status-change` event payload includes an optional `error: unknown` field, populated only when the new status is "error".
