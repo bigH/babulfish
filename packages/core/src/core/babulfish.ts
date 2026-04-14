@@ -1,4 +1,4 @@
-import type { EngineConfig } from "../engine/index.js"
+import type { EngineConfig } from "../engine/model.js"
 import type { DOMTranslatorConfig, DOMTranslator } from "../dom/translator.js"
 import { createDOMTranslator } from "../dom/translator.js"
 import { acquireEngine, releaseEngine, registerCoreEngine } from "./engine-handle.js"

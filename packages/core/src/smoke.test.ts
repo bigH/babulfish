@@ -14,13 +14,26 @@ import {
   renderInlineMarkdownToHtml as renderInlineMarkdownToHtmlDirect,
 } from "./dom/markdown.js"
 import type { PreserveMatcher as PreserveMatcherDirect } from "./dom/preserve.js"
-import { createEngine } from "./engine/index.js"
+import {
+  createEngine as createEngineDirect,
+  type EngineConfig as EngineConfigDirect,
+  type Translator as TranslatorDirect,
+  type TranslatorEvents as TranslatorEventsDirect,
+  type TranslatorStatus as TranslatorStatusDirect,
+} from "./engine/model.js"
+import {
+  getTranslationCapabilities as getTranslationCapabilitiesDirect,
+  type DevicePreference as DevicePreferenceDirect,
+  type ResolvedDevice as ResolvedDeviceDirect,
+  type TranslationCapabilities as TranslationCapabilitiesDirect,
+} from "./engine/detect.js"
 import * as domBarrel from "./dom/index.js"
+import * as engineBarrel from "./engine/index.js"
 import * as barrel from "./index.js"
 
 describe("smoke tests", () => {
   it("creates an engine with correct initial state", () => {
-    const engine = createEngine()
+    const engine = createEngineDirect()
     expect(engine).toBeDefined()
     expect(engine.status).toBe("idle")
     expect(typeof engine.load).toBe("function")
@@ -45,8 +58,29 @@ describe("smoke tests", () => {
   it("barrel re-exports core, engine, and dom", () => {
     expect(barrel.createBabulfish).toBe(createBabulfish)
     expect(barrel.DEFAULT_LANGUAGES).toBe(DEFAULT_LANGUAGES)
-    expect(barrel.createEngine).toBe(createEngine)
+    expect(barrel.createEngine).toBe(createEngineDirect)
     expect(barrel.createDOMTranslator).toBe(createDOMTranslatorDirect)
+  })
+
+  it("engine barrel re-exports the public engine surface without detection internals", () => {
+    expect(engineBarrel.createEngine).toBe(createEngineDirect)
+    expect(engineBarrel.getTranslationCapabilities).toBe(getTranslationCapabilitiesDirect)
+    expect("isWebGPUAvailable" in engineBarrel).toBe(false)
+    expect("isMobileDevice" in engineBarrel).toBe(false)
+    expect("resolveDevice" in engineBarrel).toBe(false)
+
+    expectTypeOf<typeof engineBarrel>().toMatchTypeOf<{
+      createEngine: typeof createEngineDirect
+      getTranslationCapabilities: typeof getTranslationCapabilitiesDirect
+    }>()
+
+    expectTypeOf<EngineConfigDirect>().toEqualTypeOf<engineBarrel.EngineConfig>()
+    expectTypeOf<TranslatorDirect>().toEqualTypeOf<engineBarrel.Translator>()
+    expectTypeOf<TranslatorEventsDirect>().toEqualTypeOf<engineBarrel.TranslatorEvents>()
+    expectTypeOf<TranslatorStatusDirect>().toEqualTypeOf<engineBarrel.TranslatorStatus>()
+    expectTypeOf<DevicePreferenceDirect>().toEqualTypeOf<engineBarrel.DevicePreference>()
+    expectTypeOf<ResolvedDeviceDirect>().toEqualTypeOf<engineBarrel.ResolvedDevice>()
+    expectTypeOf<TranslationCapabilitiesDirect>().toEqualTypeOf<engineBarrel.TranslationCapabilities>()
   })
 
   it("dom barrel re-exports the public DOM surface", () => {

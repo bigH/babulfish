@@ -1,5 +1,5 @@
-import type { EngineConfig, Translator } from "../engine/index.js"
-import { createEngine } from "../engine/index.js"
+import type { EngineConfig, Translator } from "../engine/model.js"
+import { createEngine } from "../engine/model.js"
 
 export type EngineHandle = {
   readonly engine: Translator
