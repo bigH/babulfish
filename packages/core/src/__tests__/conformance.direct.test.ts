@@ -28,6 +28,10 @@ beforeEach(() => {
 })
 
 describe("conformance — direct driver", () => {
+  it("is explicitly non-DOM", () => {
+    expect(driver.supportsDOM).toBe(false)
+  })
+
   it("skips DOM-only scenarios", () => {
     expect(applicable.length).toBeLessThan(scenarios.length)
     expect(applicable.every((scenario) => !scenario.requiresDOM)).toBe(true)

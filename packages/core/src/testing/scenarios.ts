@@ -3,7 +3,11 @@
 import type { Snapshot } from "../core/store.js"
 import { loadPipeline } from "../engine/pipeline-loader.js"
 import { getEngineIdentity } from "../engine/testing/index.js"
-import type { ConformanceDriver, ConformanceScenario } from "./drivers/types.js"
+import type {
+  ConformanceDriver,
+  ConformanceScenario,
+  DomConformanceDriver,
+} from "./drivers/types.js"
 
 // ---------------------------------------------------------------------------
 // Mock access — test file MUST vi.mock("../engine/pipeline-loader.js") first
@@ -98,6 +102,15 @@ function ownerDocumentFor(root: ParentNode | Document): Document {
   if (root instanceof Document) return root
   assert(root.ownerDocument instanceof Document, "DOM driver root must have an ownerDocument")
   return root.ownerDocument
+}
+
+function isDomDriver(driver: ConformanceDriver): driver is DomConformanceDriver {
+  return driver.supportsDOM
+}
+
+function domRootFor(driver: ConformanceDriver): ParentNode | Document {
+  assert(isDomDriver(driver), "Scenario requires a DOM-capable driver")
+  return driver.root
 }
 
 // ---------------------------------------------------------------------------
@@ -412,7 +425,7 @@ export const scenarios: readonly ConformanceScenario[] = [
       mockedLoad.mockResolvedValue(fakePipeline("traducido"))
       const core = await driver.create()
       await core.loadModel()
-      const root = driver.root!
+      const root = domRootFor(driver)
       const original = root.querySelector("#app p")?.textContent ?? ""
       const doc = ownerDocumentFor(root)
       const container = doc.createElement("div")

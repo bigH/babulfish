@@ -1,4 +1,4 @@
-import { describe, it, vi, beforeEach } from "vitest"
+import { describe, expect, it, vi, beforeEach } from "vitest"
 
 // Mock pipeline-loader — the ONLY file that imports @huggingface/transformers
 vi.mock("../engine/pipeline-loader.js", () => ({
@@ -26,6 +26,14 @@ beforeEach(() => {
 })
 
 describe("conformance — vanilla DOM driver", () => {
+  it("exposes a DOM root", () => {
+    if (!driver.supportsDOM) {
+      throw new Error("Expected vanilla DOM driver to support DOM scenarios")
+    }
+
+    expect(driver.root).toBe(document)
+  })
+
   it("supports DOM scenarios with a fragment-backed root", async () => {
     if (!rootOverrideScenario) {
       throw new Error("Expected root-override conformance scenario to exist")

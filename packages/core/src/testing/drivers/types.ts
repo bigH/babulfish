@@ -3,13 +3,25 @@
 import type { BabulfishConfig, BabulfishCore } from "../../core/babulfish.js"
 
 /** @experimental — subject to change */
-export interface ConformanceDriver {
+type ConformanceDriverBase = {
   readonly id: string
-  readonly supportsDOM?: boolean
   create(config?: BabulfishConfig): Promise<BabulfishCore>
   dispose(core: BabulfishCore): Promise<void>
-  readonly root?: ParentNode | Document
 }
+
+/** @experimental — subject to change */
+export type DomConformanceDriver = ConformanceDriverBase & {
+  readonly supportsDOM: true
+  readonly root: ParentNode | Document
+}
+
+/** @experimental — subject to change */
+export type NonDomConformanceDriver = ConformanceDriverBase & {
+  readonly supportsDOM: false
+}
+
+/** @experimental — subject to change */
+export type ConformanceDriver = DomConformanceDriver | NonDomConformanceDriver
 
 /** @experimental — subject to change */
 export type ConformanceScenario = {
