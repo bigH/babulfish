@@ -190,6 +190,34 @@ describe("4.3 — cancellation", () => {
     controller.abort()
     await expect(core.loadModel({ signal: controller.signal })).rejects.toThrow()
   })
+
+  it("translateTo failure resets translation status to idle", async () => {
+    const generate = vi.fn(async () => {
+      throw new Error("translation failed")
+    })
+    const pipeline = Object.assign(generate, {
+      _call: generate,
+      task: "text-generation" as const,
+      model: {} as unknown,
+      tokenizer: {} as unknown,
+      dispose: vi.fn(async () => {}),
+    })
+    mockLoadPipeline.mockResolvedValue(pipeline)
+
+    const root = document.createElement("div")
+    root.innerHTML = '<div id="app"><p>Hello</p></div>'
+
+    const core = createBabulfish({
+      dom: {
+        root,
+        roots: ["#app"],
+      },
+    })
+    await core.loadModel()
+
+    await expect(core.translateTo("es")).rejects.toThrow("translation failed")
+    expect(core.snapshot.translation.status).toBe("idle")
+  })
 })
 
 // ---- 4.4 Root lifetime — set-once default + per-call override ------------

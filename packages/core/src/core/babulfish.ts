@@ -143,6 +143,17 @@ export function createBabulfish(config?: BabulfishConfig): BabulfishCore {
       currentLanguage: lang,
     }))
 
+    function resetTranslationIfCurrentRun(): void {
+      if (!progress.isCurrentRun(runId)) return
+      store.set((prev) => {
+        if (prev.translation.status === "idle") return prev
+        return {
+          ...prev,
+          translation: Object.freeze({ status: "idle" as const }),
+        }
+      })
+    }
+
     try {
       runSignal.throwIfAborted()
 
@@ -154,21 +165,8 @@ export function createBabulfish(config?: BabulfishConfig): BabulfishCore {
       }
 
       runSignal.throwIfAborted()
-
-      if (progress.isCurrentRun(runId)) {
-        store.set((prev) => ({
-          ...prev,
-          translation: Object.freeze({ status: "idle" as const }),
-        }))
-      }
-    } catch (err) {
-      if (progress.isCurrentRun(runId)) {
-        store.set((prev) => ({
-          ...prev,
-          translation: Object.freeze({ status: "idle" as const }),
-        }))
-      }
-      throw err
+    } finally {
+      resetTranslationIfCurrentRun()
     }
   }
 
