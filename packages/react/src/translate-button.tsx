@@ -46,6 +46,14 @@ type ButtonState =
   | { readonly kind: "ready"; readonly dropdownOpen: boolean }
   | { readonly kind: "translating"; readonly dropdownOpen: boolean; readonly progress: number }
 
+function dismissTransientState(state: ButtonState): ButtonState {
+  if (state.kind === "confirm") return { kind: "idle" }
+  if (state.kind === "ready" && state.dropdownOpen) {
+    return { kind: "ready", dropdownOpen: false }
+  }
+  return state
+}
+
 export type TranslateButtonProps = {
   readonly classNames?: TranslateButtonClassNames
   readonly icon?: ReactNode
@@ -305,12 +313,7 @@ export function TranslateButton({
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
       if (!containerRef.current?.contains(e.target as Node)) {
-        setState((prev) => {
-          if (prev.kind === "confirm") return { kind: "idle" }
-          if (prev.kind === "ready" && prev.dropdownOpen)
-            return { kind: "ready", dropdownOpen: false }
-          return prev
-        })
+        setState(dismissTransientState)
       }
     }
     document.addEventListener("mousedown", handleClickOutside)
@@ -321,12 +324,7 @@ export function TranslateButton({
   useEffect(() => {
     function handleEscape(e: KeyboardEvent) {
       if (e.key !== "Escape") return
-      setState((prev) => {
-        if (prev.kind === "confirm") return { kind: "idle" }
-        if (prev.kind === "ready" && prev.dropdownOpen)
-          return { kind: "ready", dropdownOpen: false }
-        return prev
-      })
+      setState(dismissTransientState)
     }
     document.addEventListener("keydown", handleEscape)
     return () => document.removeEventListener("keydown", handleEscape)

@@ -415,6 +415,62 @@ describe("TranslateButton", () => {
     expect(screen.queryByRole("tooltip")).not.toBeInTheDocument()
   })
 
+  it("dismisses ready dropdown on click outside", async () => {
+    mockLoadModel.mockImplementation(async () => {
+      setSnapshot((prev) => ({
+        ...prev,
+        model: Object.freeze({ status: "ready" as const }),
+      }))
+    })
+
+    render(
+      <Wrapper config={DOM_CONFIG}>
+        <TranslateButton />
+      </Wrapper>,
+    )
+
+    const button = screen.getByRole("button")
+
+    fireEvent.click(button)
+    await act(async () => {
+      fireEvent.click(button)
+    })
+
+    fireEvent.click(button)
+    expect(screen.getByRole("listbox")).toBeInTheDocument()
+
+    clickOutside()
+    expect(screen.queryByRole("listbox")).not.toBeInTheDocument()
+  })
+
+  it("dismisses ready dropdown on Escape key", async () => {
+    mockLoadModel.mockImplementation(async () => {
+      setSnapshot((prev) => ({
+        ...prev,
+        model: Object.freeze({ status: "ready" as const }),
+      }))
+    })
+
+    render(
+      <Wrapper config={DOM_CONFIG}>
+        <TranslateButton />
+      </Wrapper>,
+    )
+
+    const button = screen.getByRole("button")
+
+    fireEvent.click(button)
+    await act(async () => {
+      fireEvent.click(button)
+    })
+
+    fireEvent.click(button)
+    expect(screen.getByRole("listbox")).toBeInTheDocument()
+
+    fireEvent.keyDown(document, { key: "Escape" })
+    expect(screen.queryByRole("listbox")).not.toBeInTheDocument()
+  })
+
   it("starts download on confirm click", async () => {
     render(
       <Wrapper config={DOM_CONFIG}>
