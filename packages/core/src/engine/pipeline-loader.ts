@@ -8,9 +8,19 @@ import type {
 
 export type PipelineTask = "text-generation"
 
+export type DeviceType =
+  | "auto" | "gpu" | "cpu" | "wasm" | "webgpu"
+  | "cuda" | "dml" | "coreml"
+  | "webnn" | "webnn-npu" | "webnn-gpu" | "webnn-cpu"
+
+export type DtypeType =
+  | "auto" | "fp32" | "fp16"
+  | "q8" | "int8" | "uint8"
+  | "q4" | "bnb4" | "q4f16"
+
 export type PipelineOptions = {
-  readonly dtype?: string
-  readonly device?: string
+  readonly dtype?: DtypeType
+  readonly device?: DeviceType
   readonly progress_callback?: (event: ProgressInfo) => void
 }
 

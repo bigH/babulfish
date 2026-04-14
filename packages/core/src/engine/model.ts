@@ -201,8 +201,6 @@ export function createEngine(config?: EngineConfig): Translator {
     pipelinePromise = null
     loadPromise = null
     transition("idle")
-    listeners["status-change"].clear()
-    listeners["progress"].clear()
   }
 
   function on<K extends keyof TranslatorEvents>(
