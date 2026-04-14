@@ -6,75 +6,68 @@ import {
   resolveDevice,
 } from "../detect.js"
 
-describe("isWebGPUAvailable", () => {
-  const originalNavigator = globalThis.navigator
+const originalWindow = Object.getOwnPropertyDescriptor(globalThis, "window")
+const originalNavigator = Object.getOwnPropertyDescriptor(globalThis, "navigator")
 
-  afterEach(() => {
-    Object.defineProperty(globalThis, "navigator", {
-      value: originalNavigator,
-      configurable: true,
-    })
+function restoreGlobal(
+  key: "window" | "navigator",
+  descriptor: PropertyDescriptor | undefined,
+): void {
+  if (descriptor) {
+    Object.defineProperty(globalThis, key, descriptor)
+    return
+  }
+
+  delete (globalThis as Record<string, unknown>)[key]
+}
+
+function mockWindow(value: object): void {
+  Object.defineProperty(globalThis, "window", {
+    value,
+    configurable: true,
   })
+}
 
+function mockNavigator(value: object): void {
+  Object.defineProperty(globalThis, "navigator", {
+    value,
+    configurable: true,
+  })
+}
+
+afterEach(() => {
+  restoreGlobal("window", originalWindow)
+  restoreGlobal("navigator", originalNavigator)
+})
+
+describe("isWebGPUAvailable", () => {
   it("returns true when navigator.gpu exists", () => {
-    Object.defineProperty(globalThis, "navigator", {
-      value: { gpu: {} },
-      configurable: true,
-    })
+    mockNavigator({ gpu: {} })
     expect(isWebGPUAvailable()).toBe(true)
   })
 
   it("returns false when navigator has no gpu", () => {
-    Object.defineProperty(globalThis, "navigator", {
-      value: {},
-      configurable: true,
-    })
+    mockNavigator({})
     expect(isWebGPUAvailable()).toBe(false)
   })
 })
 
 describe("isMobileDevice", () => {
-  const originalWindow = globalThis.window
-  const originalNavigator = globalThis.navigator
-
-  afterEach(() => {
-    Object.defineProperty(globalThis, "window", {
-      value: originalWindow,
-      configurable: true,
-    })
-    Object.defineProperty(globalThis, "navigator", {
-      value: originalNavigator,
-      configurable: true,
-    })
-  })
-
   it("returns true for narrow touch screens", () => {
-    Object.defineProperty(globalThis, "window", {
-      value: {
-        innerWidth: 400,
-        ontouchstart: null,
-      },
-      configurable: true,
+    mockWindow({
+      innerWidth: 400,
+      ontouchstart: null,
     })
-    Object.defineProperty(globalThis, "navigator", {
-      value: { maxTouchPoints: 1 },
-      configurable: true,
-    })
+    mockNavigator({ maxTouchPoints: 1 })
     expect(isMobileDevice()).toBe(true)
   })
 
   it("returns false for wide screens", () => {
-    Object.defineProperty(globalThis, "window", {
-      value: {
-        innerWidth: 1024,
-        ontouchstart: null,
-      },
-      configurable: true,
+    mockWindow({
+      innerWidth: 1024,
+      ontouchstart: null,
     })
-    Object.defineProperty(globalThis, "navigator", {
-      value: { maxTouchPoints: 1 },
-      configurable: true,
-    })
+    mockNavigator({ maxTouchPoints: 1 })
     expect(isMobileDevice()).toBe(false)
   })
 })
@@ -89,46 +82,20 @@ describe("resolveDevice", () => {
   })
 
   it("returns 'wasm' in auto mode when WebGPU unavailable", () => {
-    Object.defineProperty(globalThis, "navigator", {
-      value: {},
-      configurable: true,
-    })
+    mockNavigator({})
     expect(resolveDevice("auto")).toBe("wasm")
   })
 
   it("returns 'webgpu' in auto mode when WebGPU available", () => {
-    Object.defineProperty(globalThis, "navigator", {
-      value: { gpu: {} },
-      configurable: true,
-    })
+    mockNavigator({ gpu: {} })
     expect(resolveDevice("auto")).toBe("webgpu")
   })
 })
 
 describe("getTranslationCapabilities", () => {
-  const originalWindow = globalThis.window
-  const originalNavigator = globalThis.navigator
-
-  afterEach(() => {
-    Object.defineProperty(globalThis, "window", {
-      value: originalWindow,
-      configurable: true,
-    })
-    Object.defineProperty(globalThis, "navigator", {
-      value: originalNavigator,
-      configurable: true,
-    })
-  })
-
   it("reports desktop WASM fallback when WebGPU is unavailable", () => {
-    Object.defineProperty(globalThis, "window", {
-      value: { innerWidth: 1280 },
-      configurable: true,
-    })
-    Object.defineProperty(globalThis, "navigator", {
-      value: { maxTouchPoints: 0 },
-      configurable: true,
-    })
+    mockWindow({ innerWidth: 1280 })
+    mockNavigator({ maxTouchPoints: 0 })
 
     expect(getTranslationCapabilities()).toEqual({
       hasWebGPU: false,
@@ -139,14 +106,8 @@ describe("getTranslationCapabilities", () => {
   })
 
   it("keeps mobile explicit without claiming the default UI path is unavailable", () => {
-    Object.defineProperty(globalThis, "window", {
-      value: { innerWidth: 400, ontouchstart: null },
-      configurable: true,
-    })
-    Object.defineProperty(globalThis, "navigator", {
-      value: { maxTouchPoints: 1 },
-      configurable: true,
-    })
+    mockWindow({ innerWidth: 400, ontouchstart: null })
+    mockNavigator({ maxTouchPoints: 1 })
 
     expect(getTranslationCapabilities()).toEqual({
       hasWebGPU: false,
@@ -157,19 +118,25 @@ describe("getTranslationCapabilities", () => {
   })
 
   it("reports translation unavailable when WebGPU is forced but missing", () => {
-    Object.defineProperty(globalThis, "window", {
-      value: { innerWidth: 1280 },
-      configurable: true,
-    })
-    Object.defineProperty(globalThis, "navigator", {
-      value: { maxTouchPoints: 0 },
-      configurable: true,
-    })
+    mockWindow({ innerWidth: 1280 })
+    mockNavigator({ maxTouchPoints: 0 })
 
     expect(getTranslationCapabilities("webgpu")).toEqual({
       hasWebGPU: false,
       isMobile: false,
       device: "webgpu",
+      canTranslate: false,
+    })
+  })
+
+  it("stays SSR-safe when window is unavailable", () => {
+    delete (globalThis as Record<string, unknown>).window
+    delete (globalThis as Record<string, unknown>).navigator
+
+    expect(getTranslationCapabilities()).toEqual({
+      hasWebGPU: false,
+      isMobile: false,
+      device: "wasm",
       canTranslate: false,
     })
   })

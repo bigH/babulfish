@@ -38,9 +38,9 @@ export function resolveDevice(preference: DevicePreference): ResolvedDevice {
 export function getTranslationCapabilities(
   preference: DevicePreference = "auto",
 ): TranslationCapabilities {
-  const hasBrowserWindow = typeof window !== "undefined"
   const hasWebGPU = isWebGPUAvailable()
-  const isMobile = hasBrowserWindow && isMobileDevice()
+  const hasBrowserWindow = typeof window !== "undefined"
+  const isMobile = isMobileDevice()
   const device = resolveDevice(preference)
 
   return {
