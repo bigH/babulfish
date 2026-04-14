@@ -761,16 +761,16 @@ Dispatch note for agents: when you pick this task up, scan the file tree — if 
 - **Owner:** `[Artisan]`
 - **Phase:** 3
 - **Blocks:** —
-- **Blocked by:** T-5, T-6, T-7 (T-8 if shipped)
+- **Blocked by:** T-5, T-6, T-7, T-8
 - **Files:**
   - Update: root `README.md` with "Pick your binding" matrix, repo overview, links to per-package READMEs, links to all demos
   - Expand: `packages/core/README.md` — quick-start (`createBabulfish` + vanilla DOM), API summary, link to design doc, link to `@babulfish/core/testing`
   - Expand: `packages/react/README.md` — quick-start (install, `<TranslatorProvider>`, `useTranslator`), components, link to `packages/demo`
   - Expand: `packages/styles/README.md` — custom-property contract (already drafted in T-3a)
-  - Expand: `packages/demo-vanilla/README.md` and (if shipped) `packages/demo-webcomponent/README.md` — runnable instructions
+  - Expand: `packages/demo-vanilla/README.md` and `packages/demo-webcomponent/README.md` — runnable instructions
   - Update: `docs/ui-agnostic-core.md` if any decision changed during execution (probably not)
 - **Acceptance:**
-  - Root README's first navigation item is "Pick your binding" with a matrix showing: React (`@babulfish/react`, see demo), Vanilla / Web Component / custom (`@babulfish/core` directly, see vanilla demo, see WC demo if shipped).
+  - Root README's first navigation item is "Pick your binding" with a matrix showing: React (`@babulfish/react`, see demo), Vanilla / Web Component / custom (`@babulfish/core` directly, see vanilla demo, see WC demo).
   - Every package's quick-start is copy-pastable into a fresh project and actually works.
   - All cross-links between READMEs resolve.
 - **Dispatch template:**
@@ -789,7 +789,7 @@ Dispatch note for agents: when you pick this task up, scan the file tree — if 
   Task:
   1. Rewrite root README.md:
      - Project description (2-3 sentences).
-     - Pick-your-binding matrix (table from §3.1): React via @babulfish/react; any framework or no framework via @babulfish/core; stretch row for Web Components if T-8 shipped.
+     - Pick-your-binding matrix (table from §3.1): React via @babulfish/react; any framework or no framework via @babulfish/core; Web Components via `<babulfish-translator>` custom element.
      - Quick-start linking to packages/react/README.md (most common case).
      - Architecture diagram (Mermaid from design doc §8 "After Tier 3").
      - Repo layout (workspace overview naming all demo packages).
@@ -798,7 +798,7 @@ Dispatch note for agents: when you pick this task up, scan the file tree — if 
   3. Expand packages/react/README.md: quick-start (npm install, TranslatorProvider, useTranslator); components reference (TranslateButton, TranslateDropdown); link to packages/demo; CSS instructions (`import "@babulfish/react/css"`).
   4. Expand packages/styles/README.md: confirm the custom-property contract list from T-3a is comprehensive; add usage examples for theming.
   5. Expand packages/demo-vanilla/README.md: one paragraph + link to root README + `pnpm --filter @babulfish/demo-vanilla dev` instructions.
-  6. If T-8 shipped, same for packages/demo-webcomponent/README.md.
+  6. Expand packages/demo-webcomponent/README.md: cross-links to siblings + root README (core event/attribute contract is already documented).
   7. Cross-link: every README has a section linking to siblings.
 
   Deliverable: a single PR titled `T-9 — Documentation refresh`.
@@ -822,3 +822,4 @@ Dispatch note for agents: when you pick this task up, scan the file tree — if 
 - **T-5** ✅ complete — React binding is now a thin projection of `BabulfishCore`. `provider.tsx` is 26 non-comment/non-import lines (wiring only: lazy `createBabulfish`, context, dispose-on-unmount). Both `use-translator.ts` and `use-translate-dom.ts` subscribe exclusively via `useSyncExternalStore`; zero `useState` for core-owned state. `DEFAULT_LANGUAGES` re-exported from `@babulfish/core`; no `"restore"` sentinel. `TranslateDropdown` renders a binding-local "Original" affordance that calls `core.restore()`, with snapshot/behavior tests proving it. New `ssr.ts` provides a frozen SSR-safe snapshot for `useSyncExternalStore`'s server fallback. `languages` return type tightened to `ReadonlyArray<TranslatorLanguage>` (safe narrowing — read-only supertype). 35/35 React tests green. No `packages/core/` files touched. No downstream drift — T-6 and T-9 expectations align with shipped surface.
 - **T-6** ✅ complete — React conformance test suite in `packages/react/src/__tests__/conformance.test.tsx` runs all shared scenarios from `@babulfish/core/testing` through a `ReactConformanceDriver`. Driver mounts `<TranslatorProvider>` via `@testing-library/react`, reads snapshots through `useTranslatorContext()` + `useSyncExternalStore` (proving the binding layer, not bypassing to core). Failure messages include `driver.id="react"` and `scenario.id`. `ReactConformanceDriver` exported with `@experimental` JSDoc from `packages/react/src/testing/react-driver.ts`. Added `packages/react/vitest.config.ts` for test infrastructure. All scenarios green. No core scenarios modified. No downstream drift — T-9 expectations unaffected.
 - **T-7** ✅ complete — `packages/demo-vanilla/` proves UI-agnosticism with a zero-framework demo. ~71-line `main.ts` wires `createBabulfish` to pure DOM: `<select>` for language, "Original" button for restore, status region tracking model/translation/language state via `core.subscribe`. Vite plain-HTML dev server with COOP/COEP headers for WebGPU. `@babulfish/styles/css` imported for consistent theming. All acceptance criteria met: zero framework deps, functional translate/restore cycle, static build via `pnpm build`, README links to root "Pick your binding" matrix. One API shape note: dispatch template's `createBabulfish({ root: document })` became `createBabulfish({ dom: { roots: ["article"] } })` reflecting the finalized T-3b contract (`roots` = CSS selector array, `root` = scoping root). Updated T-8's template accordingly — `roots` is required alongside `root` when providing `dom` config.
+- **T-8** ✅ complete — `packages/demo-webcomponent/` proves the Shadow DOM story from T-2. `<babulfish-translator>` custom element attaches `shadowRoot` in `connectedCallback`, creates `createBabulfish({ dom: { root: shadow, roots: [".content"] } })`, and dispatches `CustomEvent("babulfish-status", { bubbles: true, composed: true })` on every snapshot. Two instances on `index.html` share one engine via singleton. `disconnectedCallback` calls `dispose()` to release the ref-count. Host-page `MutationObserver` in `main.ts` verifies the host document is untouched. `attributeChangedCallback` on `target-lang` triggers `translateTo`. Public `restore()` method. README documents attributes, events (with snapshot shape), methods, and lifecycle. 8 unit tests covering shadow attachment, event dispatch, control state, dispose, and restore delegation. Zero framework deps. Updated T-9's conditional "if T-8 shipped" references to unconditional — T-9 now definitively includes the WC demo in docs scope.
