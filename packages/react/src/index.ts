@@ -1,5 +1,7 @@
-export { TranslatorProvider, DEFAULT_LANGUAGES } from "./provider.js"
+export { TranslatorProvider } from "./provider.js"
 export type { TranslatorConfig, TranslatorLanguage } from "./provider.js"
+
+export { DEFAULT_LANGUAGES } from "@babulfish/core"
 
 export { useTranslator } from "./use-translator.js"
 export type { ModelState, TranslationState } from "./use-translator.js"

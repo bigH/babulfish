@@ -338,16 +338,21 @@ export function TranslateButton({
   function handleKeyDown(e: React.KeyboardEvent) {
     if (state.kind !== "ready" || !state.dropdownOpen) return
 
+    const totalItems = languages.length + 1
     if (e.key === "ArrowDown") {
       e.preventDefault()
-      setFocusedIndex((prev) => Math.min(prev + 1, languages.length - 1))
+      setFocusedIndex((prev) => Math.min(prev + 1, totalItems - 1))
     } else if (e.key === "ArrowUp") {
       e.preventDefault()
       setFocusedIndex((prev) => Math.max(prev - 1, 0))
     } else if (e.key === "Enter") {
       e.preventDefault()
-      const lang = languages[focusedIndex]
-      if (lang) handleLanguageSelect(lang.code)
+      if (focusedIndex === 0) {
+        handleRestore()
+      } else {
+        const lang = languages[focusedIndex - 1]
+        if (lang) handleLanguageSelect(lang.code)
+      }
     }
   }
 
@@ -388,14 +393,13 @@ export function TranslateButton({
     }
   }
 
+  function handleRestore() {
+    restore()
+    setState({ kind: "ready", dropdownOpen: false })
+  }
+
   async function handleLanguageSelect(code: string) {
     if (state.kind !== "ready") return
-
-    if (code === "restore") {
-      restore()
-      setState({ kind: "ready", dropdownOpen: false })
-      return
-    }
 
     setState({ kind: "translating", dropdownOpen: true, progress: 0 })
     try {
@@ -583,6 +587,7 @@ export function TranslateButton({
             value={currentLanguage}
             disabled={false}
             onSelect={handleLanguageSelect}
+            onRestore={handleRestore}
             focusedIndex={focusedIndex}
             className={classNames?.dropdown}
           />
@@ -592,6 +597,7 @@ export function TranslateButton({
             value={currentLanguage}
             disabled
             onSelect={() => {}}
+            onRestore={() => {}}
             focusedIndex={-1}
             className={classNames?.dropdown}
           />

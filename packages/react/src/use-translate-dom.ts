@@ -1,8 +1,6 @@
-// useTranslateDOM — thin wrapper around the DOM translator for consumers
-// who build their own UI and skip TranslateButton
-
-import { useCallback } from "react"
+import { useSyncExternalStore } from "react"
 import { useTranslatorContext } from "./context.js"
+import { SSR_SNAPSHOT } from "./ssr.js"
 
 export type UseTranslateDOMReturn = {
   translatePage(lang: string): Promise<void>
@@ -11,20 +9,17 @@ export type UseTranslateDOMReturn = {
 }
 
 export function useTranslateDOM(): UseTranslateDOMReturn {
-  const { domTranslator, translationProgress } = useTranslatorContext()
-
-  const translatePage = useCallback(
-    async (lang: string) => {
-      if (!domTranslator) return
-
-      await domTranslator.translate(lang)
-    },
-    [domTranslator],
+  const core = useTranslatorContext()
+  const snapshot = useSyncExternalStore(
+    core.subscribe,
+    () => core.snapshot,
+    () => SSR_SNAPSHOT,
   )
 
-  const restorePage = useCallback(() => {
-    domTranslator?.restore()
-  }, [domTranslator])
+  const progress =
+    snapshot.translation.status === "translating"
+      ? snapshot.translation.progress
+      : null
 
-  return { translatePage, restorePage, progress: translationProgress }
+  return { translatePage: core.translateTo, restorePage: core.restore, progress }
 }

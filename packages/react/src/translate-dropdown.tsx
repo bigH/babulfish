@@ -1,26 +1,17 @@
-// TranslateDropdown — standalone language picker, usable independently
-
 import { useContext, useEffect, useRef, type ReactNode } from "react"
 import { TranslatorContext } from "./context.js"
 import type { TranslatorLanguage } from "./context.js"
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
 export type TranslateDropdownProps = {
   readonly onSelect: (code: string) => void
+  readonly onRestore?: () => void
   readonly value?: string | null
   readonly disabled?: boolean
   readonly className?: string
   readonly renderOption?: (lang: TranslatorLanguage, active: boolean) => ReactNode
-  readonly languages?: TranslatorLanguage[]
+  readonly languages?: readonly TranslatorLanguage[]
   readonly focusedIndex?: number
 }
-
-// ---------------------------------------------------------------------------
-// Built-in check icon
-// ---------------------------------------------------------------------------
 
 function CheckIcon() {
   return (
@@ -40,12 +31,9 @@ function CheckIcon() {
   )
 }
 
-// ---------------------------------------------------------------------------
-// Component
-// ---------------------------------------------------------------------------
-
 export function TranslateDropdown({
   onSelect,
+  onRestore,
   value = null,
   disabled = false,
   className,
@@ -53,8 +41,6 @@ export function TranslateDropdown({
   languages: languagesProp,
   focusedIndex = -1,
 }: TranslateDropdownProps) {
-  // Always call useContext unconditionally (hook rules).
-  // When languages prop is supplied, the context value is simply ignored.
   const ctx = useContext(TranslatorContext)
   const languages = languagesProp ?? ctx?.languages
 
@@ -77,6 +63,19 @@ export function TranslateDropdown({
   const focusedId =
     focusedIndex >= 0 ? `babulfish-lang-${focusedIndex}` : undefined
 
+  const hasOriginal = !!onRestore
+  const isOriginalActive = value === null
+
+  const itemStyle = (isActive: boolean): React.CSSProperties => ({
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    padding: "0.5rem 0.75rem",
+    cursor: "pointer",
+    fontSize: "0.875rem",
+    fontWeight: isActive ? 500 : 400,
+  })
+
   return (
     <ul
       ref={listRef}
@@ -89,15 +88,32 @@ export function TranslateDropdown({
       }
       style={disabled ? { pointerEvents: "none", opacity: 0.5 } : undefined}
     >
+      {hasOriginal && (
+        <li
+          key="__original__"
+          id="babulfish-lang-0"
+          role="option"
+          aria-selected={isOriginalActive}
+          tabIndex={-1}
+          data-focused={focusedIndex === 0 || undefined}
+          data-active={isOriginalActive || undefined}
+          onClick={onRestore}
+          style={itemStyle(isOriginalActive)}
+        >
+          Original
+          {isOriginalActive && <CheckIcon />}
+        </li>
+      )}
       {languages.map((lang, i) => {
+        const listIndex = hasOriginal ? i + 1 : i
         const isActive = lang.code === value
-        const isFocused = i === focusedIndex
+        const isFocused = listIndex === focusedIndex
 
         if (renderOption) {
           return (
             <li
               key={lang.code}
-              id={`babulfish-lang-${i}`}
+              id={`babulfish-lang-${listIndex}`}
               role="option"
               aria-selected={isActive}
               tabIndex={-1}
@@ -111,22 +127,14 @@ export function TranslateDropdown({
         return (
           <li
             key={lang.code}
-            id={`babulfish-lang-${i}`}
+            id={`babulfish-lang-${listIndex}`}
             role="option"
             aria-selected={isActive}
             tabIndex={-1}
             data-focused={isFocused || undefined}
             data-active={isActive || undefined}
             onClick={() => onSelect(lang.code)}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              padding: "0.5rem 0.75rem",
-              cursor: "pointer",
-              fontSize: "0.875rem",
-              fontWeight: isActive ? 500 : 400,
-            }}
+            style={itemStyle(isActive)}
           >
             {lang.label}
             {isActive && <CheckIcon />}

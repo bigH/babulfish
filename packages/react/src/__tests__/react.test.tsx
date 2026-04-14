@@ -1,89 +1,85 @@
 /// <reference types="@testing-library/jest-dom" />
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import { render, screen, fireEvent, act, cleanup } from "@testing-library/react"
-import { hydrateRoot } from "react-dom/client"
-import { renderToString } from "react-dom/server"
+import type { Snapshot } from "@babulfish/core"
 
 // ---------------------------------------------------------------------------
-// Mocks — must be declared before imports that use them
+// Mock — @babulfish/core
 // ---------------------------------------------------------------------------
 
-// Engine mock
-const mockLoad = vi.fn<() => Promise<void>>()
-const mockTranslate = vi.fn<(text: string, lang: string) => Promise<string>>()
-const mockDispose = vi.fn()
-const mockOn = vi.fn<
-  (event: string, handler: (data: unknown) => void) => () => void
->()
-let mockEngineStatus = "idle"
+const MOCK_LANGUAGES = [
+  { label: "Spanish", code: "es-ES" },
+  { label: "French", code: "fr" },
+  { label: "German", code: "de" },
+  { label: "Japanese", code: "ja" },
+  { label: "Korean", code: "ko" },
+  { label: "Chinese (Simplified)", code: "zh-CN" },
+  { label: "Hindi", code: "hi" },
+  { label: "Portuguese (Brazil)", code: "pt-BR" },
+  { label: "Arabic", code: "ar" },
+  { label: "Russian", code: "ru" },
+  { label: "Italian", code: "it" },
+  { label: "Thai", code: "th" },
+  { label: "Vietnamese", code: "vi" },
+]
 
-vi.mock("@babulfish/core/engine", () => ({
-  createEngine: () => ({
-    load: (...args: unknown[]) => mockLoad(...(args as [])),
-    translate: (text: string, lang: string) => mockTranslate(text, lang),
-    dispose: () => mockDispose(),
-    on: (event: string, handler: (data: unknown) => void) =>
-      mockOn(event, handler),
-    get status() {
-      return mockEngineStatus
-    },
-  }),
-  isWebGPUAvailable: () => mockIsWebGPUAvailable(),
-  isMobileDevice: () => mockIsMobileDevice(),
-  getTranslationCapabilities: (
-    preference: "auto" | "webgpu" | "wasm" = "auto",
-  ) => mockGetTranslationCapabilities(preference),
-}))
+let mockSnapshot: Snapshot
+const listeners = new Set<() => void>()
 
-// DOM translator mock
-const mockDOMTranslate = vi.fn<(lang: string) => Promise<void>>()
-const mockDOMRestore = vi.fn()
-const mockDOMAbort = vi.fn()
-let mockDOMIsTranslating = false
-let mockDOMCurrentLang: string | null = null
-type MockDOMHooks = {
-  readonly onTranslateStart?: (element: Element) => void
-  readonly onTranslateEnd?: (element: Element) => void
-  readonly onProgress?: (done: number, total: number) => void
-  readonly onDirectionChange?: (root: Element, dir: "ltr" | "rtl") => void
+function createDefaultSnapshot(): Snapshot {
+  return Object.freeze({
+    model: Object.freeze({ status: "idle" as const }),
+    translation: Object.freeze({ status: "idle" as const }),
+    currentLanguage: null,
+    capabilities: Object.freeze({
+      ready: true,
+      hasWebGPU: true,
+      canTranslate: true,
+      device: "webgpu" as const,
+      isMobile: false,
+    }),
+  })
 }
-let mockDOMHooks: MockDOMHooks | undefined
 
-vi.mock("@babulfish/core/dom", () => ({
-  createDOMTranslator: (config: { hooks?: MockDOMHooks }) => {
-    mockDOMHooks = config.hooks
-    return {
-      translate: (lang: string) => mockDOMTranslate(lang),
-      restore: () => mockDOMRestore(),
-      abort: () => mockDOMAbort(),
-      get isTranslating() {
-        return mockDOMIsTranslating
-      },
-      get currentLang() {
-        return mockDOMCurrentLang
-      },
-    }
+function setSnapshot(updater: (prev: Snapshot) => Snapshot) {
+  mockSnapshot = Object.freeze(updater(mockSnapshot))
+  for (const listener of listeners) listener()
+}
+
+const mockLoadModel = vi.fn<() => Promise<void>>()
+const mockTranslateTo = vi.fn<(lang: string) => Promise<void>>()
+const mockTranslateText = vi.fn<(text: string, lang: string) => Promise<string>>()
+const mockRestore = vi.fn()
+const mockAbort = vi.fn()
+const mockDispose = vi.fn()
+
+vi.mock("@babulfish/core", () => ({
+  createBabulfish: () => ({
+    get snapshot() {
+      return mockSnapshot
+    },
+    subscribe(listener: () => void) {
+      listeners.add(listener)
+      return () => {
+        listeners.delete(listener)
+      }
+    },
+    loadModel: (...args: unknown[]) => mockLoadModel(...(args as [])),
+    translateTo: (lang: string) => mockTranslateTo(lang),
+    translateText: (text: string, lang: string) =>
+      mockTranslateText(text, lang),
+    restore: () => mockRestore(),
+    abort: () => mockAbort(),
+    dispose: () => mockDispose(),
+    languages: MOCK_LANGUAGES,
+  }),
+  get DEFAULT_LANGUAGES() {
+    return MOCK_LANGUAGES
   },
 }))
 
-// Detect mock
-let mockResolvedDevice: "webgpu" | "wasm" = "webgpu"
-let mockCanTranslate = true
-const mockGetTranslationCapabilities = vi.fn(
-  (_preference: "auto" | "webgpu" | "wasm" = "auto") => ({
-    hasWebGPU: mockIsWebGPUAvailable(),
-    isMobile: mockIsMobileDevice(),
-    device: mockResolvedDevice,
-    canTranslate: mockCanTranslate,
-  }),
-)
-
-
-const mockIsWebGPUAvailable = vi.fn(() => true)
-const mockIsMobileDevice = vi.fn(() => false)
-
 // ---------------------------------------------------------------------------
-// Imports (after mocks)
+// Imports (after mock)
 // ---------------------------------------------------------------------------
 
 import { TranslatorProvider } from "../provider.js"
@@ -91,7 +87,6 @@ import { useTranslator } from "../use-translator.js"
 import { useTranslateDOM } from "../use-translate-dom.js"
 import { TranslateButton } from "../translate-button.js"
 import { TranslateDropdown } from "../translate-dropdown.js"
-import { DEFAULT_LANGUAGES } from "../provider.js"
 import type { TranslatorConfig } from "../provider.js"
 
 // ---------------------------------------------------------------------------
@@ -102,11 +97,6 @@ const DOM_CONFIG: TranslatorConfig = {
   dom: { roots: ["main"] },
 }
 
-function clickOutside() {
-  fireEvent.mouseDown(document.body)
-}
-
-/** Wrapper that provides the TranslatorProvider */
 function Wrapper({
   config,
   children,
@@ -117,61 +107,62 @@ function Wrapper({
   return <TranslatorProvider config={config}>{children}</TranslatorProvider>
 }
 
-/** Test component that exposes useTranslator state */
 function HookInspector() {
   const state = useTranslator()
   return (
     <div>
       <span data-testid="model-status">{state.model.status}</span>
       <span data-testid="translation-status">{state.translation.status}</span>
-      <span data-testid="current-language">{state.currentLanguage ?? "none"}</span>
-      <span data-testid="capabilities-ready">{String(state.capabilitiesReady)}</span>
+      <span data-testid="current-language">
+        {state.currentLanguage ?? "none"}
+      </span>
+      <span data-testid="capabilities-ready">
+        {String(state.capabilitiesReady)}
+      </span>
       <span data-testid="is-supported">{String(state.isSupported)}</span>
       <span data-testid="has-webgpu">{String(state.hasWebGPU)}</span>
       <span data-testid="can-translate">{String(state.canTranslate)}</span>
       <span data-testid="device">{state.device ?? "none"}</span>
       <span data-testid="is-mobile">{String(state.isMobile)}</span>
       <span data-testid="language-count">{state.languages.length}</span>
-      <button data-testid="load" onClick={() => state.loadModel()}>Load</button>
-      <button data-testid="translate-to" onClick={() => state.translateTo("es-ES")}>Translate</button>
-      <button data-testid="restore" onClick={() => state.restore()}>Restore</button>
+      <button data-testid="load" onClick={() => state.loadModel()}>
+        Load
+      </button>
+      <button
+        data-testid="translate-to"
+        onClick={() => state.translateTo("es-ES")}
+      >
+        Translate
+      </button>
+      <button data-testid="restore" onClick={() => state.restore()}>
+        Restore
+      </button>
     </div>
   )
 }
 
-/** Test component that exposes useTranslateDOM state */
 function DOMHookInspector() {
   const { translatePage, restorePage, progress } = useTranslateDOM()
   return (
     <div>
-      <span data-testid="dom-progress">{progress === null ? "null" : String(progress)}</span>
-      <button data-testid="dom-translate" onClick={() => translatePage("fr")}>Translate</button>
-      <button data-testid="dom-restore" onClick={() => restorePage()}>Restore</button>
+      <span data-testid="dom-progress">
+        {progress === null ? "null" : String(progress)}
+      </span>
+      <button
+        data-testid="dom-translate"
+        onClick={() => translatePage("fr")}
+      >
+        Translate
+      </button>
+      <button data-testid="dom-restore" onClick={() => restorePage()}>
+        Restore
+      </button>
     </div>
   )
 }
 
-function CapabilitySnapshotProbe() {
-  const {
-    capabilitiesReady,
-    isSupported,
-    hasWebGPU,
-    canTranslate,
-    device,
-    isMobile,
-  } = useTranslator()
-  return (
-    <output data-testid="capabilities-probe">
-      {JSON.stringify({
-        capabilitiesReady,
-        isSupported,
-        hasWebGPU,
-        canTranslate,
-        device,
-        isMobile,
-      })}
-    </output>
-  )
+function clickOutside() {
+  fireEvent.mouseDown(document.body)
 }
 
 function createDeferred<T>() {
@@ -184,11 +175,6 @@ function createDeferred<T>() {
   return { promise, resolve, reject }
 }
 
-// Set up mockOn to return an unsubscribe fn by default
-function setupMockOn() {
-  mockOn.mockImplementation(() => () => {})
-}
-
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -196,18 +182,11 @@ function setupMockOn() {
 describe("TranslatorProvider", () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mockEngineStatus = "idle"
-    mockDOMIsTranslating = false
-    mockDOMCurrentLang = null
-    mockDOMHooks = undefined
-    mockIsWebGPUAvailable.mockReturnValue(true)
-    mockIsMobileDevice.mockReturnValue(false)
-    mockResolvedDevice = "webgpu"
-    mockCanTranslate = true
-    mockLoad.mockResolvedValue(undefined)
-    mockTranslate.mockResolvedValue("translated")
-    mockDOMTranslate.mockResolvedValue(undefined)
-    setupMockOn()
+    listeners.clear()
+    mockSnapshot = createDefaultSnapshot()
+    mockLoadModel.mockResolvedValue(undefined)
+    mockTranslateTo.mockResolvedValue(undefined)
+    mockTranslateText.mockResolvedValue("translated")
   })
 
   afterEach(cleanup)
@@ -222,7 +201,6 @@ describe("TranslatorProvider", () => {
   })
 
   it("throws when hook used outside provider", () => {
-    // Suppress React error boundary output
     const spy = vi.spyOn(console, "error").mockImplementation(() => {})
     expect(() => render(<HookInspector />)).toThrow(
       "useTranslator must be used within <TranslatorProvider>",
@@ -237,7 +215,7 @@ describe("TranslatorProvider", () => {
       </Wrapper>,
     )
     expect(screen.getByTestId("language-count")).toHaveTextContent(
-      String(DEFAULT_LANGUAGES.length),
+      String(MOCK_LANGUAGES.length),
     )
   })
 })
@@ -245,18 +223,11 @@ describe("TranslatorProvider", () => {
 describe("useTranslator", () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mockEngineStatus = "idle"
-    mockDOMIsTranslating = false
-    mockDOMCurrentLang = null
-    mockDOMHooks = undefined
-    mockIsWebGPUAvailable.mockReturnValue(true)
-    mockIsMobileDevice.mockReturnValue(false)
-    mockResolvedDevice = "webgpu"
-    mockCanTranslate = true
-    mockLoad.mockResolvedValue(undefined)
-    mockTranslate.mockResolvedValue("translated")
-    mockDOMTranslate.mockResolvedValue(undefined)
-    setupMockOn()
+    listeners.clear()
+    mockSnapshot = createDefaultSnapshot()
+    mockLoadModel.mockResolvedValue(undefined)
+    mockTranslateTo.mockResolvedValue(undefined)
+    mockTranslateText.mockResolvedValue("translated")
   })
 
   afterEach(cleanup)
@@ -280,13 +251,23 @@ describe("useTranslator", () => {
   })
 
   it("reports WASM fallback when WebGPU is unavailable", () => {
-    mockIsWebGPUAvailable.mockReturnValue(false)
-    mockResolvedDevice = "wasm"
+    mockSnapshot = Object.freeze({
+      ...mockSnapshot,
+      capabilities: Object.freeze({
+        ready: true,
+        hasWebGPU: false,
+        canTranslate: true,
+        device: "wasm" as const,
+        isMobile: false,
+      }),
+    })
+
     render(
       <Wrapper config={DOM_CONFIG}>
         <HookInspector />
       </Wrapper>,
     )
+
     expect(screen.getByTestId("is-supported")).toHaveTextContent("false")
     expect(screen.getByTestId("has-webgpu")).toHaveTextContent("false")
     expect(screen.getByTestId("can-translate")).toHaveTextContent("true")
@@ -294,96 +275,24 @@ describe("useTranslator", () => {
   })
 
   it("reports isMobile=true on mobile device", () => {
-    mockIsMobileDevice.mockReturnValue(true)
+    mockSnapshot = Object.freeze({
+      ...mockSnapshot,
+      capabilities: Object.freeze({
+        ...mockSnapshot.capabilities,
+        isMobile: true,
+      }),
+    })
+
     render(
       <Wrapper config={DOM_CONFIG}>
         <HookInspector />
       </Wrapper>,
     )
+
     expect(screen.getByTestId("is-mobile")).toHaveTextContent("true")
   })
 
-  it("uses the provider device preference when resolving capabilities", () => {
-    mockIsWebGPUAvailable.mockReturnValue(false)
-    mockResolvedDevice = "webgpu"
-    mockCanTranslate = false
-
-    render(
-      <Wrapper
-        config={{
-          engine: { device: "webgpu" },
-          dom: { roots: ["main"] },
-        }}
-      >
-        <HookInspector />
-      </Wrapper>,
-    )
-
-    expect(mockGetTranslationCapabilities).toHaveBeenCalledWith("webgpu")
-    expect(screen.getByTestId("device")).toHaveTextContent("webgpu")
-    expect(screen.getByTestId("can-translate")).toHaveTextContent("false")
-  })
-
-  it("keeps capability state neutral through hydration, then resolves browser capabilities", async () => {
-    const serverHtml = renderToString(
-      <Wrapper config={DOM_CONFIG}>
-        <CapabilitySnapshotProbe />
-      </Wrapper>,
-    )
-
-    expect(mockIsWebGPUAvailable).not.toHaveBeenCalled()
-    expect(mockIsMobileDevice).not.toHaveBeenCalled()
-    expect(serverHtml).toContain("&quot;capabilitiesReady&quot;:false")
-    expect(serverHtml).toContain("&quot;isSupported&quot;:false")
-    expect(serverHtml).toContain("&quot;hasWebGPU&quot;:false")
-    expect(serverHtml).toContain("&quot;canTranslate&quot;:false")
-    expect(serverHtml).toContain("&quot;device&quot;:null")
-    expect(serverHtml).toContain("&quot;isMobile&quot;:false")
-
-    const container = document.createElement("div")
-    container.innerHTML = serverHtml
-    document.body.append(container)
-
-    const recoverableError = vi.fn()
-
-    const root = hydrateRoot(
-      container,
-      <Wrapper config={DOM_CONFIG}>
-        <CapabilitySnapshotProbe />
-      </Wrapper>,
-      { onRecoverableError: recoverableError },
-    )
-
-    expect(container.textContent).toContain("\"capabilitiesReady\":false")
-    expect(container.textContent).toContain("\"isSupported\":false")
-    expect(container.textContent).toContain("\"hasWebGPU\":false")
-    expect(container.textContent).toContain("\"canTranslate\":false")
-    expect(container.textContent).toContain("\"device\":null")
-    expect(container.textContent).toContain("\"isMobile\":false")
-    expect(mockIsWebGPUAvailable).not.toHaveBeenCalled()
-    expect(mockIsMobileDevice).not.toHaveBeenCalled()
-
-    await act(async () => {
-      await Promise.resolve()
-    })
-
-    expect(recoverableError).not.toHaveBeenCalled()
-    expect(mockIsWebGPUAvailable).toHaveBeenCalledTimes(1)
-    expect(mockIsMobileDevice).toHaveBeenCalledTimes(1)
-    expect(container.textContent).toContain("\"capabilitiesReady\":true")
-    expect(container.textContent).toContain("\"isSupported\":true")
-    expect(container.textContent).toContain("\"hasWebGPU\":true")
-    expect(container.textContent).toContain("\"canTranslate\":true")
-    expect(container.textContent).toContain("\"device\":\"webgpu\"")
-    expect(container.textContent).toContain("\"isMobile\":false")
-
-    await act(async () => {
-      root.unmount()
-    })
-    container.remove()
-  })
-
-  it("calls engine.load on loadModel", async () => {
+  it("calls core.loadModel on loadModel", async () => {
     render(
       <Wrapper config={DOM_CONFIG}>
         <HookInspector />
@@ -394,10 +303,10 @@ describe("useTranslator", () => {
       fireEvent.click(screen.getByTestId("load"))
     })
 
-    expect(mockLoad).toHaveBeenCalledTimes(1)
+    expect(mockLoadModel).toHaveBeenCalledTimes(1)
   })
 
-  it("calls domTranslator.restore on restore", () => {
+  it("calls core.restore on restore", () => {
     render(
       <Wrapper config={DOM_CONFIG}>
         <HookInspector />
@@ -405,25 +314,18 @@ describe("useTranslator", () => {
     )
 
     fireEvent.click(screen.getByTestId("restore"))
-    expect(mockDOMRestore).toHaveBeenCalledTimes(1)
+    expect(mockRestore).toHaveBeenCalledTimes(1)
   })
 })
 
 describe("TranslateButton", () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mockEngineStatus = "idle"
-    mockDOMIsTranslating = false
-    mockDOMCurrentLang = null
-    mockDOMHooks = undefined
-    mockIsWebGPUAvailable.mockReturnValue(true)
-    mockIsMobileDevice.mockReturnValue(false)
-    mockResolvedDevice = "webgpu"
-    mockCanTranslate = true
-    mockLoad.mockResolvedValue(undefined)
-    mockTranslate.mockResolvedValue("translated")
-    mockDOMTranslate.mockResolvedValue(undefined)
-    setupMockOn()
+    listeners.clear()
+    mockSnapshot = createDefaultSnapshot()
+    mockLoadModel.mockResolvedValue(undefined)
+    mockTranslateTo.mockResolvedValue(undefined)
+    mockTranslateText.mockResolvedValue("translated")
   })
 
   afterEach(cleanup)
@@ -501,21 +403,15 @@ describe("TranslateButton", () => {
       fireEvent.click(button)
     })
 
-    expect(mockLoad).toHaveBeenCalledTimes(1)
+    expect(mockLoadModel).toHaveBeenCalledTimes(1)
   })
 
   it("shows language dropdown when button clicked in ready state", async () => {
-    // Simulate engine going straight to ready
-    let statusHandler: ((data: { from: string; to: string }) => void) | null = null
-    mockOn.mockImplementation((event, handler) => {
-      if (event === "status-change") {
-        statusHandler = handler as (data: { from: string; to: string }) => void
-      }
-      return () => {}
-    })
-    mockLoad.mockImplementation(async () => {
-      mockEngineStatus = "ready"
-      statusHandler?.({ from: "downloading", to: "ready" })
+    mockLoadModel.mockImplementation(async () => {
+      setSnapshot((prev) => ({
+        ...prev,
+        model: Object.freeze({ status: "ready" as const }),
+      }))
     })
 
     render(
@@ -535,13 +431,22 @@ describe("TranslateButton", () => {
     // READY -> open dropdown
     fireEvent.click(button)
     expect(screen.getByRole("listbox")).toBeInTheDocument()
+    expect(screen.getByText("Original")).toBeInTheDocument()
     expect(screen.getByText("Spanish")).toBeInTheDocument()
     expect(screen.getByText("French")).toBeInTheDocument()
   })
 
   it("shows an explicit mobile warning state", () => {
-    mockIsMobileDevice.mockReturnValue(true)
-    mockResolvedDevice = "wasm"
+    mockSnapshot = Object.freeze({
+      ...mockSnapshot,
+      capabilities: Object.freeze({
+        ready: true,
+        hasWebGPU: false,
+        canTranslate: true,
+        device: "wasm" as const,
+        isMobile: true,
+      }),
+    })
 
     render(
       <Wrapper config={DOM_CONFIG}>
@@ -557,10 +462,17 @@ describe("TranslateButton", () => {
     expect(button).toBeDisabled()
   })
 
-  it("renders and explains the WASM fallback when WebGPU is unavailable on desktop", async () => {
-    mockIsWebGPUAvailable.mockReturnValue(false)
-    mockIsMobileDevice.mockReturnValue(false)
-    mockResolvedDevice = "wasm"
+  it("renders and explains the WASM fallback on desktop", async () => {
+    mockSnapshot = Object.freeze({
+      ...mockSnapshot,
+      capabilities: Object.freeze({
+        ready: true,
+        hasWebGPU: false,
+        canTranslate: true,
+        device: "wasm" as const,
+        isMobile: false,
+      }),
+    })
 
     render(
       <Wrapper config={DOM_CONFIG}>
@@ -580,21 +492,23 @@ describe("TranslateButton", () => {
       fireEvent.click(button)
     })
 
-    expect(mockLoad).toHaveBeenCalledTimes(1)
+    expect(mockLoadModel).toHaveBeenCalledTimes(1)
   })
 
-  it("does not render when the provider forces WebGPU on an unsupported desktop", () => {
-    mockIsWebGPUAvailable.mockReturnValue(false)
-    mockResolvedDevice = "webgpu"
-    mockCanTranslate = false
+  it("does not render when canTranslate is false", () => {
+    mockSnapshot = Object.freeze({
+      ...mockSnapshot,
+      capabilities: Object.freeze({
+        ready: true,
+        hasWebGPU: false,
+        canTranslate: false,
+        device: "webgpu" as const,
+        isMobile: false,
+      }),
+    })
 
     const { container } = render(
-      <Wrapper
-        config={{
-          engine: { device: "webgpu" },
-          dom: { roots: ["main"] },
-        }}
-      >
+      <Wrapper config={DOM_CONFIG}>
         <TranslateButton />
       </Wrapper>,
     )
@@ -603,26 +517,28 @@ describe("TranslateButton", () => {
   })
 
   it("shows non-zero translation progress from hook state", async () => {
-    let statusHandler: ((data: { from: string; to: string }) => void) | null = null
-    mockOn.mockImplementation((event, handler) => {
-      if (event === "status-change") {
-        statusHandler = handler as (data: { from: string; to: string }) => void
-      }
-      return () => {}
-    })
-    mockLoad.mockImplementation(async () => {
-      mockEngineStatus = "ready"
-      statusHandler?.({ from: "downloading", to: "ready" })
+    mockLoadModel.mockImplementation(async () => {
+      setSnapshot((prev) => ({
+        ...prev,
+        model: Object.freeze({ status: "ready" as const }),
+      }))
     })
 
     const deferred = createDeferred<void>()
-    mockDOMTranslate.mockImplementation(async () => {
-      const paragraph = document.createElement("p")
-      mockDOMHooks?.onTranslateStart?.(paragraph)
-      mockDOMHooks?.onProgress?.(1, 2)
+    mockTranslateTo.mockImplementation(async (lang) => {
+      setSnapshot((prev) => ({
+        ...prev,
+        translation: Object.freeze({
+          status: "translating" as const,
+          progress: 0.5,
+        }),
+        currentLanguage: lang,
+      }))
       await deferred.promise
-      mockDOMHooks?.onProgress?.(2, 2)
-      mockDOMHooks?.onTranslateEnd?.(paragraph)
+      setSnapshot((prev) => ({
+        ...prev,
+        translation: Object.freeze({ status: "idle" as const }),
+      }))
     })
 
     render(
@@ -633,11 +549,13 @@ describe("TranslateButton", () => {
 
     const button = screen.getByRole("button")
 
+    // Get to ready state
     fireEvent.click(button)
     await act(async () => {
       fireEvent.click(button)
     })
 
+    // Open dropdown and select Spanish
     fireEvent.click(button)
     await act(async () => {
       fireEvent.click(screen.getByText("Spanish"))
@@ -657,15 +575,14 @@ describe("TranslateButton", () => {
 
 describe("TranslateDropdown", () => {
   const testLanguages = [
-    { label: "English (Original)", code: "restore" },
     { label: "Spanish", code: "es-ES" },
     { label: "French", code: "fr" },
   ]
 
   beforeEach(() => {
     vi.clearAllMocks()
-    mockEngineStatus = "idle"
-    setupMockOn()
+    listeners.clear()
+    mockSnapshot = createDefaultSnapshot()
   })
 
   afterEach(cleanup)
@@ -673,14 +590,10 @@ describe("TranslateDropdown", () => {
   it("renders all languages", () => {
     render(
       <Wrapper>
-        <TranslateDropdown
-          onSelect={() => {}}
-          languages={testLanguages}
-        />
+        <TranslateDropdown onSelect={() => {}} languages={testLanguages} />
       </Wrapper>,
     )
 
-    expect(screen.getByText("English (Original)")).toBeInTheDocument()
     expect(screen.getByText("Spanish")).toBeInTheDocument()
     expect(screen.getByText("French")).toBeInTheDocument()
   })
@@ -689,10 +602,7 @@ describe("TranslateDropdown", () => {
     const onSelect = vi.fn()
     render(
       <Wrapper>
-        <TranslateDropdown
-          onSelect={onSelect}
-          languages={testLanguages}
-        />
+        <TranslateDropdown onSelect={onSelect} languages={testLanguages} />
       </Wrapper>,
     )
 
@@ -751,22 +661,100 @@ describe("TranslateDropdown", () => {
     expect(screen.getByTestId("custom-fr")).toHaveTextContent("French (active)")
     expect(screen.getByTestId("custom-es-ES")).toHaveTextContent("Spanish")
   })
+
+  it("shows Original entry above languages when onRestore is provided", () => {
+    render(
+      <Wrapper>
+        <TranslateDropdown
+          onSelect={() => {}}
+          onRestore={() => {}}
+          languages={testLanguages}
+        />
+      </Wrapper>,
+    )
+
+    const options = screen.getAllByRole("option")
+    expect(options[0]).toHaveTextContent("Original")
+    expect(options[1]).toHaveTextContent("Spanish")
+    expect(options[2]).toHaveTextContent("French")
+  })
+
+  it("calls onRestore when Original is clicked", () => {
+    const onRestore = vi.fn()
+    render(
+      <Wrapper>
+        <TranslateDropdown
+          onSelect={() => {}}
+          onRestore={onRestore}
+          languages={testLanguages}
+        />
+      </Wrapper>,
+    )
+
+    fireEvent.click(screen.getByText("Original"))
+    expect(onRestore).toHaveBeenCalledTimes(1)
+  })
+
+  it("marks Original as active when value is null", () => {
+    render(
+      <Wrapper>
+        <TranslateDropdown
+          onSelect={() => {}}
+          onRestore={() => {}}
+          value={null}
+          languages={testLanguages}
+        />
+      </Wrapper>,
+    )
+
+    const options = screen.getAllByRole("option")
+    expect(options[0]).toHaveAttribute("aria-selected", "true")
+    expect(options[1]).toHaveAttribute("aria-selected", "false")
+  })
+
+  it("does not show Original when onRestore is omitted", () => {
+    render(
+      <Wrapper>
+        <TranslateDropdown onSelect={() => {}} languages={testLanguages} />
+      </Wrapper>,
+    )
+
+    expect(screen.queryByText("Original")).not.toBeInTheDocument()
+    const options = screen.getAllByRole("option")
+    expect(options).toHaveLength(2)
+  })
+
+  it("does not alter consumer languages list when showing Original", () => {
+    const onSelect = vi.fn()
+    render(
+      <Wrapper>
+        <TranslateDropdown
+          onSelect={onSelect}
+          onRestore={() => {}}
+          languages={testLanguages}
+        />
+      </Wrapper>,
+    )
+
+    fireEvent.click(screen.getByText("Spanish"))
+    expect(onSelect).toHaveBeenCalledWith("es-ES")
+
+    const options = screen.getAllByRole("option")
+    expect(options).toHaveLength(3)
+  })
 })
 
 describe("useTranslateDOM", () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mockEngineStatus = "idle"
-    mockDOMIsTranslating = false
-    mockDOMCurrentLang = null
-    mockDOMHooks = undefined
-    mockDOMTranslate.mockResolvedValue(undefined)
-    setupMockOn()
+    listeners.clear()
+    mockSnapshot = createDefaultSnapshot()
+    mockTranslateTo.mockResolvedValue(undefined)
   })
 
   afterEach(cleanup)
 
-  it("calls domTranslator.translate on translatePage", async () => {
+  it("calls core.translateTo on translatePage", async () => {
     render(
       <Wrapper config={DOM_CONFIG}>
         <DOMHookInspector />
@@ -777,10 +765,10 @@ describe("useTranslateDOM", () => {
       fireEvent.click(screen.getByTestId("dom-translate"))
     })
 
-    expect(mockDOMTranslate).toHaveBeenCalledWith("fr")
+    expect(mockTranslateTo).toHaveBeenCalledWith("fr")
   })
 
-  it("calls domTranslator.restore on restorePage", () => {
+  it("calls core.restore on restorePage", () => {
     render(
       <Wrapper config={DOM_CONFIG}>
         <DOMHookInspector />
@@ -788,7 +776,7 @@ describe("useTranslateDOM", () => {
     )
 
     fireEvent.click(screen.getByTestId("dom-restore"))
-    expect(mockDOMRestore).toHaveBeenCalledTimes(1)
+    expect(mockRestore).toHaveBeenCalledTimes(1)
   })
 
   it("reports null progress when not translating", () => {
@@ -801,30 +789,25 @@ describe("useTranslateDOM", () => {
     expect(screen.getByTestId("dom-progress")).toHaveTextContent("null")
   })
 
-  it("composes user DOM hooks and exposes real progress", async () => {
-    const onTranslateStart = vi.fn()
-    const onTranslateEnd = vi.fn()
-    const onProgress = vi.fn()
+  it("reports translation progress from snapshot", async () => {
     const deferred = createDeferred<void>()
-
-    mockDOMTranslate.mockImplementation(async () => {
-      const paragraph = document.createElement("p")
-      mockDOMHooks?.onTranslateStart?.(paragraph)
-      mockDOMHooks?.onProgress?.(1, 2)
+    mockTranslateTo.mockImplementation(async () => {
+      setSnapshot((prev) => ({
+        ...prev,
+        translation: Object.freeze({
+          status: "translating" as const,
+          progress: 0.5,
+        }),
+      }))
       await deferred.promise
-      mockDOMHooks?.onProgress?.(2, 2)
-      mockDOMHooks?.onTranslateEnd?.(paragraph)
+      setSnapshot((prev) => ({
+        ...prev,
+        translation: Object.freeze({ status: "idle" as const }),
+      }))
     })
 
     render(
-      <Wrapper
-        config={{
-          dom: {
-            roots: ["main"],
-            hooks: { onTranslateStart, onTranslateEnd, onProgress },
-          },
-        }}
-      >
+      <Wrapper config={DOM_CONFIG}>
         <DOMHookInspector />
       </Wrapper>,
     )
@@ -835,16 +818,12 @@ describe("useTranslateDOM", () => {
     })
 
     expect(screen.getByTestId("dom-progress")).toHaveTextContent("0.5")
-    expect(onTranslateStart).toHaveBeenCalledTimes(1)
-    expect(onProgress).toHaveBeenCalledWith(1, 2)
-    expect(onTranslateEnd).not.toHaveBeenCalled()
 
     await act(async () => {
       deferred.resolve()
       await Promise.resolve()
     })
 
-    expect(onTranslateEnd).toHaveBeenCalledTimes(1)
     expect(screen.getByTestId("dom-progress")).toHaveTextContent("null")
   })
 })

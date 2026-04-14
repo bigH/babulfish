@@ -24,7 +24,7 @@ describe("public React API contract", () => {
     }>()
 
     expectTypeOf<import("../index.js").TranslatorConfig>().toMatchTypeOf<{
-      readonly languages?: import("../index.js").TranslatorLanguage[]
+      readonly languages?: readonly import("../index.js").TranslatorLanguage[]
     }>()
 
     expectTypeOf<import("../index.js").TranslateButtonClassNames>().toMatchTypeOf<{
@@ -40,7 +40,7 @@ describe("public React API contract", () => {
 
     expectTypeOf<import("../index.js").TranslateDropdownProps>().toMatchTypeOf<{
       readonly value?: string | null
-      readonly languages?: import("../index.js").TranslatorLanguage[]
+      readonly languages?: readonly import("../index.js").TranslatorLanguage[]
     }>()
 
     expectTypeOf<import("../index.js").ModelState>().toMatchTypeOf<
