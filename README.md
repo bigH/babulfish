@@ -9,7 +9,7 @@ No server round-trips, no API keys — the model runs entirely in the user's bro
 |---|---|---|
 | React UI (batteries included) | [`@babulfish/react`](packages/react/README.md) | [`packages/demo`](packages/demo/) |
 | Any framework or no framework | [`@babulfish/core`](packages/core/README.md) | [`packages/demo-vanilla`](packages/demo-vanilla/README.md) |
-| Web Components / Shadow DOM | [`@babulfish/core`](packages/core/README.md) | [`packages/demo-webcomponent`](packages/demo-webcomponent/README.md) |
+| Web Components (`<babulfish-translator>`) | [`@babulfish/core`](packages/core/README.md) | [`packages/demo-webcomponent`](packages/demo-webcomponent/README.md) |
 
 `@babulfish/react` is a thin projection of `@babulfish/core` — both share one engine singleton.
 Use `@babulfish/core` directly when you need framework-agnostic access or are building your own binding.
@@ -57,11 +57,20 @@ See [`packages/react/README.md`](packages/react/README.md) for the full API.
 ```mermaid
 graph TD
   REACT["@babulfish/react"]
+  VUE["@babulfish/vue<br/>(future)"]
+  WC["@babulfish/web-components<br/>(future)"]
   CORE["@babulfish/core<br/>(engine + dom + contract)"]
-  STYLES["@babulfish/styles<br/>(CSS custom properties)"]
+  STYLES["@babulfish/styles<br/>(CSS contract)"]
 
   REACT --> CORE
   REACT --> STYLES
+  VUE -.-> CORE
+  WC -.-> CORE
+  VUE -.-> STYLES
+  WC -.-> STYLES
+
+  style VUE stroke-dasharray: 5 5
+  style WC stroke-dasharray: 5 5
 ```
 
 `@babulfish/core` bundles three layers: the translation **engine** (model lifecycle, WebGPU/WASM device selection), the **DOM** orchestrator (tree-walking, text-node replacement, Shadow DOM support), and the **contract** (`createBabulfish` facade unifying both).

@@ -5,6 +5,7 @@
   --babulfish-error: rgb(239 68 68);
   --babulfish-border: var(--border, #e5e7eb);
   --babulfish-surface: var(--surface, #fff);
+  --babulfish-muted: #9ca3af;
 }
 
 /* ---------------------------------------------------------------------------

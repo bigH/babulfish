@@ -30,6 +30,8 @@ core.restore()
 
 ## API summary
 
+See [design doc §2.2](../../docs/ui-agnostic-core.md#22-typescript-interface) for the full interface specification.
+
 ### `createBabulfish(config?): BabulfishCore`
 
 | Config field | Type | Description |
