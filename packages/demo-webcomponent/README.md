@@ -34,7 +34,7 @@ The `detail` payload is a frozen `Snapshot` object:
   model: { status: "idle" | "downloading" | "ready" | "error", progress?: number, error?: unknown }
   translation: { status: "idle" | "translating", progress?: number }
   currentLanguage: string | null
-  capabilities: { webgpu: boolean, wasm: boolean }
+  capabilities: { ready: boolean, hasWebGPU: boolean, canTranslate: boolean, device: "webgpu" | "wasm" | null, isMobile: boolean }
 }
 ```
 

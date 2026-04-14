@@ -12,7 +12,6 @@
   },
   "dependencies": {
     "@babulfish/core": "workspace:*",
-    "@babulfish/styles": "workspace:*",
     "@huggingface/transformers": "^4.0.0"
   },
   "devDependencies": {
