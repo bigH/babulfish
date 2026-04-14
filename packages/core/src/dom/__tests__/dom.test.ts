@@ -586,6 +586,21 @@ describe("DOM translator", () => {
     expect(span.innerHTML).not.toContain("<strong>")
   })
 
+  it("falls back to plain text when translated markdown has an unclosed italic marker", async () => {
+    const { span } = setUpRichTextMain(
+      "hello *world*",
+      "hello <em>world</em>",
+    )
+
+    translate.mockResolvedValueOnce("hola *mundo")
+
+    const t = makeTranslator(translate, { richText: RICH_TEXT_CONFIG })
+    await t.translate("es-ES")
+
+    expect(span.textContent).toBe("hola mundo")
+    expect(span.innerHTML).not.toContain("<em>")
+  })
+
   // -----------------------------------------------------------------------
   // 20. Preserve matchers (string)
   // -----------------------------------------------------------------------

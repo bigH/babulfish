@@ -6,6 +6,11 @@ type InlineSegment =
   | { type: "strong"; content: string }
   | { type: "em"; content: string }
 
+type ParsedInlineMarkdown = {
+  segments: InlineSegment[]
+  wellFormed: boolean
+}
+
 const MARKERS: ReadonlyArray<{ kind: "strong" | "em"; pattern: string }> = [
   { kind: "strong", pattern: "**" },
   { kind: "em", pattern: "*" },
@@ -45,9 +50,10 @@ function segmentToHtml(segment: InlineSegment): string {
   }
 }
 
-export function parseInlineMarkdown(source: string): InlineSegment[] {
+function parseInlineMarkdownResult(source: string): ParsedInlineMarkdown {
   const segments: InlineSegment[] = []
   let cursor = 0
+  let wellFormed = true
 
   while (cursor < source.length) {
     let matched = false
@@ -59,6 +65,7 @@ export function parseInlineMarkdown(source: string): InlineSegment[] {
       if (close === -1) {
         pushText(segments, pattern)
         cursor += pattern.length
+        wellFormed = false
         matched = true
         break
       }
@@ -73,7 +80,11 @@ export function parseInlineMarkdown(source: string): InlineSegment[] {
     cursor++
   }
 
-  return segments
+  return { segments, wellFormed }
+}
+
+export function parseInlineMarkdown(source: string): InlineSegment[] {
+  return parseInlineMarkdownResult(source).segments
 }
 
 export function renderInlineMarkdownToHtml(source: string): string {
@@ -81,7 +92,5 @@ export function renderInlineMarkdownToHtml(source: string): string {
 }
 
 export function isWellFormedMarkdown(text: string): boolean {
-  return parseInlineMarkdown(text).every(
-    (seg) => seg.type !== "text" || !seg.content.includes("**"),
-  )
+  return parseInlineMarkdownResult(text).wellFormed
 }
