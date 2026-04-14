@@ -124,7 +124,7 @@ The dispatch templates below assume these constraints — they are not repeated 
 
 ---
 
-### T-2 — `dom/translator.ts` accepts `root: ParentNode | Document`
+### T-2 — `dom/translator.ts` accepts `root: ParentNode | Document`  ✅ complete
 
 - **Owner:** `[Artisan]`
 - **Phase:** 0
@@ -714,7 +714,7 @@ Dispatch note for agents: when you pick this task up, scan the file tree — if 
   - New directory: `packages/demo-webcomponent/`
   - New: `packages/demo-webcomponent/package.json` (`@babulfish/demo-webcomponent`, `private: true`)
   - New: `packages/demo-webcomponent/index.html` (hosts the custom element)
-  - New: `packages/demo-webcomponent/src/babulfish-translator.ts` (custom element defined via `class extends HTMLElement`; attaches Shadow DOM; creates `createBabulfish({ root: shadowRoot })`; dispatches `CustomEvent`s for status changes)
+  - New: `packages/demo-webcomponent/src/babulfish-translator.ts` (custom element defined via `class extends HTMLElement`; attaches Shadow DOM; creates `createBabulfish({ dom: { root: shadowRoot } })`; dispatches `CustomEvent`s for status changes)
   - New: `packages/demo-webcomponent/README.md`
 - **Acceptance:**
   - Custom element `<babulfish-translator>` renders into Shadow DOM; translation works inside the shadow root; the host document is untouched (verify via a listener on `document.DOMContentLoaded`-style observers).
@@ -737,7 +737,7 @@ Dispatch note for agents: when you pick this task up, scan the file tree — if 
   Task:
   1. Create packages/demo-webcomponent/ with a static HTML page that hosts `<babulfish-translator data-model="...">` twice on the page (to prove singleton engine sharing across elements).
   2. Implement the custom element:
-     - connectedCallback: attachShadow({ mode: "open" }); render inner template (sample paragraph + controls); const core = createBabulfish({ root: this.shadowRoot }); core.subscribe(snapshot => this.dispatchEvent(new CustomEvent("babulfish-status", { detail: snapshot, bubbles: true, composed: true }))); translate on attribute change; restore on a method/event.
+     - connectedCallback: attachShadow({ mode: "open" }); render inner template (sample paragraph + controls); const core = createBabulfish({ dom: { root: this.shadowRoot } }); core.subscribe(snapshot => this.dispatchEvent(new CustomEvent("babulfish-status", { detail: snapshot, bubbles: true, composed: true }))); translate on attribute change; restore on a method/event.
      - disconnectedCallback: core.dispose().
   3. Host page binds to `babulfish-status` events to log status transitions to console.
   4. Verify both custom elements share one engine (check console; engine loads the model once).
@@ -812,8 +812,8 @@ Dispatch note for agents: when you pick this task up, scan the file tree — if 
 
 ---
 
-## Smallest first PR
+## Execution progress
 
-**Pick up T-1 first.** It is independent of everything else, lands cleanly as a single small PR, and unblocks Phase 1.
-
-If two coding agents are available in parallel, the second can pick up **T-2** simultaneously — also independent.
+- **T-1** ✅ complete — engine `status-change` event now carries error detail.
+- **T-2** ✅ complete — `dom/translator.ts` accepts `root: ParentNode | Document`; walker.ts uses `ownerDocument`-based tree-walker. Shadow DOM and DocumentFragment tests pass.
+- **T-3a** — next up (blocked by T-1, T-2 — both resolved).
