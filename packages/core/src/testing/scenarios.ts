@@ -94,6 +94,12 @@ function setInnerHTML(el: Element, html: string): void {
   el.innerHTML = html // eslint-disable-line no-unsanitized/property
 }
 
+function ownerDocumentFor(root: ParentNode | Document): Document {
+  if (root instanceof Document) return root
+  assert(root.ownerDocument instanceof Document, "DOM driver root must have an ownerDocument")
+  return root.ownerDocument
+}
+
 // ---------------------------------------------------------------------------
 // Scenarios
 // ---------------------------------------------------------------------------
@@ -406,8 +412,9 @@ export const scenarios: readonly ConformanceScenario[] = [
       mockedLoad.mockResolvedValue(fakePipeline("traducido"))
       const core = await driver.create()
       await core.loadModel()
-      const doc = driver.root! as Document
-      const original = doc.querySelector("#app p")?.textContent ?? ""
+      const root = driver.root!
+      const original = root.querySelector("#app p")?.textContent ?? ""
+      const doc = ownerDocumentFor(root)
       const container = doc.createElement("div")
       // Safe: hardcoded test fixture, not user content
       setInnerHTML(container, '<div id="app"><p>Override me</p></div>')
@@ -417,7 +424,7 @@ export const scenarios: readonly ConformanceScenario[] = [
         "Fragment text should change",
       )
       assertEqual(
-        doc.querySelector("#app p")?.textContent ?? "",
+        root.querySelector("#app p")?.textContent ?? "",
         original,
         "Default root untouched",
       )

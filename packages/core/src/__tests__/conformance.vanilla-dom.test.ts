@@ -10,6 +10,9 @@ import { createVanillaDomDriver } from "../testing/drivers/vanilla-dom.js"
 import { __resetEngineForTests } from "../engine/testing/index.js"
 
 const driver = createVanillaDomDriver()
+const rootOverrideScenario = scenariosForDriver(driver).find(
+  (scenario) => scenario.id === "root-override",
+)
 
 function resetDOM(): void {
   // Safe: hardcoded test fixture, not user content
@@ -23,6 +26,15 @@ beforeEach(() => {
 })
 
 describe("conformance — vanilla DOM driver", () => {
+  it("supports DOM scenarios with a fragment-backed root", async () => {
+    if (!rootOverrideScenario) {
+      throw new Error("Expected root-override conformance scenario to exist")
+    }
+    const range = document.createRange()
+    const fragment = range.createContextualFragment('<div id="app"><p>Hello world</p></div>')
+    await rootOverrideScenario.run(createVanillaDomDriver(fragment))
+  })
+
   it.each([...scenariosForDriver(driver)])("$id — $description", async (scenario) => {
     await scenario.run(driver)
   })
