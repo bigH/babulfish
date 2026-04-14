@@ -1,5 +1,8 @@
 import type {
+  DataType,
+  DeviceType as TransformersDeviceType,
   Message,
+  ProgressCallback,
   ProgressInfo,
   TextGenerationChatOutput,
   TextGenerationPipeline,
@@ -8,29 +11,23 @@ import type {
 
 export type PipelineTask = "text-generation"
 
-export type DeviceType =
-  | "auto" | "gpu" | "cpu" | "wasm" | "webgpu"
-  | "cuda" | "dml" | "coreml"
-  | "webnn" | "webnn-npu" | "webnn-gpu" | "webnn-cpu"
+export type DeviceType = TransformersDeviceType
 
-export type DtypeType =
-  | "auto" | "fp32" | "fp16"
-  | "q8" | "int8" | "uint8"
-  | "q4" | "bnb4" | "q4f16"
+export type DtypeType = DataType
 
 export type PipelineOptions = {
   readonly dtype?: DtypeType
   readonly device?: DeviceType
-  readonly progress_callback?: (event: ProgressInfo) => void
+  readonly progress_callback?: ProgressCallback
 }
 
 export async function loadPipeline(
   task: PipelineTask,
   model: string,
   opts?: PipelineOptions,
-): Promise<unknown> {
+): Promise<TextGenerationPipeline> {
   const { pipeline } = await import("@huggingface/transformers")
-  return pipeline(task, model, opts)
+  return pipeline(task, model, opts) as Promise<TextGenerationPipeline>
 }
 
 export type {

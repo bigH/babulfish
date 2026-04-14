@@ -134,7 +134,7 @@ export function createEngine(config?: EngineConfig): Translator {
         dtype,
         device: resolvedDevice,
         progress_callback: buildProgressCallback(),
-      }) as Promise<TextGenerationPipeline>
+      })
 
       await pipelinePromise
     })()
