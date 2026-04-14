@@ -17,30 +17,6 @@ const STYLES = /* css */ `
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; }
 
-@keyframes babulfish-pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.2; }
-}
-.babulfish-pulse { animation: babulfish-pulse 0.75s ease-in-out infinite; }
-
-@keyframes babulfish-active-pulse {
-  0%, 100% {
-    border-color: rgb(239 68 68 / 0.5);
-    box-shadow: 0 0 8px rgb(239 68 68 / 0.25);
-  }
-  50% {
-    border-color: var(--babulfish-error);
-    box-shadow: 0 0 14px rgb(239 68 68 / 0.45);
-  }
-}
-.babulfish-active { animation: babulfish-active-pulse 0.75s ease-in-out infinite; }
-
-@keyframes babulfish-settle {
-  from { clip-path: inset(0 100% 0 0); }
-  to { clip-path: inset(0 0 0 0); }
-}
-.babulfish-settled { animation: babulfish-settle 0.3s ease-out; }
-
 .toolbar {
   display: flex;
   gap: 0.5rem;
