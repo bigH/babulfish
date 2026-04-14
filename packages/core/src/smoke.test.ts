@@ -1,39 +1,33 @@
-import { describe, it, expect, expectTypeOf } from "vitest"
+import { describe, expect, expectTypeOf, it } from "vitest"
 import { createBabulfish } from "./core/babulfish.js"
 import { DEFAULT_LANGUAGES } from "./core/languages.js"
-import {
-  createDOMTranslator as createDOMTranslatorDirect,
-  type DOMTranslator as DOMTranslatorDirect,
-  type DOMTranslatorConfig as DOMTranslatorConfigDirect,
-  type LinkedConfig as LinkedConfigDirect,
-  type RichTextConfig as RichTextConfigDirect,
-} from "./dom/translator.js"
-import {
-  isWellFormedMarkdown as isWellFormedMarkdownDirect,
-  parseInlineMarkdown as parseInlineMarkdownDirect,
-  renderInlineMarkdownToHtml as renderInlineMarkdownToHtmlDirect,
-} from "./dom/markdown.js"
-import type { PreserveMatcher as PreserveMatcherDirect } from "./dom/preserve.js"
-import {
-  createEngine as createEngineDirect,
-  type EngineConfig as EngineConfigDirect,
-  type Translator as TranslatorDirect,
-  type TranslatorEvents as TranslatorEventsDirect,
-  type TranslatorStatus as TranslatorStatusDirect,
-} from "./engine/model.js"
-import {
-  getTranslationCapabilities as getTranslationCapabilitiesDirect,
-  type DevicePreference as DevicePreferenceDirect,
-  type ResolvedDevice as ResolvedDeviceDirect,
-  type TranslationCapabilities as TranslationCapabilitiesDirect,
-} from "./engine/detect.js"
 import * as domBarrel from "./dom/index.js"
+import * as markdown from "./dom/markdown.js"
+import type * as preserve from "./dom/preserve.js"
+import * as domTranslator from "./dom/translator.js"
 import * as engineBarrel from "./engine/index.js"
+import * as detect from "./engine/detect.js"
+import * as engineModel from "./engine/model.js"
 import * as barrel from "./index.js"
+
+function expectValueReExports(
+  actualModule: Record<string, unknown>,
+  expectedExports: Record<string, unknown>,
+): void {
+  for (const [name, expectedValue] of Object.entries(expectedExports)) {
+    expect(actualModule[name]).toBe(expectedValue)
+  }
+}
+
+function expectMissingExports(moduleExports: Record<string, unknown>, names: readonly string[]): void {
+  for (const name of names) {
+    expect(name in moduleExports).toBe(false)
+  }
+}
 
 describe("smoke tests", () => {
   it("creates an engine with correct initial state", () => {
-    const engine = createEngineDirect()
+    const engine = engineModel.createEngine()
     expect(engine).toBeDefined()
     expect(engine.status).toBe("idle")
     expect(typeof engine.load).toBe("function")
@@ -43,7 +37,7 @@ describe("smoke tests", () => {
   })
 
   it("creates a DOM translator", () => {
-    const translator = createDOMTranslatorDirect({
+    const translator = domTranslator.createDOMTranslator({
       translate: async (text) => text,
       roots: ["main"],
     })
@@ -56,67 +50,71 @@ describe("smoke tests", () => {
   })
 
   it("barrel re-exports core, engine, and dom", () => {
-    expect(barrel.createBabulfish).toBe(createBabulfish)
-    expect(barrel.DEFAULT_LANGUAGES).toBe(DEFAULT_LANGUAGES)
-    expect(barrel.createEngine).toBe(engineBarrel.createEngine)
-    expect(barrel.getTranslationCapabilities).toBe(engineBarrel.getTranslationCapabilities)
-    expect(barrel.createDOMTranslator).toBe(domBarrel.createDOMTranslator)
-    expect(barrel.renderInlineMarkdownToHtml).toBe(domBarrel.renderInlineMarkdownToHtml)
-    expect(barrel.parseInlineMarkdown).toBe(domBarrel.parseInlineMarkdown)
-    expect(barrel.isWellFormedMarkdown).toBe(domBarrel.isWellFormedMarkdown)
+    expectValueReExports(barrel, {
+      createBabulfish,
+      DEFAULT_LANGUAGES,
+      createEngine: engineBarrel.createEngine,
+      getTranslationCapabilities: engineBarrel.getTranslationCapabilities,
+      createDOMTranslator: domBarrel.createDOMTranslator,
+      renderInlineMarkdownToHtml: domBarrel.renderInlineMarkdownToHtml,
+      parseInlineMarkdown: domBarrel.parseInlineMarkdown,
+      isWellFormedMarkdown: domBarrel.isWellFormedMarkdown,
+    })
 
-    expectTypeOf<EngineConfigDirect>().toEqualTypeOf<barrel.EngineConfig>()
-    expectTypeOf<TranslatorDirect>().toEqualTypeOf<barrel.Translator>()
-    expectTypeOf<TranslatorEventsDirect>().toEqualTypeOf<barrel.TranslatorEvents>()
-    expectTypeOf<TranslatorStatusDirect>().toEqualTypeOf<barrel.TranslatorStatus>()
-    expectTypeOf<DevicePreferenceDirect>().toEqualTypeOf<barrel.DevicePreference>()
-    expectTypeOf<ResolvedDeviceDirect>().toEqualTypeOf<barrel.ResolvedDevice>()
-    expectTypeOf<TranslationCapabilitiesDirect>().toEqualTypeOf<barrel.TranslationCapabilities>()
-    expectTypeOf<DOMTranslatorConfigDirect>().toEqualTypeOf<barrel.DOMTranslatorConfig>()
-    expectTypeOf<DOMTranslatorDirect>().toEqualTypeOf<barrel.DOMTranslator>()
-    expectTypeOf<RichTextConfigDirect>().toEqualTypeOf<barrel.RichTextConfig>()
-    expectTypeOf<LinkedConfigDirect>().toEqualTypeOf<barrel.LinkedConfig>()
-    expectTypeOf<PreserveMatcherDirect>().toEqualTypeOf<barrel.PreserveMatcher>()
+    expectTypeOf<engineModel.EngineConfig>().toEqualTypeOf<barrel.EngineConfig>()
+    expectTypeOf<engineModel.Translator>().toEqualTypeOf<barrel.Translator>()
+    expectTypeOf<engineModel.TranslatorEvents>().toEqualTypeOf<barrel.TranslatorEvents>()
+    expectTypeOf<engineModel.TranslatorStatus>().toEqualTypeOf<barrel.TranslatorStatus>()
+    expectTypeOf<detect.DevicePreference>().toEqualTypeOf<barrel.DevicePreference>()
+    expectTypeOf<detect.ResolvedDevice>().toEqualTypeOf<barrel.ResolvedDevice>()
+    expectTypeOf<detect.TranslationCapabilities>().toEqualTypeOf<barrel.TranslationCapabilities>()
+    expectTypeOf<domTranslator.DOMTranslatorConfig>().toEqualTypeOf<barrel.DOMTranslatorConfig>()
+    expectTypeOf<domTranslator.DOMTranslator>().toEqualTypeOf<barrel.DOMTranslator>()
+    expectTypeOf<domTranslator.RichTextConfig>().toEqualTypeOf<barrel.RichTextConfig>()
+    expectTypeOf<domTranslator.LinkedConfig>().toEqualTypeOf<barrel.LinkedConfig>()
+    expectTypeOf<preserve.PreserveMatcher>().toEqualTypeOf<barrel.PreserveMatcher>()
   })
 
   it("engine barrel re-exports the public engine surface without detection internals", () => {
-    expect(engineBarrel.createEngine).toBe(createEngineDirect)
-    expect(engineBarrel.getTranslationCapabilities).toBe(getTranslationCapabilitiesDirect)
-    expect("isWebGPUAvailable" in engineBarrel).toBe(false)
-    expect("isMobileDevice" in engineBarrel).toBe(false)
-    expect("resolveDevice" in engineBarrel).toBe(false)
+    expectValueReExports(engineBarrel, {
+      createEngine: engineModel.createEngine,
+      getTranslationCapabilities: detect.getTranslationCapabilities,
+    })
+    expectMissingExports(engineBarrel, ["isWebGPUAvailable", "isMobileDevice", "resolveDevice"])
 
     expectTypeOf<typeof engineBarrel>().toMatchTypeOf<{
-      createEngine: typeof createEngineDirect
-      getTranslationCapabilities: typeof getTranslationCapabilitiesDirect
+      createEngine: typeof engineModel.createEngine
+      getTranslationCapabilities: typeof detect.getTranslationCapabilities
     }>()
 
-    expectTypeOf<EngineConfigDirect>().toEqualTypeOf<engineBarrel.EngineConfig>()
-    expectTypeOf<TranslatorDirect>().toEqualTypeOf<engineBarrel.Translator>()
-    expectTypeOf<TranslatorEventsDirect>().toEqualTypeOf<engineBarrel.TranslatorEvents>()
-    expectTypeOf<TranslatorStatusDirect>().toEqualTypeOf<engineBarrel.TranslatorStatus>()
-    expectTypeOf<DevicePreferenceDirect>().toEqualTypeOf<engineBarrel.DevicePreference>()
-    expectTypeOf<ResolvedDeviceDirect>().toEqualTypeOf<engineBarrel.ResolvedDevice>()
-    expectTypeOf<TranslationCapabilitiesDirect>().toEqualTypeOf<engineBarrel.TranslationCapabilities>()
+    expectTypeOf<engineModel.EngineConfig>().toEqualTypeOf<engineBarrel.EngineConfig>()
+    expectTypeOf<engineModel.Translator>().toEqualTypeOf<engineBarrel.Translator>()
+    expectTypeOf<engineModel.TranslatorEvents>().toEqualTypeOf<engineBarrel.TranslatorEvents>()
+    expectTypeOf<engineModel.TranslatorStatus>().toEqualTypeOf<engineBarrel.TranslatorStatus>()
+    expectTypeOf<detect.DevicePreference>().toEqualTypeOf<engineBarrel.DevicePreference>()
+    expectTypeOf<detect.ResolvedDevice>().toEqualTypeOf<engineBarrel.ResolvedDevice>()
+    expectTypeOf<detect.TranslationCapabilities>().toEqualTypeOf<engineBarrel.TranslationCapabilities>()
   })
 
   it("dom barrel re-exports the public DOM surface", () => {
-    expect(domBarrel.createDOMTranslator).toBe(createDOMTranslatorDirect)
-    expect(domBarrel.renderInlineMarkdownToHtml).toBe(renderInlineMarkdownToHtmlDirect)
-    expect(domBarrel.parseInlineMarkdown).toBe(parseInlineMarkdownDirect)
-    expect(domBarrel.isWellFormedMarkdown).toBe(isWellFormedMarkdownDirect)
+    expectValueReExports(domBarrel, {
+      createDOMTranslator: domTranslator.createDOMTranslator,
+      renderInlineMarkdownToHtml: markdown.renderInlineMarkdownToHtml,
+      parseInlineMarkdown: markdown.parseInlineMarkdown,
+      isWellFormedMarkdown: markdown.isWellFormedMarkdown,
+    })
 
     expectTypeOf<typeof domBarrel>().toMatchTypeOf<{
-      createDOMTranslator: typeof createDOMTranslatorDirect
-      renderInlineMarkdownToHtml: typeof renderInlineMarkdownToHtmlDirect
-      parseInlineMarkdown: typeof parseInlineMarkdownDirect
-      isWellFormedMarkdown: typeof isWellFormedMarkdownDirect
+      createDOMTranslator: typeof domTranslator.createDOMTranslator
+      renderInlineMarkdownToHtml: typeof markdown.renderInlineMarkdownToHtml
+      parseInlineMarkdown: typeof markdown.parseInlineMarkdown
+      isWellFormedMarkdown: typeof markdown.isWellFormedMarkdown
     }>()
 
-    expectTypeOf<DOMTranslatorConfigDirect>().toEqualTypeOf<domBarrel.DOMTranslatorConfig>()
-    expectTypeOf<DOMTranslatorDirect>().toEqualTypeOf<domBarrel.DOMTranslator>()
-    expectTypeOf<RichTextConfigDirect>().toEqualTypeOf<domBarrel.RichTextConfig>()
-    expectTypeOf<LinkedConfigDirect>().toEqualTypeOf<domBarrel.LinkedConfig>()
-    expectTypeOf<PreserveMatcherDirect>().toEqualTypeOf<domBarrel.PreserveMatcher>()
+    expectTypeOf<domTranslator.DOMTranslatorConfig>().toEqualTypeOf<domBarrel.DOMTranslatorConfig>()
+    expectTypeOf<domTranslator.DOMTranslator>().toEqualTypeOf<domBarrel.DOMTranslator>()
+    expectTypeOf<domTranslator.RichTextConfig>().toEqualTypeOf<domBarrel.RichTextConfig>()
+    expectTypeOf<domTranslator.LinkedConfig>().toEqualTypeOf<domBarrel.LinkedConfig>()
+    expectTypeOf<preserve.PreserveMatcher>().toEqualTypeOf<domBarrel.PreserveMatcher>()
   })
 })
