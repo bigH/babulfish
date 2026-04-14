@@ -1,6 +1,7 @@
 // Model lifecycle: load pipeline, translate text, emit events
 
-import type { TextGenerationPipeline, ProgressInfo } from "@huggingface/transformers"
+import type { TextGenerationPipeline, ProgressInfo } from "./pipeline-loader.js"
+import { loadPipeline } from "./pipeline-loader.js"
 import { resolveDevice } from "./detect.js"
 
 // ---------------------------------------------------------------------------
@@ -126,10 +127,9 @@ export function createEngine(config?: EngineConfig): Translator {
     transition("downloading")
 
     loadPromise = (async () => {
-      const { pipeline } = await import("@huggingface/transformers")
       const resolvedDevice = resolveDevice(device)
 
-      pipelinePromise = pipeline("text-generation", modelId, {
+      pipelinePromise = loadPipeline("text-generation", modelId, {
         dtype,
         device: resolvedDevice,
         progress_callback: buildProgressCallback(),
@@ -201,8 +201,6 @@ export function createEngine(config?: EngineConfig): Translator {
     pipelinePromise = null
     loadPromise = null
     transition("idle")
-    listeners["status-change"].clear()
-    listeners["progress"].clear()
   }
 
   function on<K extends keyof TranslatorEvents>(

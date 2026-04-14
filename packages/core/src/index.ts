@@ -1,4 +1,14 @@
-// TODO(T-3b): re-export ./core once implemented
+export { createBabulfish, DEFAULT_LANGUAGES } from "./core/index.js"
+export type {
+  BabulfishCore,
+  BabulfishConfig,
+  TranslateOptions,
+  Snapshot,
+  ModelState,
+  TranslationState,
+  Capabilities,
+  Language,
+} from "./core/index.js"
 
 export {
   createEngine,

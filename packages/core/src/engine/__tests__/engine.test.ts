@@ -4,10 +4,10 @@ import type {
   TextGenerationChatOutput,
   TextGenerationPipeline,
   TextGenerationStringOutput,
-} from "@huggingface/transformers"
+} from "../pipeline-loader.js"
 
 // ---------------------------------------------------------------------------
-// Mock @huggingface/transformers
+// Mock pipeline-loader (the single @huggingface/transformers chokepoint)
 // ---------------------------------------------------------------------------
 
 function createMockTextGenerationPipeline() {
@@ -56,16 +56,16 @@ function resolveMockPipeline(): Promise<TextGenerationPipeline> {
 const { generate: mockGenerate, generator: mockGenerator } =
   createMockTextGenerationPipeline()
 
-vi.mock("@huggingface/transformers", () => ({
-  pipeline: vi.fn(resolveMockPipeline),
+vi.mock("../pipeline-loader.js", () => ({
+  loadPipeline: vi.fn(resolveMockPipeline),
 }))
 
 // Must import after mock setup
 import { createEngine } from "../model.js"
 import type { TranslatorStatus } from "../model.js"
-import { pipeline } from "@huggingface/transformers"
+import { loadPipeline } from "../pipeline-loader.js"
 
-const mockPipeline = vi.mocked(pipeline)
+const mockLoadPipeline = vi.mocked(loadPipeline)
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -87,7 +87,7 @@ describe("createEngine", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockGenerate.mockReset()
-    mockPipeline.mockImplementation(resolveMockPipeline)
+    mockLoadPipeline.mockImplementation(resolveMockPipeline)
   })
 
   it("returns idle status initially", () => {
@@ -108,7 +108,7 @@ describe("load", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockGenerate.mockReset()
-    mockPipeline.mockImplementation(resolveMockPipeline)
+    mockLoadPipeline.mockImplementation(resolveMockPipeline)
   })
 
   it("transitions idle -> downloading -> ready", async () => {
@@ -128,7 +128,7 @@ describe("load", () => {
     const engine = createEngine()
     await engine.load()
 
-    expect(mockPipeline).toHaveBeenCalledWith(
+    expect(mockLoadPipeline).toHaveBeenCalledWith(
       "text-generation",
       "onnx-community/translategemma-text-4b-it-ONNX",
       expect.objectContaining({
@@ -147,7 +147,7 @@ describe("load", () => {
     })
     await engine.load()
 
-    expect(mockPipeline).toHaveBeenCalledWith(
+    expect(mockLoadPipeline).toHaveBeenCalledWith(
       "text-generation",
       "my-model",
       expect.objectContaining({
@@ -160,12 +160,12 @@ describe("load", () => {
   it("is idempotent — second call waits for first", async () => {
     const engine = createEngine()
     await Promise.all([engine.load(), engine.load()])
-    expect(mockPipeline).toHaveBeenCalledTimes(1)
+    expect(mockLoadPipeline).toHaveBeenCalledTimes(1)
   })
 
   it("transitions to error on failure and carries the error", async () => {
     const cause = new Error("network down")
-    mockPipeline.mockImplementation(() => Promise.reject(cause))
+    mockLoadPipeline.mockImplementation(() => Promise.reject(cause))
 
     const engine = createEngine()
     const changes = statusChanges(engine)
@@ -180,7 +180,7 @@ describe("load", () => {
   })
 
   it("allows retry after failure", async () => {
-    mockPipeline
+    mockLoadPipeline
       .mockImplementationOnce(() => Promise.reject(new Error("fail")))
       .mockImplementationOnce(resolveMockPipeline)
 
@@ -195,7 +195,7 @@ describe("translate", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockGenerate.mockReset()
-    mockPipeline.mockImplementation(resolveMockPipeline)
+    mockLoadPipeline.mockImplementation(resolveMockPipeline)
   })
 
   it("throws if model not loaded", async () => {
@@ -270,7 +270,7 @@ describe("dispose", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockGenerate.mockReset()
-    mockPipeline.mockImplementation(resolveMockPipeline)
+    mockLoadPipeline.mockImplementation(resolveMockPipeline)
   })
 
   it("resets status to idle and removes listeners", async () => {
@@ -300,7 +300,7 @@ describe("event emitter", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockGenerate.mockReset()
-    mockPipeline.mockImplementation(resolveMockPipeline)
+    mockLoadPipeline.mockImplementation(resolveMockPipeline)
   })
 
   it("on() returns unsubscribe function", async () => {
@@ -319,7 +319,7 @@ describe("event emitter", () => {
   it("emits progress events during download", async () => {
     let capturedCallback: ((event: unknown) => void) | undefined
 
-    mockPipeline.mockImplementation((_task, _model, opts) => {
+    mockLoadPipeline.mockImplementation((_task, _model, opts) => {
       capturedCallback = (opts as { progress_callback: (e: unknown) => void }).progress_callback
       return resolveMockPipeline()
     })
@@ -360,7 +360,7 @@ describe("event emitter", () => {
   it("ignores non-progress status events", async () => {
     let capturedCallback: ((event: unknown) => void) | undefined
 
-    mockPipeline.mockImplementation((_task, _model, opts) => {
+    mockLoadPipeline.mockImplementation((_task, _model, opts) => {
       capturedCallback = (opts as { progress_callback: (e: unknown) => void }).progress_callback
       return resolveMockPipeline()
     })
@@ -382,12 +382,12 @@ describe("error propagation", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockGenerate.mockReset()
-    mockPipeline.mockImplementation(resolveMockPipeline)
+    mockLoadPipeline.mockImplementation(resolveMockPipeline)
   })
 
   it("surfaces the exact error from a rejected pipeline import", async () => {
     const forced = new Error("forced failure for test")
-    mockPipeline.mockImplementation(() => Promise.reject(forced))
+    mockLoadPipeline.mockImplementation(() => Promise.reject(forced))
 
     const engine = createEngine()
     const received: unknown[] = []
@@ -417,7 +417,7 @@ describe("multiple instances", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockGenerate.mockReset()
-    mockPipeline.mockImplementation(resolveMockPipeline)
+    mockLoadPipeline.mockImplementation(resolveMockPipeline)
   })
 
   it("instances are fully independent", async () => {
@@ -436,6 +436,6 @@ describe("multiple instances", () => {
     expect(b.status).toBe("ready")
     expect(a.status).toBe("idle")
 
-    expect(mockPipeline).toHaveBeenCalledTimes(2)
+    expect(mockLoadPipeline).toHaveBeenCalledTimes(2)
   })
 })
