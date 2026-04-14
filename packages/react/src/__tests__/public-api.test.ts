@@ -1,20 +1,19 @@
 import { describe, expect, expectTypeOf, it } from "vitest"
 import * as publicApi from "../index.js"
 
-describe("public React API contract", () => {
-  it("exports the documented React runtime names", () => {
-    expect(publicApi.TranslatorProvider).toBeTypeOf("function")
-    expect(publicApi.useTranslator).toBeTypeOf("function")
-    expect(publicApi.useTranslateDOM).toBeTypeOf("function")
-    expect(publicApi.TranslateButton).toBeTypeOf("function")
-    expect(publicApi.TranslateDropdown).toBeTypeOf("function")
-    expect(publicApi.DEFAULT_LANGUAGES.length).toBeGreaterThan(0)
-  })
+const EXPECTED_RUNTIME_EXPORTS = [
+  "DEFAULT_LANGUAGES",
+  "TranslateButton",
+  "TranslateDropdown",
+  "TranslatorProvider",
+  "useTranslateDOM",
+  "useTranslator",
+] as const satisfies readonly (keyof typeof publicApi)[]
 
-  it("does not export stale Babulfish runtime aliases", () => {
-    expect("BabulfishProvider" in publicApi).toBe(false)
-    expect("useBabulfish" in publicApi).toBe(false)
-    expect("BabulfishLanguage" in publicApi).toBe(false)
+describe("public React API contract", () => {
+  it("exports exactly the documented React runtime names", () => {
+    expect(Object.keys(publicApi).toSorted()).toEqual(EXPECTED_RUNTIME_EXPORTS)
+    expect(publicApi.DEFAULT_LANGUAGES.length).toBeGreaterThan(0)
   })
 
   it("exports the documented React types", () => {
