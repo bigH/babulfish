@@ -8,6 +8,10 @@ import * as domTranslator from "./dom/translator.js"
 import * as engineBarrel from "./engine/index.js"
 import * as detect from "./engine/detect.js"
 import * as engineModel from "./engine/model.js"
+import * as testingBarrel from "./testing/index.js"
+import * as testingScenarios from "./testing/scenarios.js"
+import * as directDriver from "./testing/drivers/direct.js"
+import * as vanillaDomDriver from "./testing/drivers/vanilla-dom.js"
 import * as barrel from "./index.js"
 
 function expectValueReExports(
@@ -116,5 +120,28 @@ describe("smoke tests", () => {
     expectTypeOf<domTranslator.RichTextConfig>().toEqualTypeOf<domBarrel.RichTextConfig>()
     expectTypeOf<domTranslator.LinkedConfig>().toEqualTypeOf<domBarrel.LinkedConfig>()
     expectTypeOf<preserve.PreserveMatcher>().toEqualTypeOf<domBarrel.PreserveMatcher>()
+  })
+
+  it("testing barrel re-exports the public conformance surface with truthful driver types", () => {
+    expectValueReExports(testingBarrel, {
+      scenarios: testingScenarios.scenarios,
+      scenariosForDriver: testingScenarios.scenariosForDriver,
+      createDirectDriver: directDriver.createDirectDriver,
+      createVanillaDomDriver: vanillaDomDriver.createVanillaDomDriver,
+    })
+
+    const direct = testingBarrel.createDirectDriver()
+    const vanilla = testingBarrel.createVanillaDomDriver()
+
+    expectTypeOf(direct.supportsDOM).toEqualTypeOf<false>()
+    expectTypeOf(vanilla.supportsDOM).toEqualTypeOf<true>()
+    expectTypeOf(vanilla.root).toEqualTypeOf<ParentNode | Document>()
+
+    expect(testingBarrel.scenariosForDriver(direct).length).toBeLessThan(
+      testingBarrel.scenarios.length,
+    )
+    expect(testingBarrel.scenariosForDriver(vanilla)).toHaveLength(
+      testingBarrel.scenarios.length,
+    )
   })
 })

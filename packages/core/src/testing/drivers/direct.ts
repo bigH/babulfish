@@ -2,10 +2,10 @@
 
 import { createBabulfish } from "../../core/babulfish.js"
 import type { BabulfishConfig, BabulfishCore } from "../../core/babulfish.js"
-import type { ConformanceDriver } from "./types.js"
+import type { NonDomConformanceDriver } from "./types.js"
 
 /** @experimental — subject to change */
-export function createDirectDriver(): ConformanceDriver {
+export function createDirectDriver(): NonDomConformanceDriver {
   return {
     id: "direct",
     supportsDOM: false,

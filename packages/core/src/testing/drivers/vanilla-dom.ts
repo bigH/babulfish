@@ -2,12 +2,12 @@
 
 import { createBabulfish } from "../../core/babulfish.js"
 import type { BabulfishConfig, BabulfishCore } from "../../core/babulfish.js"
-import type { ConformanceDriver } from "./types.js"
+import type { DomConformanceDriver } from "./types.js"
 
 /** @experimental — subject to change */
 export function createVanillaDomDriver(
   root?: ParentNode | Document,
-): ConformanceDriver {
+): DomConformanceDriver {
   const domRoot = root ?? document
   return {
     id: "vanilla-dom",
