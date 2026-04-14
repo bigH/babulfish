@@ -3,7 +3,7 @@
 import type { Snapshot } from "../core/index.js"
 import { loadPipeline } from "../engine/pipeline-loader.js"
 import { getEngineIdentity } from "../engine/testing/index.js"
-import type { ConformanceDriver, ConformanceScenario } from "./drivers/types.js"
+import type { ConformanceScenario } from "./drivers/types.js"
 
 // ---------------------------------------------------------------------------
 // Mock access — test file MUST vi.mock("../engine/pipeline-loader.js") first
@@ -204,12 +204,18 @@ export const scenarios: readonly ConformanceScenario[] = [
 
   {
     id: "lifecycle-ssr-safe",
-    description: "SSR-style first render has capabilities without throwing",
+    description: "SSR-style first render has capabilities.ready === false without throwing",
     async run(driver) {
-      const core = await driver.create()
-      assert(core.snapshot.capabilities !== null, "capabilities defined")
-      assertEqual(typeof core.snapshot.capabilities.ready, "boolean", "ready type")
-      await driver.dispose(core)
+      const savedWindow = globalThis.window
+      delete (globalThis as Record<string, unknown>).window
+      try {
+        const core = await driver.create()
+        assert(core.snapshot.capabilities !== null, "capabilities defined")
+        assertEqual(core.snapshot.capabilities.ready, false, "ready is false before loadModel")
+        await driver.dispose(core)
+      } finally {
+        globalThis.window = savedWindow
+      }
     },
   },
 
