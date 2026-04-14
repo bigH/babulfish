@@ -47,6 +47,7 @@ export function ReactConformanceDriver(): ConformanceDriver {
 
   return {
     id: "react",
+    supportsDOM: true,
 
     get root() {
       return document

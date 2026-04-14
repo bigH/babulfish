@@ -3,7 +3,7 @@
 import type { Snapshot } from "../core/index.js"
 import { loadPipeline } from "../engine/pipeline-loader.js"
 import { getEngineIdentity } from "../engine/testing/index.js"
-import type { ConformanceScenario } from "./drivers/types.js"
+import type { ConformanceDriver, ConformanceScenario } from "./drivers/types.js"
 
 // ---------------------------------------------------------------------------
 // Mock access — test file MUST vi.mock("../engine/pipeline-loader.js") first
@@ -457,3 +457,10 @@ export const scenarios: readonly ConformanceScenario[] = [
     },
   },
 ]
+
+/** @experimental — subject to change */
+export function scenariosForDriver(
+  driver: ConformanceDriver,
+): readonly ConformanceScenario[] {
+  return scenarios.filter((scenario) => driver.supportsDOM || !scenario.requiresDOM)
+}

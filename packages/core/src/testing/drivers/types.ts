@@ -5,6 +5,7 @@ import type { BabulfishConfig, BabulfishCore } from "../../core/index.js"
 /** @experimental — subject to change */
 export interface ConformanceDriver {
   readonly id: string
+  readonly supportsDOM?: boolean
   create(config?: BabulfishConfig): Promise<BabulfishCore>
   dispose(core: BabulfishCore): Promise<void>
   readonly root?: ParentNode | Document

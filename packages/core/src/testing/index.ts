@@ -5,6 +5,9 @@ export type { ConformanceDriver, ConformanceScenario } from "./drivers/types.js"
 export { scenarios } from "./scenarios.js"
 
 /** @experimental — subject to change */
+export { scenariosForDriver } from "./scenarios.js"
+
+/** @experimental — subject to change */
 export { createDirectDriver } from "./drivers/direct.js"
 
 /** @experimental — subject to change */

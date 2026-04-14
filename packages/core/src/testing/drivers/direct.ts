@@ -8,6 +8,7 @@ import type { ConformanceDriver } from "./types.js"
 export function createDirectDriver(): ConformanceDriver {
   return {
     id: "direct",
+    supportsDOM: false,
     async create(config?: BabulfishConfig) {
       return createBabulfish(config)
     },

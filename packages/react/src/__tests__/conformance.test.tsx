@@ -5,7 +5,7 @@ vi.mock("../../../core/src/engine/pipeline-loader.js", () => ({
   loadPipeline: vi.fn(),
 }))
 
-import { scenarios } from "@babulfish/core/testing"
+import { scenariosForDriver } from "@babulfish/core/testing"
 import { __resetEngineForTests } from "@babulfish/core/engine/testing"
 import { ReactConformanceDriver } from "../testing/react-driver.js"
 
@@ -22,7 +22,7 @@ beforeEach(() => {
 })
 
 describe("conformance — react driver", () => {
-  it.each([...scenarios])("$id — $description", async (scenario) => {
+  it.each([...scenariosForDriver(driver)])("$id — $description", async (scenario) => {
     try {
       await scenario.run(driver)
     } catch (err) {

@@ -5,7 +5,7 @@ vi.mock("../engine/pipeline-loader.js", () => ({
   loadPipeline: vi.fn(),
 }))
 
-import { scenarios } from "../testing/index.js"
+import { scenariosForDriver } from "../testing/index.js"
 import { createVanillaDomDriver } from "../testing/drivers/vanilla-dom.js"
 import { __resetEngineForTests } from "../engine/testing/index.js"
 
@@ -23,7 +23,7 @@ beforeEach(() => {
 })
 
 describe("conformance — vanilla DOM driver", () => {
-  it.each([...scenarios])("$id — $description", async (scenario) => {
+  it.each([...scenariosForDriver(driver)])("$id — $description", async (scenario) => {
     await scenario.run(driver)
   })
 })

@@ -11,6 +11,7 @@ export function createVanillaDomDriver(
   const domRoot = root ?? document
   return {
     id: "vanilla-dom",
+    supportsDOM: true,
     get root() {
       return domRoot
     },
