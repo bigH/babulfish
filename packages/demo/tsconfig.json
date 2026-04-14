@@ -16,21 +16,6 @@
     ],
     "noUnusedLocals": false,
     "noUnusedParameters": false,
-    "baseUrl": ".",
-    "paths": {
-      "babulfish": [
-        "../babulfish/src/index.ts"
-      ],
-      "babulfish/react": [
-        "../babulfish/src/react/index.ts"
-      ],
-      "babulfish/dom": [
-        "../babulfish/src/dom/index.ts"
-      ],
-      "babulfish/engine": [
-        "../babulfish/src/engine/index.ts"
-      ]
-    },
     "jsx": "preserve"
   },
   "include": [
