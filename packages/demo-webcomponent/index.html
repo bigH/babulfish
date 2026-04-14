@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>babulfish — Web Component Demo</title>
+    <style>
+      *, *::before, *::after { box-sizing: border-box; margin: 0; }
+
+      body {
+        font-family: system-ui, -apple-system, sans-serif;
+        color: #1a1a1a;
+        background: #fff;
+        line-height: 1.6;
+        max-width: 48rem;
+        margin: 0 auto;
+        padding: 2rem 1.5rem;
+      }
+
+      h1 { font-size: 1.75rem; font-weight: 700; letter-spacing: -0.02em; margin-bottom: 0.5rem; }
+      .intro { color: #374151; margin-bottom: 2rem; }
+      .intro code { background: #f3f4f6; padding: 0.15em 0.35em; border-radius: 4px; font-size: 0.9em; }
+
+      .instances { display: grid; gap: 1.5rem; margin-bottom: 2rem; }
+
+      #event-log {
+        padding: 1rem;
+        background: #f9fafb;
+        border: 1px solid #e5e7eb;
+        border-radius: 8px;
+        max-height: 14rem;
+        overflow-y: auto;
+        font-size: 0.75rem;
+        font-family: ui-monospace, monospace;
+        line-height: 1.8;
+      }
+      #event-log .entry { border-bottom: 1px solid #f3f4f6; padding: 0.15rem 0; }
+      #event-log .label { font-weight: 600; color: #6b7280; }
+    </style>
+  </head>
+  <body>
+    <h1>babulfish — Web Component Demo</h1>
+    <p class="intro">
+      Two <code>&lt;babulfish-translator&gt;</code> custom elements, each
+      rendering into its own Shadow DOM, sharing a single translation engine.
+      Events logged below prove the <code>babulfish-status</code> contract.
+    </p>
+
+    <div class="instances">
+      <babulfish-translator data-model="gemma"></babulfish-translator>
+      <babulfish-translator data-model="gemma"></babulfish-translator>
+    </div>
+
+    <h2 style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: #6b7280; margin-bottom: 0.5rem;">
+      Event Log
+    </h2>
+    <div id="event-log"></div>
+
+    <script type="module" src="./src/main.ts"></script>
+  </body>
+</html>
