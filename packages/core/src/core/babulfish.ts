@@ -5,7 +5,7 @@ import { acquireEngine, releaseEngine, registerCoreEngine } from "./engine-handl
 import { createStore, type Snapshot } from "./store.js"
 import type { ModelState } from "./store.js"
 import { createProgressController } from "./progress.js"
-import { DEFAULT_LANGUAGES, type Language } from "./languages.js"
+import { DEFAULT_LANGUAGES, freezeLanguages, type Language } from "./languages.js"
 import { detectCapabilities } from "./capabilities.js"
 
 export type TranslateOptions = {
@@ -66,7 +66,7 @@ export function createBabulfish(config?: BabulfishConfig): BabulfishCore {
   const progress = createProgressController()
   const handle = acquireEngine(config?.engine)
   const engine = handle.engine
-  const languages = config?.languages ?? DEFAULT_LANGUAGES
+  const languages = config?.languages ? freezeLanguages(config.languages) : DEFAULT_LANGUAGES
   const defaultRoot = config?.dom?.root
   let disposed = false
 

@@ -10,7 +10,7 @@ vi.mock("../../engine/pipeline-loader.js", () => ({
 
 import { createBabulfish } from "../babulfish.js"
 import type { Snapshot } from "../store.js"
-import { DEFAULT_LANGUAGES } from "../languages.js"
+import { DEFAULT_LANGUAGES, type Language } from "../languages.js"
 import { __resetEngineForTests, getEngineIdentity } from "../../engine/testing/index.js"
 import { loadPipeline } from "../../engine/pipeline-loader.js"
 
@@ -332,5 +332,43 @@ describe("DEFAULT_LANGUAGES", () => {
 
   it("has at least one language", () => {
     expect(DEFAULT_LANGUAGES.length).toBeGreaterThan(0)
+  })
+
+  it("is deeply frozen", () => {
+    expect(Object.isFrozen(DEFAULT_LANGUAGES)).toBe(true)
+    expect(DEFAULT_LANGUAGES.every(Object.isFrozen)).toBe(true)
+
+    expect(() => {
+      ;(DEFAULT_LANGUAGES as Language[]).push({ label: "Dutch", code: "nl" })
+    }).toThrow(TypeError)
+
+    expect(() => {
+      ;(DEFAULT_LANGUAGES[0] as { label: string }).label = "Castilian"
+    }).toThrow(TypeError)
+  })
+})
+
+describe("custom language lists", () => {
+  it("clones and freezes configured languages", () => {
+    const configured = [{ label: "Dutch", code: "nl" }]
+
+    const core = createBabulfish({ languages: configured })
+
+    expect(core.languages).toEqual(configured)
+    expect(core.languages).not.toBe(configured)
+    expect(Object.isFrozen(core.languages)).toBe(true)
+    expect(Object.isFrozen(core.languages[0])).toBe(true)
+
+    configured[0].label = "Nederlands"
+
+    expect(core.languages[0]?.label).toBe("Dutch")
+
+    expect(() => {
+      ;(core.languages as Language[]).push({ label: "French", code: "fr" })
+    }).toThrow(TypeError)
+
+    expect(() => {
+      ;(core.languages[0] as { label: string }).label = "Nederlands"
+    }).toThrow(TypeError)
   })
 })
