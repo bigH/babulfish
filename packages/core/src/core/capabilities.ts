@@ -1,15 +1,28 @@
-import type { DevicePreference } from "../engine/detect.js"
+import type {
+  DevicePreference,
+  ResolvedDevice,
+  TranslationCapabilities,
+} from "../engine/detect.js"
 import { getTranslationCapabilities } from "../engine/detect.js"
 
-export type Capabilities = {
-  readonly ready: boolean
-  readonly hasWebGPU: boolean
-  readonly canTranslate: boolean
-  readonly device: "webgpu" | "wasm" | null
-  readonly isMobile: boolean
+type SSRCapabilities = {
+  readonly ready: false
+  readonly hasWebGPU: false
+  readonly canTranslate: false
+  readonly device: null
+  readonly isMobile: false
 }
 
-export const SSR_CAPABILITIES: Capabilities = Object.freeze({
+type BrowserCapabilities = Readonly<
+  TranslationCapabilities & {
+    readonly ready: true
+    readonly device: ResolvedDevice
+  }
+>
+
+export type Capabilities = BrowserCapabilities | SSRCapabilities
+
+export const SSR_CAPABILITIES: SSRCapabilities = Object.freeze({
   ready: false,
   hasWebGPU: false,
   canTranslate: false,
@@ -17,17 +30,21 @@ export const SSR_CAPABILITIES: Capabilities = Object.freeze({
   isMobile: false,
 })
 
+function createBrowserCapabilities(
+  capabilities: TranslationCapabilities,
+): BrowserCapabilities {
+  return Object.freeze({
+    ready: true,
+    ...capabilities,
+  })
+}
+
 export function detectCapabilities(
   devicePreference?: DevicePreference,
 ): Capabilities {
   if (typeof window === "undefined") return SSR_CAPABILITIES
 
-  const detected = getTranslationCapabilities(devicePreference)
-  return Object.freeze({
-    ready: true,
-    hasWebGPU: detected.hasWebGPU,
-    canTranslate: detected.canTranslate,
-    device: detected.device,
-    isMobile: detected.isMobile,
-  })
+  return createBrowserCapabilities(
+    getTranslationCapabilities(devicePreference),
+  )
 }

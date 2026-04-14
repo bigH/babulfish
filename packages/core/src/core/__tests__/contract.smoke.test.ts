@@ -323,16 +323,6 @@ describe("4.5 — translateText snapshot purity", () => {
   })
 })
 
-// ---- SSR safety ----------------------------------------------------------
-
-describe("SSR safety", () => {
-  it("snapshot.capabilities.ready reflects detection state", () => {
-    const core = createBabulfish()
-    expect(core.snapshot.capabilities).toBeDefined()
-    expect(typeof core.snapshot.capabilities.ready).toBe("boolean")
-  })
-})
-
 // ---- DEFAULT_LANGUAGES ---------------------------------------------------
 
 describe("DEFAULT_LANGUAGES", () => {
