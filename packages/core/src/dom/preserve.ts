@@ -8,15 +8,25 @@ export type PreserveMatcher = string | RegExp | ((text: string) => string[])
 /** Collect all strings matched by a single matcher. */
 function matchAll(matcher: PreserveMatcher, text: string): string[] {
   if (typeof matcher === "string") {
-    return text.includes(matcher) ? [matcher] : []
+    return matcher.length > 0 && text.includes(matcher) ? [matcher] : []
   }
   if (matcher instanceof RegExp) {
     const flags = matcher.flags.includes("g")
       ? matcher.flags
       : matcher.flags + "g"
-    return Array.from(text.matchAll(new RegExp(matcher.source, flags)), (m) => m[0])
+    return uniqueNonEmpty(
+      Array.from(text.matchAll(new RegExp(matcher.source, flags)), (m) => m[0]),
+    )
   }
-  return matcher(text)
+  return uniqueNonEmpty(matcher(text))
+}
+
+function uniqueNonEmpty(matches: Iterable<string>): string[] {
+  const values = new Set<string>()
+  for (const match of matches) {
+    if (match.length > 0) values.add(match)
+  }
+  return [...values]
 }
 
 export function insertPlaceholders(
@@ -28,10 +38,11 @@ export function insertPlaceholders(
 
   for (const matcher of matchers) {
     for (const word of matchAll(matcher, masked)) {
-      if (!masked.includes(word)) continue
       const tag = `\u27EA${slots.length}\u27EB`
+      const nextMasked = masked.replaceAll(word, tag)
+      if (nextMasked === masked) continue
       slots.push(word)
-      masked = masked.replaceAll(word, tag)
+      masked = nextMasked
     }
   }
 
