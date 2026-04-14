@@ -5,14 +5,23 @@ vi.mock("../engine/pipeline-loader.js", () => ({
   loadPipeline: vi.fn(),
 }))
 
+import { loadPipeline } from "../engine/pipeline-loader.js"
 import { scenariosForDriver } from "../testing/index.js"
 import { createVanillaDomDriver } from "../testing/drivers/vanilla-dom.js"
 import { __resetEngineForTests } from "../engine/testing/index.js"
 
+const mockedLoadPipeline = vi.mocked(loadPipeline)
 const driver = createVanillaDomDriver()
 const rootOverrideScenario = scenariosForDriver(driver).find(
   (scenario) => scenario.id === "root-override",
 )
+
+function fakePipeline(translation = "translated") {
+  return Object.assign(
+    async () => [{ generated_text: [{ role: "assistant", content: translation }] }],
+    { dispose: async () => {} },
+  )
+}
 
 function resetDOM(): void {
   // Safe: hardcoded test fixture, not user content
@@ -32,6 +41,46 @@ describe("conformance — vanilla DOM driver", () => {
     }
 
     expect(driver.root).toBe(document)
+  })
+
+  it("keeps its constructor root and selector when create() receives dom overrides", async () => {
+    const otherRoot = document.createElement("div")
+    otherRoot.innerHTML = '<div id="other"><p>Leave me alone</p></div>' // eslint-disable-line no-unsanitized/property
+
+    const core = await driver.create({
+      dom: {
+        root: otherRoot,
+        roots: ["#other"],
+      },
+    })
+
+    mockedLoadPipeline.mockResolvedValue(fakePipeline())
+    await core.loadModel()
+    await core.translateTo("es")
+
+    expect(document.querySelector("#app p")?.textContent).not.toBe("Hello world")
+    expect(otherRoot.querySelector("#other p")?.textContent).toBe("Leave me alone")
+
+    await driver.dispose(core)
+  })
+
+  it("passes through non-root dom options", async () => {
+    document.body.innerHTML =
+      '<div id="app"><button aria-label="Hello world">Hello world</button></div>' // eslint-disable-line no-unsanitized/property
+
+    const core = await driver.create({
+      dom: {
+        translateAttributes: ["aria-label"],
+      },
+    })
+
+    mockedLoadPipeline.mockResolvedValue(fakePipeline("traducido"))
+    await core.loadModel()
+    await core.translateTo("es")
+
+    expect(document.querySelector("button")?.getAttribute("aria-label")).toBe("traducido")
+
+    await driver.dispose(core)
   })
 
   it("supports DOM scenarios with a fragment-backed root", async () => {

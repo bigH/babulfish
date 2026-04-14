@@ -16,12 +16,13 @@ export function createVanillaDomDriver(
       return domRoot
     },
     async create(config?: BabulfishConfig) {
+      const { root: _ignoredRoot, roots: _ignoredRoots, ...domConfig } = config?.dom ?? {}
       return createBabulfish({
         ...config,
         dom: {
+          ...domConfig,
           roots: ["#app"],
           root: domRoot,
-          ...config?.dom,
         },
       })
     },
