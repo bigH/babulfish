@@ -52,27 +52,27 @@ const mockTranslateText = vi.fn<(text: string, lang: string) => Promise<string>>
 const mockRestore = vi.fn()
 const mockAbort = vi.fn()
 const mockDispose = vi.fn()
+const mockCreateBabulfish = vi.fn(() => ({
+  get snapshot() {
+    return mockSnapshot
+  },
+  subscribe(listener: () => void) {
+    listeners.add(listener)
+    return () => {
+      listeners.delete(listener)
+    }
+  },
+  loadModel: (...args: unknown[]) => mockLoadModel(...(args as [])),
+  translateTo: (lang: string) => mockTranslateTo(lang),
+  translateText: (text: string, lang: string) => mockTranslateText(text, lang),
+  restore: () => mockRestore(),
+  abort: () => mockAbort(),
+  dispose: () => mockDispose(),
+  languages: MOCK_LANGUAGES,
+}))
 
 vi.mock("@babulfish/core", () => ({
-  createBabulfish: () => ({
-    get snapshot() {
-      return mockSnapshot
-    },
-    subscribe(listener: () => void) {
-      listeners.add(listener)
-      return () => {
-        listeners.delete(listener)
-      }
-    },
-    loadModel: (...args: unknown[]) => mockLoadModel(...(args as [])),
-    translateTo: (lang: string) => mockTranslateTo(lang),
-    translateText: (text: string, lang: string) =>
-      mockTranslateText(text, lang),
-    restore: () => mockRestore(),
-    abort: () => mockAbort(),
-    dispose: () => mockDispose(),
-    languages: MOCK_LANGUAGES,
-  }),
+  createBabulfish: (...args: unknown[]) => mockCreateBabulfish(...args),
   get DEFAULT_LANGUAGES() {
     return MOCK_LANGUAGES
   },
@@ -217,6 +217,35 @@ describe("TranslatorProvider", () => {
     expect(screen.getByTestId("language-count")).toHaveTextContent(
       String(MOCK_LANGUAGES.length),
     )
+  })
+
+  it("creates the core once per mounted provider", () => {
+    const { rerender } = render(
+      <TranslatorProvider>
+        <span data-testid="child">hello</span>
+      </TranslatorProvider>,
+    )
+
+    rerender(
+      <TranslatorProvider>
+        <span data-testid="child">updated</span>
+      </TranslatorProvider>,
+    )
+
+    expect(mockCreateBabulfish).toHaveBeenCalledTimes(1)
+  })
+
+  it("disposes the created core on unmount", () => {
+    const { unmount } = render(
+      <TranslatorProvider>
+        <span data-testid="child">hello</span>
+      </TranslatorProvider>,
+    )
+
+    unmount()
+
+    expect(mockCreateBabulfish).toHaveBeenCalledTimes(1)
+    expect(mockDispose).toHaveBeenCalledTimes(1)
   })
 })
 

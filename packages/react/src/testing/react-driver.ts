@@ -92,7 +92,6 @@ export function ReactConformanceDriver(): ConformanceDriver {
     async dispose(core: BabulfishCore) {
       const unmount = registry.get(core)
       if (!unmount) return
-      await core.dispose()
       await act(async () => {
         unmount()
       })

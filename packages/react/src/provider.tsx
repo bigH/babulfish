@@ -26,7 +26,7 @@ export function TranslatorProvider({
     return () => {
       coreRef.current?.dispose()
     }
-  }, [core])
+  }, [])
 
   return (
     <TranslatorContext.Provider value={core}>
