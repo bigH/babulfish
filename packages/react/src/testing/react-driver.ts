@@ -12,24 +12,26 @@ import type { ConformanceDriver } from "@babulfish/core/testing"
 type BridgeState = {
   core: BabulfishCore | null
   snapshot: Snapshot | null
-  getInternalSnapshot: (() => Snapshot) | null
+  getSnapshot: (() => Snapshot) | null
+}
+
+function captureSnapshotGetter(core: BabulfishCore): () => Snapshot {
+  const getter = Object.getOwnPropertyDescriptor(core, "snapshot")?.get
+  if (!getter) {
+    throw new Error("React conformance driver requires core.snapshot to be a getter")
+  }
+  return () => getter.call(core)
 }
 
 function SnapshotBridge({ bridge }: { bridge: BridgeState }): null {
   const core = useTranslatorContext()
 
-  if (!bridge.getInternalSnapshot) {
-    const desc = Object.getOwnPropertyDescriptor(core, "snapshot")
-    const getter = desc?.get
-    bridge.getInternalSnapshot = getter
-      ? () => getter.call(core)
-      : () => core.snapshot
-  }
+  bridge.getSnapshot ??= captureSnapshotGetter(core)
 
   const snapshot = useSyncExternalStore(
     core.subscribe,
-    bridge.getInternalSnapshot,
-    bridge.getInternalSnapshot,
+    bridge.getSnapshot,
+    bridge.getSnapshot,
   )
 
   bridge.core = core
@@ -40,10 +42,7 @@ function SnapshotBridge({ bridge }: { bridge: BridgeState }): null {
 
 /** @experimental */
 export function ReactConformanceDriver(): ConformanceDriver {
-  const registry = new Map<
-    BabulfishCore,
-    { bridge: BridgeState; unmount: () => void }
-  >()
+  const registry = new Map<BabulfishCore, () => void>()
 
   return {
     id: "react",
@@ -59,7 +58,7 @@ export function ReactConformanceDriver(): ConformanceDriver {
       const bridge: BridgeState = {
         core: null,
         snapshot: null,
-        getInternalSnapshot: null,
+        getSnapshot: null,
       }
 
       const mergedConfig: BabulfishConfig = {
@@ -86,16 +85,16 @@ export function ReactConformanceDriver(): ConformanceDriver {
         enumerable: true,
       })
 
-      registry.set(core, { bridge, unmount })
+      registry.set(core, unmount)
       return core
     },
 
     async dispose(core: BabulfishCore) {
-      const entry = registry.get(core)
-      if (!entry) return
+      const unmount = registry.get(core)
+      if (!unmount) return
       await core.dispose()
       await act(async () => {
-        entry.unmount()
+        unmount()
       })
       registry.delete(core)
     },
