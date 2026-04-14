@@ -817,4 +817,4 @@ Dispatch note for agents: when you pick this task up, scan the file tree — if 
 - **T-1** ✅ complete — engine `status-change` event now carries error detail.
 - **T-2** ✅ complete — `dom/translator.ts` accepts `root: ParentNode | Document`; walker.ts uses `ownerDocument`-based tree-walker. Shadow DOM and DocumentFragment tests pass.
 - **T-3a** ✅ complete — three-package topology (`@babulfish/{core,react,styles}`) scaffolded; `packages/babulfish/` deleted; demo migrated; zero net-new behavior. `listeners.clear()` at `engine/model.ts:204-205` intentionally retained for T-3b removal.
-- **T-3b** — next up (blocked by T-3a — resolved).
+- **T-3b** ✅ complete — `createBabulfish` contract landed in `packages/core/src/core/`; `pipeline-loader.ts` seam + ESLint `no-restricted-imports` enforcement; `engine/testing/` subpath (`__resetEngineForTests`, `getEngineIdentity`); `listeners.clear()` removed from `engine/model.ts` (flagged in T-3a progress); contract smoke tests cover invariants 4.1–4.5; React binding untouched. T-4 / T-5 / T-7 / T-8 are now unblocked.
