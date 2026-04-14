@@ -8,7 +8,7 @@ export interface TaggedTextNode {
 export interface WalkerConfig {
   readonly skipTags: ReadonlySet<string>
   readonly shouldSkip: (text: string) => boolean
-  readonly skipInside?: ReadonlyArray<{ selector: string }>
+  readonly skipInside?: readonly string[]
 }
 
 const DEFAULT_SKIP_TAGS: ReadonlySet<string> = new Set([
@@ -34,12 +34,12 @@ export function buildSkipTags(extra?: readonly string[]): ReadonlySet<string> {
 function isInsideSkipped(
   node: Node,
   skipTags: ReadonlySet<string>,
-  skipSelectors: ReadonlyArray<{ selector: string }>,
+  skipSelectors: readonly string[],
 ): boolean {
   let current = node.parentElement
   while (current) {
     if (skipTags.has(current.tagName)) return true
-    for (const { selector } of skipSelectors) {
+    for (const selector of skipSelectors) {
       if (current.matches(selector)) return true
     }
     current = current.parentElement
@@ -51,8 +51,8 @@ export function collectTextNodes(
   root: Element,
   config: WalkerConfig,
   originalTexts: WeakMap<Text, string>,
-  skipSelectors: ReadonlyArray<{ selector: string }> = [],
 ): TaggedTextNode[] {
+  const skipSelectors = config.skipInside ?? []
   const walker = root.ownerDocument!.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
     acceptNode(node: Text) {
       if (isInsideSkipped(node, config.skipTags, skipSelectors))

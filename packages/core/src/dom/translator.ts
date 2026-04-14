@@ -171,9 +171,9 @@ export function createDOMTranslator(config: DOMTranslatorConfig): DOMTranslator 
 
   // Skip selectors: elements whose children should be excluded from
   // plain-text walking (they are translated separately).
-  const skipSelectors: Array<{ selector: string }> = []
-  if (config.richText) skipSelectors.push({ selector: `[${config.richText.sourceAttribute}]` })
-  if (config.linkedBy) skipSelectors.push({ selector: `[${config.linkedBy.keyAttribute}]` })
+  const skipSelectors: string[] = []
+  if (config.richText) skipSelectors.push(`[${config.richText.sourceAttribute}]`)
+  if (config.linkedBy) skipSelectors.push(`[${config.linkedBy.keyAttribute}]`)
 
   function captureLinkedOriginalText(node: Text, key: string): string {
     const original = originalTexts.get(node)
@@ -375,9 +375,9 @@ export function createDOMTranslator(config: DOMTranslatorConfig): DOMTranslator 
         )
         : []
 
-      const walkerConfig = { skipTags, shouldSkip }
+      const walkerConfig = { skipTags, shouldSkip, skipInside: skipSelectors }
       const allNodes = roots.flatMap((r) =>
-        collectTextNodes(r, walkerConfig, originalTexts, skipSelectors),
+        collectTextNodes(r, walkerConfig, originalTexts),
       )
       const allBatches = buildBatches(allNodes, charLimit)
       const allAttrs = roots.flatMap(collectTranslatableAttrs)
