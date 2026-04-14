@@ -191,6 +191,22 @@ describe("4.3 — cancellation", () => {
     await expect(core.loadModel({ signal: controller.signal })).rejects.toThrow()
   })
 
+  it("loadModel removes external abort listener after success", async () => {
+    setupPipelineMock()
+    const core = createBabulfish()
+    const controller = new AbortController()
+    const addEventListener = vi.spyOn(controller.signal, "addEventListener")
+    const removeEventListener = vi.spyOn(controller.signal, "removeEventListener")
+
+    await core.loadModel({ signal: controller.signal })
+
+    expect(addEventListener).toHaveBeenCalledWith("abort", expect.any(Function), { once: true })
+    expect(removeEventListener).toHaveBeenCalledWith(
+      "abort",
+      addEventListener.mock.calls[0]?.[1] as EventListener,
+    )
+  })
+
   it("translateTo failure resets translation status to idle", async () => {
     const generate = vi.fn(async () => {
       throw new Error("translation failed")
@@ -217,6 +233,32 @@ describe("4.3 — cancellation", () => {
 
     await expect(core.translateTo("es")).rejects.toThrow("translation failed")
     expect(core.snapshot.translation.status).toBe("idle")
+  })
+
+  it("translateTo removes external abort listener after success", async () => {
+    setupPipelineMock()
+
+    const root = document.createElement("div")
+    root.innerHTML = '<div id="app"><p>Hello</p></div>'
+
+    const core = createBabulfish({
+      dom: {
+        root,
+        roots: ["#app"],
+      },
+    })
+    const controller = new AbortController()
+    const addEventListener = vi.spyOn(controller.signal, "addEventListener")
+    const removeEventListener = vi.spyOn(controller.signal, "removeEventListener")
+
+    await core.loadModel()
+    await core.translateTo("es", { signal: controller.signal })
+
+    expect(addEventListener).toHaveBeenCalledWith("abort", expect.any(Function), { once: true })
+    expect(removeEventListener).toHaveBeenCalledWith(
+      "abort",
+      addEventListener.mock.calls[0]?.[1] as EventListener,
+    )
   })
 })
 

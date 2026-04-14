@@ -33,6 +33,34 @@ export type BabulfishConfig = {
   readonly languages?: readonly Language[]
 }
 
+function addAbortListener(signal: AbortSignal, listener: () => void): () => void {
+  if (signal.aborted) {
+    listener()
+    return () => {}
+  }
+
+  signal.addEventListener("abort", listener, { once: true })
+  return () => {
+    signal.removeEventListener("abort", listener)
+  }
+}
+
+async function raceWithAbort<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
+  if (!signal) return promise
+  if (signal.aborted) throw signal.reason
+
+  let removeAbortListener = () => {}
+  const abortPromise = new Promise<never>((_, reject) => {
+    removeAbortListener = addAbortListener(signal, () => reject(signal.reason))
+  })
+
+  try {
+    return await Promise.race([promise, abortPromise])
+  } finally {
+    removeAbortListener()
+  }
+}
+
 export function createBabulfish(config?: BabulfishConfig): BabulfishCore {
   const store = createStore()
   const progress = createProgressController()
@@ -99,24 +127,7 @@ export function createBabulfish(config?: BabulfishConfig): BabulfishCore {
 
   async function loadModel(opts?: { signal?: AbortSignal }): Promise<void> {
     if (disposed) throw new Error("Core is disposed")
-    const signal = opts?.signal
-
-    const loadPromise = engine.load()
-
-    if (signal) {
-      await Promise.race([
-        loadPromise,
-        new Promise<never>((_, reject) => {
-          if (signal.aborted) {
-            reject(signal.reason)
-            return
-          }
-          signal.addEventListener("abort", () => reject(signal.reason), { once: true })
-        }),
-      ])
-    } else {
-      await loadPromise
-    }
+    await raceWithAbort(engine.load(), opts?.signal)
   }
 
   async function translateTo(lang: string, opts?: TranslateOptions): Promise<void> {
@@ -130,12 +141,11 @@ export function createBabulfish(config?: BabulfishConfig): BabulfishCore {
 
     const { runId, signal: runSignal } = progress.startRun()
     const externalSignal = opts?.signal
-
-    if (externalSignal) {
-      externalSignal.addEventListener("abort", () => {
-        if (progress.isCurrentRun(runId)) progress.abortCurrent()
-      }, { once: true })
-    }
+    const removeExternalAbortListener = externalSignal
+      ? addAbortListener(externalSignal, () => {
+          if (progress.isCurrentRun(runId)) progress.abortCurrent()
+        })
+      : null
 
     store.set((prev) => ({
       ...prev,
@@ -160,12 +170,17 @@ export function createBabulfish(config?: BabulfishConfig): BabulfishCore {
       const translator = getDomTranslator(opts?.root)
       if (translator) {
         const translatePromise = translator.translate(lang)
-        runSignal.addEventListener("abort", () => translator.abort(), { once: true })
-        await translatePromise
+        const removeRunAbortListener = addAbortListener(runSignal, () => translator.abort())
+        try {
+          await translatePromise
+        } finally {
+          removeRunAbortListener()
+        }
       }
 
       runSignal.throwIfAborted()
     } finally {
+      removeExternalAbortListener?.()
       resetTranslationIfCurrentRun()
     }
   }
