@@ -3,8 +3,8 @@
 import { createElement } from "react"
 import { render, act } from "@testing-library/react"
 import { useSyncExternalStore } from "react"
-import { createBabulfish } from "@babulfish/core"
-import { TranslatorContext, useTranslatorContext } from "../context.js"
+import { TranslatorProvider } from "../provider.js"
+import { useTranslatorContext } from "../context.js"
 import { SSR_CORE } from "../ssr.js"
 import type { BabulfishConfig, BabulfishCore, Snapshot } from "@babulfish/core"
 import type { ConformanceDriver } from "@babulfish/core/testing"
@@ -55,28 +55,29 @@ export function ReactConformanceDriver(): ConformanceDriver {
     async create(config?: BabulfishConfig) {
       if (typeof window === "undefined") return SSR_CORE
 
-      const core = createBabulfish({
-        ...config,
-        dom: { roots: ["#app"], root: document, ...config?.dom },
-      })
-
       const bridge: BridgeState = {
         core: null,
         snapshot: null,
         getInternalSnapshot: null,
       }
 
+      const mergedConfig: BabulfishConfig = {
+        ...config,
+        dom: { roots: ["#app"], root: document, ...config?.dom },
+      }
+
       let unmount!: () => void
       await act(async () => {
         const result = render(
-          createElement(
-            TranslatorContext.Provider,
-            { value: core },
-            createElement(SnapshotBridge, { bridge }),
-          ),
+          createElement(TranslatorProvider, {
+            config: mergedConfig,
+            children: createElement(SnapshotBridge, { bridge }),
+          }),
         )
         unmount = result.unmount
       })
+
+      const core = bridge.core!
 
       Object.defineProperty(core, "snapshot", {
         get: () => bridge.snapshot,
