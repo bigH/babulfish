@@ -17,6 +17,12 @@ const homepageMarkers = [
   "babulfish Demo",
   "Fully client-side translation",
   "One-line React integration via TranslatorProvider",
+  "Model Status (useTranslator hook)",
+  "Translation Path",
+  "Default Button",
+  "Not loaded",
+  "Idle",
+  "Original",
 ]
 
 let logs = ""

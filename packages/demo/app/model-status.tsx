@@ -1,6 +1,74 @@
 "use client"
 
-import { useTranslator } from "@babulfish/react"
+import { useTranslator, type ModelState, type TranslationState } from "@babulfish/react"
+
+const CHECKING_LABEL = "Checking"
+
+type StatusRow = {
+  readonly label: string
+  readonly value: string
+}
+
+function formatCapabilityLabel(
+  capabilitiesReady: boolean,
+  resolve: () => string,
+): string {
+  return capabilitiesReady ? resolve() : CHECKING_LABEL
+}
+
+function formatWebGPUStatus(
+  capabilitiesReady: boolean,
+  hasWebGPU: boolean,
+): string {
+  return formatCapabilityLabel(
+    capabilitiesReady,
+    () => (hasWebGPU ? "Supported" : "Not available"),
+  )
+}
+
+function formatTranslationPath(
+  capabilitiesReady: boolean,
+  canTranslate: boolean,
+  device: ReturnType<typeof useTranslator>["device"],
+): string {
+  return formatCapabilityLabel(capabilitiesReady, () => {
+    if (!canTranslate) return "Unavailable"
+    return device === "webgpu" ? "WebGPU" : "WASM fallback"
+  })
+}
+
+function formatDefaultButtonStatus(
+  capabilitiesReady: boolean,
+  isMobile: boolean,
+  canTranslate: boolean,
+): string {
+  return formatCapabilityLabel(capabilitiesReady, () => {
+    if (isMobile) return "Desktop only for now"
+    return canTranslate ? "Available" : "Unavailable"
+  })
+}
+
+function formatModelStatus(model: ModelState): string {
+  switch (model.status) {
+    case "idle":
+      return "Not loaded"
+    case "downloading":
+      return `Downloading (${Math.round(model.progress * 100)}%)`
+    case "ready":
+      return "Ready"
+    case "error":
+      return "Error"
+  }
+}
+
+function formatTranslationStatus(translation: TranslationState): string {
+  switch (translation.status) {
+    case "idle":
+      return "Idle"
+    case "translating":
+      return `Translating (${Math.round(translation.progress * 100)}%)`
+  }
+}
 
 export function ModelStatus() {
   const {
@@ -14,61 +82,45 @@ export function ModelStatus() {
     isMobile,
   } = useTranslator()
 
+  const rows: ReadonlyArray<StatusRow> = [
+    {
+      label: "WebGPU",
+      value: formatWebGPUStatus(capabilitiesReady, hasWebGPU),
+    },
+    {
+      label: "Translation Path",
+      value: formatTranslationPath(capabilitiesReady, canTranslate, device),
+    },
+    {
+      label: "Default Button",
+      value: formatDefaultButtonStatus(capabilitiesReady, isMobile, canTranslate),
+    },
+    {
+      label: "Model",
+      value: formatModelStatus(model),
+    },
+    {
+      label: "Translation",
+      value: formatTranslationStatus(translation),
+    },
+    {
+      label: "Language",
+      value: currentLanguage ?? "Original",
+    },
+  ]
+
   return (
     <section className="rounded-lg border border-gray-200 bg-gray-50 p-4">
       <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500">
         Model Status (useTranslator hook)
       </h2>
       <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-        <dt className="font-medium text-gray-600">WebGPU</dt>
-        <dd>
-          {capabilitiesReady
-            ? hasWebGPU
-              ? "Supported"
-              : "Not available"
-            : "Checking"}
-        </dd>
-
-        <dt className="font-medium text-gray-600">Translation Path</dt>
-        <dd>
-          {capabilitiesReady
-            ? canTranslate
-              ? device === "webgpu"
-                ? "WebGPU"
-                : "WASM fallback"
-              : "Unavailable"
-            : "Checking"}
-        </dd>
-
-        <dt className="font-medium text-gray-600">Default Button</dt>
-        <dd>
-          {capabilitiesReady
-            ? isMobile
-              ? "Desktop only for now"
-              : canTranslate
-                ? "Available"
-                : "Unavailable"
-            : "Checking"}
-        </dd>
-
-        <dt className="font-medium text-gray-600">Model</dt>
-        <dd>
-          {model.status === "idle" && "Not loaded"}
-          {model.status === "downloading" &&
-            `Downloading (${Math.round(model.progress * 100)}%)`}
-          {model.status === "ready" && "Ready"}
-          {model.status === "error" && "Error"}
-        </dd>
-
-        <dt className="font-medium text-gray-600">Translation</dt>
-        <dd>
-          {translation.status === "idle" && "Idle"}
-          {translation.status === "translating" &&
-            `Translating (${Math.round(translation.progress * 100)}%)`}
-        </dd>
-
-        <dt className="font-medium text-gray-600">Language</dt>
-        <dd>{currentLanguage ?? "Original"}</dd>
+        {rows.map(({ label, value }) => (
+          <div key={label} className="contents">
+            <dt className="font-medium text-gray-600">{label}</dt>
+            <dd>{value}</dd>
+          </div>
+        ))}
       </dl>
     </section>
   )
