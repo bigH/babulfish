@@ -70,6 +70,13 @@ describe("isMobileDevice", () => {
     mockNavigator({ maxTouchPoints: 1 })
     expect(isMobileDevice()).toBe(false)
   })
+
+  it("returns false when navigator is unavailable", () => {
+    mockWindow({ innerWidth: 400 })
+    delete (globalThis as Record<string, unknown>).navigator
+
+    expect(isMobileDevice()).toBe(false)
+  })
 })
 
 describe("resolveDevice", () => {
@@ -138,6 +145,18 @@ describe("getTranslationCapabilities", () => {
       isMobile: false,
       device: "wasm",
       canTranslate: false,
+    })
+  })
+
+  it("treats missing navigator as no optional browser capabilities", () => {
+    mockWindow({ innerWidth: 400 })
+    delete (globalThis as Record<string, unknown>).navigator
+
+    expect(getTranslationCapabilities()).toEqual({
+      hasWebGPU: false,
+      isMobile: false,
+      device: "wasm",
+      canTranslate: true,
     })
   })
 })

@@ -12,42 +12,78 @@ export type TranslationCapabilities = {
 
 const MOBILE_WIDTH_THRESHOLD = 768
 
-export function isWebGPUAvailable(): boolean {
-  return typeof navigator !== "undefined" && "gpu" in navigator
+type EnvironmentSnapshot = {
+  readonly hasWindow: boolean
+  readonly hasWebGPU: boolean
+  readonly isMobile: boolean
 }
 
-export function isMobileDevice(): boolean {
-  if (typeof window === "undefined") return false
-  const narrowScreen = window.innerWidth < MOBILE_WIDTH_THRESHOLD
-  const hasTouch =
-    "ontouchstart" in window || navigator.maxTouchPoints > 0
-  return narrowScreen && hasTouch
+function getEnvironmentSnapshot(): EnvironmentSnapshot {
+  if (typeof window === "undefined") {
+    return {
+      hasWindow: false,
+      hasWebGPU: false,
+      isMobile: false,
+    }
+  }
+
+  const touchPoints =
+    typeof navigator === "undefined" ? 0 : navigator.maxTouchPoints
+  const hasTouch = "ontouchstart" in window || touchPoints > 0
+
+  return {
+    hasWindow: true,
+    hasWebGPU:
+      typeof navigator !== "undefined" && "gpu" in navigator,
+    isMobile:
+      window.innerWidth < MOBILE_WIDTH_THRESHOLD && hasTouch,
+  }
 }
 
-export function resolveDevice(preference: DevicePreference): ResolvedDevice {
+function resolveDeviceWithWebGPU(
+  preference: DevicePreference,
+  hasWebGPU: boolean,
+): ResolvedDevice {
   switch (preference) {
     case "webgpu":
       return "webgpu"
     case "wasm":
       return "wasm"
     case "auto":
-      return isWebGPUAvailable() ? "webgpu" : "wasm"
+      return hasWebGPU ? "webgpu" : "wasm"
   }
+}
+
+export function isWebGPUAvailable(): boolean {
+  return getEnvironmentSnapshot().hasWebGPU
+}
+
+export function isMobileDevice(): boolean {
+  return getEnvironmentSnapshot().isMobile
+}
+
+export function resolveDevice(preference: DevicePreference): ResolvedDevice {
+  return resolveDeviceWithWebGPU(
+    preference,
+    getEnvironmentSnapshot().hasWebGPU,
+  )
 }
 
 export function getTranslationCapabilities(
   preference: DevicePreference = "auto",
 ): TranslationCapabilities {
-  const hasWebGPU = isWebGPUAvailable()
-  const hasBrowserWindow = typeof window !== "undefined"
-  const isMobile = isMobileDevice()
-  const device = resolveDevice(preference)
+  const environment = getEnvironmentSnapshot()
+  const device = resolveDeviceWithWebGPU(
+    preference,
+    environment.hasWebGPU,
+  )
 
   return {
-    hasWebGPU,
-    isMobile,
+    hasWebGPU: environment.hasWebGPU,
+    isMobile: environment.isMobile,
     device,
     canTranslate:
-      hasBrowserWindow && (device === "wasm" || hasWebGPU),
+      environment.hasWindow &&
+      (device === "wasm" || environment.hasWebGPU),
   }
 }
