@@ -73,7 +73,7 @@ export function createEngine(config?: EngineConfig): Translator {
   let currentStatus: TranslatorStatus = "idle"
   let pipelinePromise: Promise<TextGenerationPipeline> | null = null
   let loadPromise: Promise<void> | null = null
-  let disposed = false
+  let lifecycleVersion = 0
   const listeners = createListeners()
 
   // -- Helpers --------------------------------------------------------------
@@ -125,6 +125,7 @@ export function createEngine(config?: EngineConfig): Translator {
     }
 
     transition("downloading")
+    const version = lifecycleVersion
 
     loadPromise = (async () => {
       const resolvedDevice = resolveDevice(device)
@@ -140,9 +141,9 @@ export function createEngine(config?: EngineConfig): Translator {
 
     try {
       await loadPromise
-      if (!disposed) transition("ready")
+      if (lifecycleVersion === version) transition("ready")
     } catch (err) {
-      if (!disposed) {
+      if (lifecycleVersion === version) {
         pipelinePromise = null
         loadPromise = null
         transition("error", err)
@@ -186,7 +187,7 @@ export function createEngine(config?: EngineConfig): Translator {
   }
 
   function dispose(): void {
-    disposed = true
+    lifecycleVersion += 1
 
     // Release GPU/WASM resources held by the pipeline. The resolved
     // pipeline exposes a dispose() method that frees ONNX sessions

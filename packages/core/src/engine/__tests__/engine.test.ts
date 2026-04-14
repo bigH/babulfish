@@ -95,6 +95,16 @@ function captureProgressCallback() {
   return () => callback
 }
 
+function createDeferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res
+    reject = rej
+  })
+  return { promise, resolve, reject }
+}
+
 beforeEach(() => {
   vi.clearAllMocks()
   mockGenerate.mockReset()
@@ -290,6 +300,43 @@ describe("dispose", () => {
     await expect(engine.translate("hello", "es")).rejects.toThrow(
       "Translation model not loaded",
     )
+  })
+
+  it("can load again after dispose", async () => {
+    const engine = createEngine()
+
+    await engine.load()
+    engine.dispose()
+    await engine.load()
+
+    expect(engine.status).toBe("ready")
+    expect(mockLoadPipeline).toHaveBeenCalledTimes(2)
+  })
+
+  it("ignores stale load completion after dispose and reload", async () => {
+    const firstLoad = createDeferred<TextGenerationPipeline>()
+    mockLoadPipeline
+      .mockImplementationOnce(() => firstLoad.promise)
+      .mockImplementationOnce(resolveMockPipeline)
+
+    const engine = createEngine()
+    const changes = statusChanges(engine)
+
+    const loading = engine.load()
+    engine.dispose()
+    const reloading = engine.load()
+    firstLoad.resolve(mockGenerator)
+
+    await loading
+    await reloading
+
+    expect(engine.status).toBe("ready")
+    expect(changes).toEqual([
+      { from: "idle", to: "downloading" },
+      { from: "downloading", to: "idle" },
+      { from: "idle", to: "downloading" },
+      { from: "downloading", to: "ready" },
+    ])
   })
 })
 
