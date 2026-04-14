@@ -1,0 +1,75 @@
+import type { Snapshot } from "@babulfish/core"
+import { afterEach, describe, expect, it, vi } from "vitest"
+
+import { appendStatusEntry, observeHostDocument, requireEventLog } from "./main-helpers.js"
+
+function createSnapshot(overrides: Partial<Snapshot> = {}): Snapshot {
+  return {
+    model: overrides.model ?? { status: "ready" },
+    translation: overrides.translation ?? { status: "idle" },
+    currentLanguage: overrides.currentLanguage ?? null,
+    capabilities: overrides.capabilities ?? {
+      ready: true,
+      hasWebGPU: true,
+      canTranslate: true,
+      device: "webgpu",
+      isMobile: false,
+    },
+  }
+}
+
+describe("demo main helpers", () => {
+  const observers: MutationObserver[] = []
+
+  afterEach(() => {
+    for (const observer of observers.splice(0)) observer.disconnect()
+    document.body.innerHTML = ""
+  })
+
+  it("fails fast when the host page is missing #event-log", () => {
+    expect(() => requireEventLog(document)).toThrowError(
+      "Expected host page to provide #event-log for demo status output",
+    )
+  })
+
+  it("prepends formatted status entries and mirrors them to the console", () => {
+    document.body.innerHTML = `<div id="event-log"><div class="entry">older</div></div>`
+    const eventLog = requireEventLog(document)
+    const logger = { log: vi.fn() }
+    const snapshot = createSnapshot({
+      model: { status: "downloading", progress: 0.42 },
+      translation: { status: "translating", progress: 0.75 },
+      currentLanguage: "es",
+    })
+
+    appendStatusEntry(eventLog, 1, snapshot, logger)
+
+    const entries = Array.from(eventLog.querySelectorAll(".entry"))
+    expect(entries).toHaveLength(2)
+    expect(entries[0]?.textContent).toContain("[#2]")
+    expect(entries[0]?.textContent).toContain("model=downloading")
+    expect(entries[0]?.textContent).toContain("translation=translating")
+    expect(entries[0]?.textContent).toContain("lang=es")
+    expect(entries[1]?.textContent).toBe("older")
+    expect(logger.log).toHaveBeenCalledWith("[babulfish-translator #2]", snapshot)
+  })
+
+  it("ignores mutations inside #event-log but warns on host document mutations", async () => {
+    document.body.innerHTML = `<div id="event-log"></div><div id="outside"></div>`
+    const eventLog = requireEventLog(document)
+    const logger = { warn: vi.fn() }
+    const observer = observeHostDocument(document.body, eventLog, logger)
+    observers.push(observer)
+
+    eventLog.append(document.createElement("div"))
+    document.getElementById("outside")?.append("changed")
+    await Promise.resolve()
+
+    expect(logger.warn).toHaveBeenCalledTimes(1)
+    expect(logger.warn).toHaveBeenCalledWith(
+      "[host-doc] unexpected mutation outside shadow roots:",
+      "childList",
+      document.getElementById("outside"),
+    )
+  })
+})
