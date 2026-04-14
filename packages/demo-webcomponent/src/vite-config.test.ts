@@ -44,4 +44,9 @@ describe("demo-webcomponent vite config", () => {
     expect(viteConfig.server?.headers).toEqual(viteConfig.preview?.headers)
     expect(viteConfig.server?.headers).toMatchObject(expectedHeaders)
   })
+
+  it("keeps vitest running in jsdom against the package test files", () => {
+    expect(viteConfig.test?.environment).toBe("jsdom")
+    expect(viteConfig.test?.include).toEqual(["src/**/*.test.ts"])
+  })
 })
