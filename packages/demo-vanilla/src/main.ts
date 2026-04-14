@@ -1,21 +1,27 @@
-import { createBabulfish, type Snapshot, DEFAULT_LANGUAGES } from "@babulfish/core"
+import { createBabulfish, type Snapshot } from "@babulfish/core"
 import "@babulfish/styles/css"
 
 const core = createBabulfish({
   dom: { roots: ["article"] },
 })
 
-const $ = <T extends HTMLElement>(id: string): T =>
-  document.getElementById(id) as T
+function requireElement<T extends typeof HTMLElement>(
+  id: string,
+  expectedType: T,
+): InstanceType<T> {
+  const el = document.getElementById(id)
+  if (el instanceof expectedType) return el as InstanceType<T>
+  throw new Error(`Expected #${id} to be a ${expectedType.name}`)
+}
 
-const select = $<HTMLSelectElement>("language")
-const restoreBtn = $<HTMLButtonElement>("restore")
-const loadBtn = $<HTMLButtonElement>("load-model")
-const statusModel = $<HTMLElement>("status-model")
-const statusTranslation = $<HTMLElement>("status-translation")
-const statusLanguage = $<HTMLElement>("status-language")
+const select = requireElement("language", HTMLSelectElement)
+const restoreBtn = requireElement("restore", HTMLButtonElement)
+const loadBtn = requireElement("load-model", HTMLButtonElement)
+const statusModel = requireElement("status-model", HTMLElement)
+const statusTranslation = requireElement("status-translation", HTMLElement)
+const statusLanguage = requireElement("status-language", HTMLElement)
 
-for (const lang of DEFAULT_LANGUAGES) {
+for (const lang of core.languages) {
   const opt = document.createElement("option")
   opt.value = lang.code
   opt.textContent = lang.label
@@ -44,6 +50,7 @@ function render(s: Snapshot): void {
       : "Idle"
 
   statusLanguage.textContent = s.currentLanguage ?? "Original"
+  select.value = s.currentLanguage ?? ""
 
   const modelReady = s.model.status === "ready"
   const translating = s.translation.status === "translating"
@@ -67,5 +74,4 @@ select.addEventListener("change", () => {
 
 restoreBtn.addEventListener("click", () => {
   core.restore()
-  select.value = ""
 })
