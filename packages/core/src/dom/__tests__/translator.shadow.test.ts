@@ -5,62 +5,81 @@ function uppercaseTranslate(text: string): Promise<string> {
   return Promise.resolve(text.toUpperCase())
 }
 
+type ScopedRootFixture = {
+  readonly root: ParentNode
+  readonly texts: readonly HTMLElement[]
+}
+
+function appendSection(
+  root: ParentNode,
+  texts: readonly string[],
+): readonly HTMLElement[] {
+  const section = document.createElement("section")
+  const nodes = texts.map((text) => {
+    const paragraph = document.createElement("p")
+    paragraph.textContent = text
+    section.appendChild(paragraph)
+    return paragraph
+  })
+  root.appendChild(section)
+  return nodes
+}
+
+function setUpFragmentRoot(texts: readonly string[]): ScopedRootFixture {
+  const root = document.createDocumentFragment()
+  return {
+    root,
+    texts: appendSection(root, texts),
+  }
+}
+
+function setUpShadowRoot(texts: readonly string[]): ScopedRootFixture {
+  const host = document.createElement("div")
+  document.body.appendChild(host)
+  const root = host.attachShadow({ mode: "open" })
+  return {
+    root,
+    texts: appendSection(root, texts),
+  }
+}
+
+function createTranslator(root?: ParentNode | Document) {
+  return createDOMTranslator({
+    translate: uppercaseTranslate,
+    roots: ["section"],
+    root,
+  })
+}
+
 afterEach(() => {
   vi.restoreAllMocks()
-  while (document.body.firstChild) {
-    document.body.removeChild(document.body.firstChild)
-  }
+  document.body.textContent = ""
 })
 
 describe("DOMTranslator with custom root", () => {
-  it("translates inside a DocumentFragment with two text nodes without touching global document", async () => {
-    const frag = document.createDocumentFragment()
-    const section = document.createElement("section")
-    const p1 = document.createElement("p")
-    p1.textContent = "hello"
-    const p2 = document.createElement("p")
-    p2.textContent = "world"
-    section.appendChild(p1)
-    section.appendChild(p2)
-    frag.appendChild(section)
-
+  it.each([
+    {
+      label: "DocumentFragment",
+      setUp: () => setUpFragmentRoot(["hello", "world"]),
+      expected: ["HELLO", "WORLD"],
+    },
+    {
+      label: "ShadowRoot",
+      setUp: () => setUpShadowRoot(["shadow text"]),
+      expected: ["SHADOW TEXT"],
+    },
+  ])("translates inside a $label without touching global document", async ({
+    setUp,
+    expected,
+  }) => {
+    const fixture = setUp()
     const spy = vi.spyOn(document, "querySelector")
 
-    const translator = createDOMTranslator({
-      translate: uppercaseTranslate,
-      roots: ["section"],
-      root: frag,
-    })
-
-    await translator.translate("de")
-
-    expect(p1.textContent).toBe("HELLO")
-    expect(p2.textContent).toBe("WORLD")
-    expect(spy).not.toHaveBeenCalled()
-  })
-
-  it("translates inside a ShadowRoot without touching global document", async () => {
-    const host = document.createElement("div")
-    document.body.appendChild(host)
-    const shadow = host.attachShadow({ mode: "open" })
-
-    const wrapper = document.createElement("section")
-    const span = document.createElement("span")
-    span.textContent = "shadow text"
-    wrapper.appendChild(span)
-    shadow.appendChild(wrapper)
-
-    const spy = vi.spyOn(document, "querySelector")
-
-    const translator = createDOMTranslator({
-      translate: uppercaseTranslate,
-      roots: ["section"],
-      root: shadow,
-    })
+    const translator = createTranslator(fixture.root)
 
     await translator.translate("fr")
 
-    expect(span.textContent).toBe("SHADOW TEXT")
+    expect(fixture.texts.map((node) => node.textContent)).toEqual(expected)
     expect(spy).not.toHaveBeenCalled()
   })
 
@@ -82,26 +101,13 @@ describe("DOMTranslator with custom root", () => {
   })
 
   it("restore works with scoped root", async () => {
-    const host = document.createElement("div")
-    document.body.appendChild(host)
-    const shadow = host.attachShadow({ mode: "open" })
-
-    const wrapper = document.createElement("section")
-    const span = document.createElement("span")
-    span.textContent = "original"
-    wrapper.appendChild(span)
-    shadow.appendChild(wrapper)
-
-    const translator = createDOMTranslator({
-      translate: uppercaseTranslate,
-      roots: ["section"],
-      root: shadow,
-    })
+    const fixture = setUpShadowRoot(["original"])
+    const translator = createTranslator(fixture.root)
 
     await translator.translate("de")
-    expect(span.textContent).toBe("ORIGINAL")
+    expect(fixture.texts[0]?.textContent).toBe("ORIGINAL")
 
     translator.restore()
-    expect(span.textContent).toBe("original")
+    expect(fixture.texts[0]?.textContent).toBe("original")
   })
 })
