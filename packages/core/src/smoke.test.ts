@@ -58,8 +58,25 @@ describe("smoke tests", () => {
   it("barrel re-exports core, engine, and dom", () => {
     expect(barrel.createBabulfish).toBe(createBabulfish)
     expect(barrel.DEFAULT_LANGUAGES).toBe(DEFAULT_LANGUAGES)
-    expect(barrel.createEngine).toBe(createEngineDirect)
-    expect(barrel.createDOMTranslator).toBe(createDOMTranslatorDirect)
+    expect(barrel.createEngine).toBe(engineBarrel.createEngine)
+    expect(barrel.getTranslationCapabilities).toBe(engineBarrel.getTranslationCapabilities)
+    expect(barrel.createDOMTranslator).toBe(domBarrel.createDOMTranslator)
+    expect(barrel.renderInlineMarkdownToHtml).toBe(domBarrel.renderInlineMarkdownToHtml)
+    expect(barrel.parseInlineMarkdown).toBe(domBarrel.parseInlineMarkdown)
+    expect(barrel.isWellFormedMarkdown).toBe(domBarrel.isWellFormedMarkdown)
+
+    expectTypeOf<EngineConfigDirect>().toEqualTypeOf<barrel.EngineConfig>()
+    expectTypeOf<TranslatorDirect>().toEqualTypeOf<barrel.Translator>()
+    expectTypeOf<TranslatorEventsDirect>().toEqualTypeOf<barrel.TranslatorEvents>()
+    expectTypeOf<TranslatorStatusDirect>().toEqualTypeOf<barrel.TranslatorStatus>()
+    expectTypeOf<DevicePreferenceDirect>().toEqualTypeOf<barrel.DevicePreference>()
+    expectTypeOf<ResolvedDeviceDirect>().toEqualTypeOf<barrel.ResolvedDevice>()
+    expectTypeOf<TranslationCapabilitiesDirect>().toEqualTypeOf<barrel.TranslationCapabilities>()
+    expectTypeOf<DOMTranslatorConfigDirect>().toEqualTypeOf<barrel.DOMTranslatorConfig>()
+    expectTypeOf<DOMTranslatorDirect>().toEqualTypeOf<barrel.DOMTranslator>()
+    expectTypeOf<RichTextConfigDirect>().toEqualTypeOf<barrel.RichTextConfig>()
+    expectTypeOf<LinkedConfigDirect>().toEqualTypeOf<barrel.LinkedConfig>()
+    expectTypeOf<PreserveMatcherDirect>().toEqualTypeOf<barrel.PreserveMatcher>()
   })
 
   it("engine barrel re-exports the public engine surface without detection internals", () => {
