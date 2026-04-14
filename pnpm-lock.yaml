@@ -8,11 +8,67 @@ importers:
 
   .: {}
 
-  packages/babulfish:
+  packages/core:
     dependencies:
       '@huggingface/transformers':
         specifier: ^4.0.0
         version: 4.0.1
+    devDependencies:
+      jsdom:
+        specifier: ^26.1.0
+        version: 26.1.0
+      tsup:
+        specifier: ^8.4.0
+        version: 8.5.1(jiti@2.6.1)(postcss@8.5.9)(typescript@5.9.3)
+      typescript:
+        specifier: ^5.8.3
+        version: 5.9.3
+      vitest:
+        specifier: ^3.1.1
+        version: 3.2.4(@types/node@25.6.0)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.32.0)
+
+  packages/demo:
+    dependencies:
+      '@babulfish/react':
+        specifier: workspace:*
+        version: link:../react
+      '@huggingface/transformers':
+        specifier: ^4.0.0
+        version: 4.0.1
+      next:
+        specifier: ^15.0.0
+        version: 15.5.15(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
+      react:
+        specifier: ^19.0.0
+        version: 19.2.5
+      react-dom:
+        specifier: ^19.0.0
+        version: 19.2.5(react@19.2.5)
+    devDependencies:
+      '@tailwindcss/postcss':
+        specifier: ^4.0.0
+        version: 4.2.2
+      '@types/react':
+        specifier: ^19.0.0
+        version: 19.2.14
+      '@types/react-dom':
+        specifier: ^19.0.0
+        version: 19.2.3(@types/react@19.2.14)
+      tailwindcss:
+        specifier: ^4.0.0
+        version: 4.2.2
+      typescript:
+        specifier: ^5.0.0
+        version: 5.9.3
+
+  packages/react:
+    dependencies:
+      '@babulfish/core':
+        specifier: workspace:^
+        version: link:../core
+      '@babulfish/styles':
+        specifier: workspace:^
+        version: link:../styles
     devDependencies:
       '@testing-library/jest-dom':
         specifier: ^6.6.3
@@ -45,39 +101,7 @@ importers:
         specifier: ^3.1.1
         version: 3.2.4(@types/node@25.6.0)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.32.0)
 
-  packages/demo:
-    dependencies:
-      '@huggingface/transformers':
-        specifier: ^4.0.0
-        version: 4.0.1
-      babulfish:
-        specifier: workspace:*
-        version: link:../babulfish
-      next:
-        specifier: ^15.0.0
-        version: 15.5.15(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
-      react:
-        specifier: ^19.0.0
-        version: 19.2.5
-      react-dom:
-        specifier: ^19.0.0
-        version: 19.2.5(react@19.2.5)
-    devDependencies:
-      '@tailwindcss/postcss':
-        specifier: ^4.0.0
-        version: 4.2.2
-      '@types/react':
-        specifier: ^19.0.0
-        version: 19.2.14
-      '@types/react-dom':
-        specifier: ^19.0.0
-        version: 19.2.3(@types/react@19.2.14)
-      tailwindcss:
-        specifier: ^4.0.0
-        version: 4.2.2
-      typescript:
-        specifier: ^5.0.0
-        version: 5.9.3
+  packages/styles: {}
 
 packages:
 

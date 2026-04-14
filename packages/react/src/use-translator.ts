@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react"
 import {
   getTranslationCapabilities,
   type ResolvedDevice,
-} from "../engine/detect.js"
+} from "@babulfish/core/engine"
 import { useTranslatorContext } from "./context.js"
 import type { TranslatorLanguage } from "./context.js"
 

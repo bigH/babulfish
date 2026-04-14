@@ -1,6 +1,6 @@
 "use client"
 
-import { TranslatorProvider, TranslateButton } from "babulfish"
+import { TranslatorProvider, TranslateButton } from "@babulfish/react"
 import "./globals.css"
 
 export default function RootLayout({

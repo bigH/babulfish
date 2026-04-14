@@ -2,9 +2,8 @@
 // can reference the same context instance without circular imports.
 
 import { createContext, useContext } from "react"
-import type { Translator } from "../engine/index.js"
-import type { DOMTranslator } from "../dom/index.js"
-import type { DevicePreference } from "../engine/detect.js"
+import type { Translator, DevicePreference } from "@babulfish/core/engine"
+import type { DOMTranslator } from "@babulfish/core/dom"
 
 // ---------------------------------------------------------------------------
 // Types (shared across react layer)

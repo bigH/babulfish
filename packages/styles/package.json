@@ -1,0 +1,18 @@
+{
+  "name": "@babulfish/styles",
+  "version": "0.0.0",
+  "description": "Base styles and animations for babulfish translation UI.",
+  "license": "MIT",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bigH/babulfish.git",
+    "directory": "packages/styles"
+  },
+  "exports": {
+    "./css": "./src/babulfish.css"
+  },
+  "files": [
+    "src/babulfish.css"
+  ]
+}

@@ -4,7 +4,8 @@ import { fileURLToPath } from "node:url"
 import type { NextConfig } from "next"
 
 const demoDir = path.dirname(fileURLToPath(import.meta.url))
-const babulfishSrcDir = path.resolve(demoDir, "../babulfish/src")
+const coreSrcDir = path.resolve(demoDir, "../core/src")
+const reactSrcDir = path.resolve(demoDir, "../react/src")
 
 const config: NextConfig = {
   experimental: {
@@ -29,7 +30,7 @@ const config: NextConfig = {
       },
     ]
   },
-  transpilePackages: ["babulfish"],
+  transpilePackages: ["@babulfish/react", "@babulfish/core"],
   webpack: (webpackConfig) => {
     webpackConfig.resolve ??= {}
     webpackConfig.resolve.extensionAlias = {
@@ -38,10 +39,10 @@ const config: NextConfig = {
     }
     webpackConfig.resolve.alias = {
       ...(webpackConfig.resolve.alias as Record<string, string | false>),
-      "babulfish$": path.join(babulfishSrcDir, "index.ts"),
-      "babulfish/react$": path.join(babulfishSrcDir, "react/index.ts"),
-      "babulfish/dom$": path.join(babulfishSrcDir, "dom/index.ts"),
-      "babulfish/engine$": path.join(babulfishSrcDir, "engine/index.ts"),
+      "@babulfish/react$": path.join(reactSrcDir, "index.ts"),
+      "@babulfish/core$": path.join(coreSrcDir, "index.ts"),
+      "@babulfish/core/engine$": path.join(coreSrcDir, "engine/index.ts"),
+      "@babulfish/core/dom$": path.join(coreSrcDir, "dom/index.ts"),
     }
 
     return webpackConfig

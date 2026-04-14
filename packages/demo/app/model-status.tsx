@@ -1,6 +1,6 @@
 "use client"
 
-import { useTranslator } from "babulfish"
+import { useTranslator } from "@babulfish/react"
 
 export function ModelStatus() {
   const {

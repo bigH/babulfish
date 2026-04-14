@@ -11,7 +11,7 @@ import {
 } from "react"
 import { useTranslator } from "./use-translator.js"
 import { TranslateDropdown } from "./translate-dropdown.js"
-import type { ResolvedDevice } from "../engine/detect.js"
+import type { ResolvedDevice } from "@babulfish/core/engine"
 
 // ---------------------------------------------------------------------------
 // Types

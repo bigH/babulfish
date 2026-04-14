@@ -17,7 +17,7 @@ const mockOn = vi.fn<
 >()
 let mockEngineStatus = "idle"
 
-vi.mock("../../engine/index.js", () => ({
+vi.mock("@babulfish/core/engine", () => ({
   createEngine: () => ({
     load: (...args: unknown[]) => mockLoad(...(args as [])),
     translate: (text: string, lang: string) => mockTranslate(text, lang),
@@ -28,6 +28,11 @@ vi.mock("../../engine/index.js", () => ({
       return mockEngineStatus
     },
   }),
+  isWebGPUAvailable: () => mockIsWebGPUAvailable(),
+  isMobileDevice: () => mockIsMobileDevice(),
+  getTranslationCapabilities: (
+    preference: "auto" | "webgpu" | "wasm" = "auto",
+  ) => mockGetTranslationCapabilities(preference),
 }))
 
 // DOM translator mock
@@ -44,7 +49,7 @@ type MockDOMHooks = {
 }
 let mockDOMHooks: MockDOMHooks | undefined
 
-vi.mock("../../dom/index.js", () => ({
+vi.mock("@babulfish/core/dom", () => ({
   createDOMTranslator: (config: { hooks?: MockDOMHooks }) => {
     mockDOMHooks = config.hooks
     return {
@@ -73,13 +78,6 @@ const mockGetTranslationCapabilities = vi.fn(
   }),
 )
 
-vi.mock("../../engine/detect.js", () => ({
-  isWebGPUAvailable: () => mockIsWebGPUAvailable(),
-  isMobileDevice: () => mockIsMobileDevice(),
-  getTranslationCapabilities: (
-    preference: "auto" | "webgpu" | "wasm" = "auto",
-  ) => mockGetTranslationCapabilities(preference),
-}))
 
 const mockIsWebGPUAvailable = vi.fn(() => true)
 const mockIsMobileDevice = vi.fn(() => false)

@@ -7,11 +7,10 @@ import {
   useState,
   type ReactNode,
 } from "react"
-import { createEngine } from "../engine/index.js"
-import { createDOMTranslator } from "../dom/index.js"
-import type { EngineConfig, Translator } from "../engine/index.js"
-import type { DOMTranslatorConfig, DOMTranslator } from "../dom/index.js"
-import type { DevicePreference } from "../engine/detect.js"
+import { createEngine } from "@babulfish/core/engine"
+import type { EngineConfig, Translator, DevicePreference } from "@babulfish/core/engine"
+import { createDOMTranslator } from "@babulfish/core/dom"
+import type { DOMTranslatorConfig, DOMTranslator } from "@babulfish/core/dom"
 import { TranslatorContext } from "./context.js"
 import type { TranslatorContextValue, TranslatorLanguage } from "./context.js"
 
