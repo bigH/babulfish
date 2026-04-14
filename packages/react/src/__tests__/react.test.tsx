@@ -579,6 +579,18 @@ describe("TranslateDropdown", () => {
     { label: "French", code: "fr" },
   ]
 
+  function renderDropdown(
+    props: Partial<React.ComponentProps<typeof TranslateDropdown>> = {},
+  ) {
+    return render(
+      <TranslateDropdown
+        onSelect={() => {}}
+        languages={testLanguages}
+        {...props}
+      />,
+    )
+  }
+
   beforeEach(() => {
     vi.clearAllMocks()
     listeners.clear()
@@ -587,39 +599,33 @@ describe("TranslateDropdown", () => {
 
   afterEach(cleanup)
 
-  it("renders all languages", () => {
-    render(
-      <Wrapper>
-        <TranslateDropdown onSelect={() => {}} languages={testLanguages} />
-      </Wrapper>,
-    )
+  it("renders all languages from props without a provider", () => {
+    renderDropdown()
 
     expect(screen.getByText("Spanish")).toBeInTheDocument()
     expect(screen.getByText("French")).toBeInTheDocument()
   })
 
+  it("throws when neither languages nor a provider are present", () => {
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {})
+
+    expect(() => render(<TranslateDropdown onSelect={() => {}} />)).toThrow(
+      "TranslateDropdown requires either a languages prop or a <TranslatorProvider>",
+    )
+
+    spy.mockRestore()
+  })
+
   it("calls onSelect with correct code", () => {
     const onSelect = vi.fn()
-    render(
-      <Wrapper>
-        <TranslateDropdown onSelect={onSelect} languages={testLanguages} />
-      </Wrapper>,
-    )
+    renderDropdown({ onSelect })
 
     fireEvent.click(screen.getByText("Spanish"))
     expect(onSelect).toHaveBeenCalledWith("es-ES")
   })
 
   it("marks active language", () => {
-    render(
-      <Wrapper>
-        <TranslateDropdown
-          onSelect={() => {}}
-          value="es-ES"
-          languages={testLanguages}
-        />
-      </Wrapper>,
-    )
+    renderDropdown({ value: "es-ES" })
 
     const options = screen.getAllByRole("option")
     const spanish = options.find((el) => el.textContent?.includes("Spanish"))
@@ -627,15 +633,7 @@ describe("TranslateDropdown", () => {
   })
 
   it("applies disabled styling", () => {
-    render(
-      <Wrapper>
-        <TranslateDropdown
-          onSelect={() => {}}
-          disabled
-          languages={testLanguages}
-        />
-      </Wrapper>,
-    )
+    renderDropdown({ disabled: true })
 
     const listbox = screen.getByRole("listbox")
     expect(listbox.style.pointerEvents).toBe("none")
@@ -643,35 +641,21 @@ describe("TranslateDropdown", () => {
   })
 
   it("uses custom renderOption", () => {
-    render(
-      <Wrapper>
-        <TranslateDropdown
-          onSelect={() => {}}
-          languages={testLanguages}
-          renderOption={(lang, active) => (
-            <span data-testid={`custom-${lang.code}`}>
-              {lang.label} {active ? "(active)" : ""}
-            </span>
-          )}
-          value="fr"
-        />
-      </Wrapper>,
-    )
+    renderDropdown({
+      renderOption: (lang, active) => (
+        <span data-testid={`custom-${lang.code}`}>
+          {lang.label} {active ? "(active)" : ""}
+        </span>
+      ),
+      value: "fr",
+    })
 
     expect(screen.getByTestId("custom-fr")).toHaveTextContent("French (active)")
     expect(screen.getByTestId("custom-es-ES")).toHaveTextContent("Spanish")
   })
 
   it("shows Original entry above languages when onRestore is provided", () => {
-    render(
-      <Wrapper>
-        <TranslateDropdown
-          onSelect={() => {}}
-          onRestore={() => {}}
-          languages={testLanguages}
-        />
-      </Wrapper>,
-    )
+    renderDropdown({ onRestore: () => {} })
 
     const options = screen.getAllByRole("option")
     expect(options[0]).toHaveTextContent("Original")
@@ -681,31 +665,14 @@ describe("TranslateDropdown", () => {
 
   it("calls onRestore when Original is clicked", () => {
     const onRestore = vi.fn()
-    render(
-      <Wrapper>
-        <TranslateDropdown
-          onSelect={() => {}}
-          onRestore={onRestore}
-          languages={testLanguages}
-        />
-      </Wrapper>,
-    )
+    renderDropdown({ onRestore })
 
     fireEvent.click(screen.getByText("Original"))
     expect(onRestore).toHaveBeenCalledTimes(1)
   })
 
   it("marks Original as active when value is null", () => {
-    render(
-      <Wrapper>
-        <TranslateDropdown
-          onSelect={() => {}}
-          onRestore={() => {}}
-          value={null}
-          languages={testLanguages}
-        />
-      </Wrapper>,
-    )
+    renderDropdown({ onRestore: () => {}, value: null })
 
     const options = screen.getAllByRole("option")
     expect(options[0]).toHaveAttribute("aria-selected", "true")
@@ -713,11 +680,7 @@ describe("TranslateDropdown", () => {
   })
 
   it("does not show Original when onRestore is omitted", () => {
-    render(
-      <Wrapper>
-        <TranslateDropdown onSelect={() => {}} languages={testLanguages} />
-      </Wrapper>,
-    )
+    renderDropdown()
 
     expect(screen.queryByText("Original")).not.toBeInTheDocument()
     const options = screen.getAllByRole("option")
@@ -726,21 +689,25 @@ describe("TranslateDropdown", () => {
 
   it("does not alter consumer languages list when showing Original", () => {
     const onSelect = vi.fn()
-    render(
-      <Wrapper>
-        <TranslateDropdown
-          onSelect={onSelect}
-          onRestore={() => {}}
-          languages={testLanguages}
-        />
-      </Wrapper>,
-    )
+    renderDropdown({ onSelect, onRestore: () => {} })
 
     fireEvent.click(screen.getByText("Spanish"))
     expect(onSelect).toHaveBeenCalledWith("es-ES")
 
     const options = screen.getAllByRole("option")
     expect(options).toHaveLength(3)
+  })
+
+  it("falls back to provider languages when no languages prop is supplied", () => {
+    render(
+      <Wrapper>
+        <TranslateDropdown onSelect={() => {}} />
+      </Wrapper>,
+    )
+
+    expect(screen.getByText("Spanish")).toBeInTheDocument()
+    expect(screen.getByText("French")).toBeInTheDocument()
+    expect(screen.getByText("German")).toBeInTheDocument()
   })
 })
 
