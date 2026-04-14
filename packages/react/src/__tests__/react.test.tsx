@@ -709,6 +709,18 @@ describe("TranslateDropdown", () => {
     expect(screen.getByText("French")).toBeInTheDocument()
     expect(screen.getByText("German")).toBeInTheDocument()
   })
+
+  it("prefers explicit languages over provider languages", () => {
+    render(
+      <Wrapper>
+        <TranslateDropdown onSelect={() => {}} languages={testLanguages} />
+      </Wrapper>,
+    )
+
+    expect(screen.getByText("Spanish")).toBeInTheDocument()
+    expect(screen.getByText("French")).toBeInTheDocument()
+    expect(screen.queryByText("German")).not.toBeInTheDocument()
+  })
 })
 
 describe("useTranslateDOM", () => {

@@ -1,6 +1,8 @@
-import { useContext, useEffect, useRef, type ReactNode } from "react"
-import { TranslatorContext } from "./context.js"
-import type { TranslatorLanguage } from "./context.js"
+import { useEffect, useRef, type ReactNode } from "react"
+import {
+  useOptionalTranslatorContext,
+  type TranslatorLanguage,
+} from "./context.js"
 
 export type TranslateDropdownProps = {
   readonly onSelect: (code: string) => void
@@ -41,7 +43,7 @@ export function TranslateDropdown({
   languages: languagesProp,
   focusedIndex = -1,
 }: TranslateDropdownProps) {
-  const ctx = useContext(TranslatorContext)
+  const ctx = useOptionalTranslatorContext()
   const languages = languagesProp ?? ctx?.languages
 
   if (!languages) {

@@ -6,7 +6,7 @@ import { SSR_CORE } from "./ssr.js"
 
 export type TranslatorConfig = BabulfishConfig
 
-export type { TranslatorLanguage, TranslatorContextValue } from "./context.js"
+export type { TranslatorLanguage } from "./context.js"
 export { useTranslatorContext } from "./context.js"
 
 export function TranslatorProvider({
