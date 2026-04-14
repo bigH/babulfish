@@ -1,6 +1,6 @@
 /** @experimental — subject to change */
 
-import type { Snapshot } from "../core/index.js"
+import type { Snapshot } from "../core/store.js"
 import { loadPipeline } from "../engine/pipeline-loader.js"
 import { getEngineIdentity } from "../engine/testing/index.js"
 import type { ConformanceDriver, ConformanceScenario } from "./drivers/types.js"

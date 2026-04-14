@@ -1,7 +1,7 @@
 /** @experimental — subject to change */
 
-import { createBabulfish } from "../../core/index.js"
-import type { BabulfishConfig, BabulfishCore } from "../../core/index.js"
+import { createBabulfish } from "../../core/babulfish.js"
+import type { BabulfishConfig, BabulfishCore } from "../../core/babulfish.js"
 import type { ConformanceDriver } from "./types.js"
 
 /** @experimental — subject to change */

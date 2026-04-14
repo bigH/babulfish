@@ -1,6 +1,6 @@
 /** @experimental — subject to change */
 
-import type { BabulfishConfig, BabulfishCore } from "../../core/index.js"
+import type { BabulfishConfig, BabulfishCore } from "../../core/babulfish.js"
 
 /** @experimental — subject to change */
 export interface ConformanceDriver {

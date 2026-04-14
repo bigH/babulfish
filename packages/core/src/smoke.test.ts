@@ -1,4 +1,6 @@
 import { describe, it, expect } from "vitest"
+import { createBabulfish } from "./core/babulfish.js"
+import { DEFAULT_LANGUAGES } from "./core/languages.js"
 import { createEngine } from "./engine/index.js"
 import { createDOMTranslator } from "./dom/index.js"
 import * as barrel from "./index.js"
@@ -27,7 +29,9 @@ describe("smoke tests", () => {
     expect(translator.currentLang).toBeNull()
   })
 
-  it("barrel re-exports engine and dom", () => {
+  it("barrel re-exports core, engine, and dom", () => {
+    expect(barrel.createBabulfish).toBe(createBabulfish)
+    expect(barrel.DEFAULT_LANGUAGES).toBe(DEFAULT_LANGUAGES)
     expect(barrel.createEngine).toBe(createEngine)
     expect(barrel.createDOMTranslator).toBe(createDOMTranslator)
   })
