@@ -15,6 +15,11 @@ type BridgeState = {
   getSnapshot: (() => Snapshot) | null
 }
 
+type DriverRegistration = {
+  readonly unmount: () => void
+  readonly snapshotDescriptor: PropertyDescriptor
+}
+
 function captureSnapshotGetter(core: BabulfishCore): () => Snapshot {
   const getter = Object.getOwnPropertyDescriptor(core, "snapshot")?.get
   if (!getter) {
@@ -42,7 +47,7 @@ function SnapshotBridge({ bridge }: { bridge: BridgeState }): null {
 
 /** @experimental */
 export function ReactConformanceDriver(): ConformanceDriver {
-  const registry = new Map<BabulfishCore, () => void>()
+  const registry = new Map<BabulfishCore, DriverRegistration>()
 
   return {
     id: "react",
@@ -77,7 +82,15 @@ export function ReactConformanceDriver(): ConformanceDriver {
         unmount = result.unmount
       })
 
-      const core = bridge.core!
+      const core = bridge.core
+      if (!core || !bridge.snapshot) {
+        throw new Error("React conformance driver failed to capture the provider core snapshot")
+      }
+
+      const snapshotDescriptor = Object.getOwnPropertyDescriptor(core, "snapshot")
+      if (!snapshotDescriptor?.get) {
+        throw new Error("React conformance driver requires core.snapshot to be a getter")
+      }
 
       Object.defineProperty(core, "snapshot", {
         get: () => bridge.snapshot,
@@ -85,16 +98,17 @@ export function ReactConformanceDriver(): ConformanceDriver {
         enumerable: true,
       })
 
-      registry.set(core, unmount)
+      registry.set(core, { unmount, snapshotDescriptor })
       return core
     },
 
     async dispose(core: BabulfishCore) {
-      const unmount = registry.get(core)
-      if (!unmount) return
+      const registration = registry.get(core)
+      if (!registration) return
       await act(async () => {
-        unmount()
+        registration.unmount()
       })
+      Object.defineProperty(core, "snapshot", registration.snapshotDescriptor)
       registry.delete(core)
     },
   }
