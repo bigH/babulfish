@@ -91,7 +91,7 @@ export function useTranslator(): UseTranslatorReturn {
 
   // Wire engine events -> model state
   useEffect(() => {
-    const unsubStatus = engine.on("status-change", ({ to }) => {
+    const unsubStatus = engine.on("status-change", ({ to, error }) => {
       switch (to) {
         case "idle":
           setModel({ status: "idle" })
@@ -103,7 +103,7 @@ export function useTranslator(): UseTranslatorReturn {
           setModel({ status: "ready" })
           break
         case "error":
-          setModel({ status: "error", error: new Error("Model loading failed") })
+          setModel({ status: "error", error })
           break
       }
     })

@@ -71,8 +71,10 @@ const mockPipeline = vi.mocked(pipeline)
 // Helpers
 // ---------------------------------------------------------------------------
 
+type StatusChange = { from: TranslatorStatus; to: TranslatorStatus; error?: unknown }
+
 function statusChanges(engine: ReturnType<typeof createEngine>) {
-  const changes: Array<{ from: TranslatorStatus; to: TranslatorStatus }> = []
+  const changes: StatusChange[] = []
   engine.on("status-change", (e) => changes.push(e))
   return changes
 }
@@ -161,8 +163,9 @@ describe("load", () => {
     expect(mockPipeline).toHaveBeenCalledTimes(1)
   })
 
-  it("transitions to error on failure", async () => {
-    mockPipeline.mockImplementation(() => Promise.reject(new Error("network down")))
+  it("transitions to error on failure and carries the error", async () => {
+    const cause = new Error("network down")
+    mockPipeline.mockImplementation(() => Promise.reject(cause))
 
     const engine = createEngine()
     const changes = statusChanges(engine)
@@ -171,7 +174,7 @@ describe("load", () => {
 
     expect(changes).toEqual([
       { from: "idle", to: "downloading" },
-      { from: "downloading", to: "error" },
+      { from: "downloading", to: "error", error: cause },
     ])
     expect(engine.status).toBe("error")
   })
@@ -372,6 +375,41 @@ describe("event emitter", () => {
     capturedCallback?.({ status: "done", file: "model.bin", name: "m" })
 
     expect(progressEvents).toHaveLength(0)
+  })
+})
+
+describe("error propagation", () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockGenerate.mockReset()
+    mockPipeline.mockImplementation(resolveMockPipeline)
+  })
+
+  it("surfaces the exact error from a rejected pipeline import", async () => {
+    const forced = new Error("forced failure for test")
+    mockPipeline.mockImplementation(() => Promise.reject(forced))
+
+    const engine = createEngine()
+    const received: unknown[] = []
+    engine.on("status-change", (e) => {
+      if (e.error !== undefined) received.push(e.error)
+    })
+
+    await expect(engine.load()).rejects.toThrow("forced failure for test")
+
+    expect(received).toHaveLength(1)
+    expect(received[0]).toBe(forced)
+  })
+
+  it("does not include error field on non-error transitions", async () => {
+    const engine = createEngine()
+    const changes = statusChanges(engine)
+
+    await engine.load()
+
+    for (const change of changes) {
+      expect(change).not.toHaveProperty("error")
+    }
   })
 })
 

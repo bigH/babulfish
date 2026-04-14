@@ -18,7 +18,7 @@ export type EngineConfig = {
 export type TranslatorStatus = "idle" | "downloading" | "ready" | "error"
 
 export type TranslatorEvents = {
-  "status-change": { from: TranslatorStatus; to: TranslatorStatus }
+  "status-change": { from: TranslatorStatus; to: TranslatorStatus; error?: unknown }
   "progress": { loaded: number; total: number; name?: string }
 }
 
@@ -86,11 +86,11 @@ export function createEngine(config?: EngineConfig): Translator {
     }
   }
 
-  function transition(to: TranslatorStatus): void {
+  function transition(to: TranslatorStatus, error?: unknown): void {
     const from = currentStatus
     if (from === to) return
     currentStatus = to
-    emit("status-change", { from, to })
+    emit("status-change", error !== undefined ? { from, to, error } : { from, to })
   }
 
   function buildProgressCallback(): (event: ProgressInfo) => void {
@@ -145,7 +145,7 @@ export function createEngine(config?: EngineConfig): Translator {
       if (!disposed) {
         pipelinePromise = null
         loadPromise = null
-        transition("error")
+        transition("error", err)
       }
       throw err
     }
