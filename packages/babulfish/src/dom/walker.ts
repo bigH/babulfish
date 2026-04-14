@@ -53,7 +53,7 @@ export function collectTextNodes(
   originalTexts: WeakMap<Text, string>,
   skipSelectors: ReadonlyArray<{ selector: string }> = [],
 ): TaggedTextNode[] {
-  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+  const walker = root.ownerDocument!.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
     acceptNode(node: Text) {
       if (isInsideSkipped(node, config.skipTags, skipSelectors))
         return NodeFilter.FILTER_REJECT

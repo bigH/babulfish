@@ -28,6 +28,8 @@ export type LinkedConfig = {
 export type DOMTranslatorConfig = {
   readonly translate: (text: string, targetLang: string) => Promise<string>
   readonly roots: string[]
+  /** Scoping root for DOM queries. Defaults to `document` when omitted. */
+  readonly root?: ParentNode | Document
   readonly phases?: string[]
   readonly preserve?: { matchers: PreserveMatcher[] }
   readonly skipTags?: string[]
@@ -78,9 +80,12 @@ type PhaseWork = {
 
 const DEFAULT_RTL_LANGS: ReadonlySet<string> = new Set(["ar", "he", "ur", "fa"])
 
-function resolveRoots(selectors: readonly string[]): Element[] {
+function resolveRoots(
+  selectors: readonly string[],
+  scope: ParentNode | Document,
+): Element[] {
   return selectors
-    .map((sel) => document.querySelector(sel))
+    .map((sel) => scope.querySelector(sel))
     .filter((el): el is Element => el !== null)
 }
 
@@ -127,6 +132,8 @@ function notifyEnd(
 // ---------------------------------------------------------------------------
 
 export function createDOMTranslator(config: DOMTranslatorConfig): DOMTranslator {
+  const scope: ParentNode | Document = config.root ?? document
+
   // Instance-scoped state — no module singletons
   const originalTexts = new WeakMap<Text, string>()
   const originalRichElements = new Map<Element, string>()
@@ -329,7 +336,7 @@ export function createDOMTranslator(config: DOMTranslatorConfig): DOMTranslator 
     lang = targetLang
 
     try {
-      const roots = resolveRoots(config.roots)
+      const roots = resolveRoots(config.roots, scope)
       if (roots.length === 0) return
 
       // RTL direction
@@ -368,7 +375,7 @@ export function createDOMTranslator(config: DOMTranslatorConfig): DOMTranslator 
       // If phases configured, partition work; otherwise treat as single phase
       if (config.phases && config.phases.length > 0) {
         const phaseRoots = config.phases.map((sel) =>
-          Array.from(document.querySelectorAll(sel)),
+          Array.from(scope.querySelectorAll(sel)),
         )
         const phaseCount = config.phases.length + 1
         const phases: PhaseWork[] = Array.from({ length: phaseCount }, () => ({
@@ -491,9 +498,9 @@ export function createDOMTranslator(config: DOMTranslatorConfig): DOMTranslator 
     originalLinkedSources.clear()
 
     // Restore text nodes
-    const roots = resolveRoots(config.roots)
+    const roots = resolveRoots(config.roots, scope)
     for (const root of roots) {
-      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
+      const walker = root.ownerDocument!.createTreeWalker(root, NodeFilter.SHOW_TEXT)
       let current = walker.nextNode() as Text | null
       while (current) {
         const original = originalTexts.get(current)
