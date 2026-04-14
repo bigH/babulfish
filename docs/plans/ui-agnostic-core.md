@@ -645,7 +645,7 @@ Dispatch note for agents: when you pick this task up, scan the file tree — if 
 
 ## Phase 2 — UI-agnostic proof
 
-### T-7 — `packages/demo-vanilla` (zero-framework demo)
+### T-7 — `packages/demo-vanilla` (zero-framework demo)  ✅ complete
 
 - **Owner:** `[Artisan]`
 - **Phase:** 2
@@ -714,7 +714,7 @@ Dispatch note for agents: when you pick this task up, scan the file tree — if 
   - New directory: `packages/demo-webcomponent/`
   - New: `packages/demo-webcomponent/package.json` (`@babulfish/demo-webcomponent`, `private: true`)
   - New: `packages/demo-webcomponent/index.html` (hosts the custom element)
-  - New: `packages/demo-webcomponent/src/babulfish-translator.ts` (custom element defined via `class extends HTMLElement`; attaches Shadow DOM; creates `createBabulfish({ dom: { root: shadowRoot } })`; dispatches `CustomEvent`s for status changes)
+  - New: `packages/demo-webcomponent/src/babulfish-translator.ts` (custom element defined via `class extends HTMLElement`; attaches Shadow DOM; creates `createBabulfish({ dom: { root: this.shadowRoot, roots: [".content"] } })`; dispatches `CustomEvent`s for status changes)
   - New: `packages/demo-webcomponent/README.md`
 - **Acceptance:**
   - Custom element `<babulfish-translator>` renders into Shadow DOM; translation works inside the shadow root; the host document is untouched (verify via a listener on `document.DOMContentLoaded`-style observers).
@@ -737,7 +737,7 @@ Dispatch note for agents: when you pick this task up, scan the file tree — if 
   Task:
   1. Create packages/demo-webcomponent/ with a static HTML page that hosts `<babulfish-translator data-model="...">` twice on the page (to prove singleton engine sharing across elements).
   2. Implement the custom element:
-     - connectedCallback: attachShadow({ mode: "open" }); render inner template (sample paragraph + controls); const core = createBabulfish({ dom: { root: this.shadowRoot } }); core.subscribe(snapshot => this.dispatchEvent(new CustomEvent("babulfish-status", { detail: snapshot, bubbles: true, composed: true }))); translate on attribute change; restore on a method/event.
+     - connectedCallback: attachShadow({ mode: "open" }); render inner template (sample paragraph + controls); const core = createBabulfish({ dom: { root: this.shadowRoot, roots: [".content"] } }); core.subscribe(snapshot => this.dispatchEvent(new CustomEvent("babulfish-status", { detail: snapshot, bubbles: true, composed: true }))); translate on attribute change; restore on a method/event.
      - disconnectedCallback: core.dispose().
   3. Host page binds to `babulfish-status` events to log status transitions to console.
   4. Verify both custom elements share one engine (check console; engine loads the model once).
@@ -821,3 +821,4 @@ Dispatch note for agents: when you pick this task up, scan the file tree — if 
 - **T-4** ✅ complete — conformance suite with all 16 planned scenarios (a–p) across snapshot, lifecycle/multi-instance, cancellation, root-override, and translateText-purity groups. Direct driver (11 scenarios; skips `requiresDOM`) and vanilla DOM driver (all 16) both green. Two minor interface refinements vs. plan spec: `ConformanceDriver.dispose` returns `Promise<void>` (matches async teardown reality) and `create` takes optional config (more ergonomic for scenarios that use defaults). Public barrel at `@babulfish/core/testing` with `@experimental` JSDoc on all exports. Engine mocked exclusively via `pipeline-loader` seam. No downstream drift — T-6 and T-7 expectations align with shipped exports.
 - **T-5** ✅ complete — React binding is now a thin projection of `BabulfishCore`. `provider.tsx` is 26 non-comment/non-import lines (wiring only: lazy `createBabulfish`, context, dispose-on-unmount). Both `use-translator.ts` and `use-translate-dom.ts` subscribe exclusively via `useSyncExternalStore`; zero `useState` for core-owned state. `DEFAULT_LANGUAGES` re-exported from `@babulfish/core`; no `"restore"` sentinel. `TranslateDropdown` renders a binding-local "Original" affordance that calls `core.restore()`, with snapshot/behavior tests proving it. New `ssr.ts` provides a frozen SSR-safe snapshot for `useSyncExternalStore`'s server fallback. `languages` return type tightened to `ReadonlyArray<TranslatorLanguage>` (safe narrowing — read-only supertype). 35/35 React tests green. No `packages/core/` files touched. No downstream drift — T-6 and T-9 expectations align with shipped surface.
 - **T-6** ✅ complete — React conformance test suite in `packages/react/src/__tests__/conformance.test.tsx` runs all shared scenarios from `@babulfish/core/testing` through a `ReactConformanceDriver`. Driver mounts `<TranslatorProvider>` via `@testing-library/react`, reads snapshots through `useTranslatorContext()` + `useSyncExternalStore` (proving the binding layer, not bypassing to core). Failure messages include `driver.id="react"` and `scenario.id`. `ReactConformanceDriver` exported with `@experimental` JSDoc from `packages/react/src/testing/react-driver.ts`. Added `packages/react/vitest.config.ts` for test infrastructure. All scenarios green. No core scenarios modified. No downstream drift — T-9 expectations unaffected.
+- **T-7** ✅ complete — `packages/demo-vanilla/` proves UI-agnosticism with a zero-framework demo. ~71-line `main.ts` wires `createBabulfish` to pure DOM: `<select>` for language, "Original" button for restore, status region tracking model/translation/language state via `core.subscribe`. Vite plain-HTML dev server with COOP/COEP headers for WebGPU. `@babulfish/styles/css` imported for consistent theming. All acceptance criteria met: zero framework deps, functional translate/restore cycle, static build via `pnpm build`, README links to root "Pick your binding" matrix. One API shape note: dispatch template's `createBabulfish({ root: document })` became `createBabulfish({ dom: { roots: ["article"] } })` reflecting the finalized T-3b contract (`roots` = CSS selector array, `root` = scoping root). Updated T-8's template accordingly — `roots` is required alongside `root` when providing `dom` config.
