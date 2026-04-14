@@ -1,5 +1,6 @@
 /** @experimental — subject to change */
 
+import type { BabulfishCore, TranslateOptions } from "../core/babulfish.js"
 import type { Snapshot } from "../core/store.js"
 import { loadPipeline } from "../engine/pipeline-loader.js"
 import { getEngineIdentity } from "../engine/testing/index.js"
@@ -73,22 +74,66 @@ function controllablePipeline() {
   }
   return {
     pipeline: Object.assign(generate, { dispose: async () => {} }),
-    barriers,
     resolveAll() {
       barriers.forEach((r) => r())
     },
   }
 }
 
-function collect(
-  core: { subscribe(fn: (s: Snapshot) => void): () => void },
-): Snapshot[] {
+function collect(core: Pick<BabulfishCore, "subscribe">): Snapshot[] {
   const out: Snapshot[] = []
   core.subscribe((s) => out.push(s))
   return out
 }
 
 const tick = () => new Promise<void>((r) => setTimeout(r, 0))
+
+async function withCore<T>(
+  driver: ConformanceDriver,
+  run: (core: BabulfishCore) => Promise<T>,
+): Promise<T> {
+  const core = await driver.create()
+  try {
+    return await run(core)
+  } finally {
+    await driver.dispose(core)
+  }
+}
+
+async function withLoadedCore<T>(
+  driver: ConformanceDriver,
+  run: (core: BabulfishCore) => Promise<T>,
+  translation = "translated",
+): Promise<T> {
+  mockedLoad.mockResolvedValue(fakePipeline(translation))
+  return withCore(driver, async (core) => {
+    await core.loadModel()
+    return run(core)
+  })
+}
+
+async function startPendingTranslation(
+  driver: ConformanceDriver,
+  lang: string,
+  opts?: TranslateOptions,
+): Promise<{
+  readonly core: BabulfishCore
+  readonly translation: Promise<void>
+  readonly resolve: () => void
+}> {
+  const { pipeline, resolveAll } = controllablePipeline()
+  mockedLoad.mockResolvedValue(pipeline)
+  const core = await driver.create()
+  await core.loadModel()
+  const translation = core.translateTo(lang, opts)
+  translation.catch(() => {})
+  await tick()
+  return {
+    core,
+    translation,
+    resolve: resolveAll,
+  }
+}
 
 // ---------------------------------------------------------------------------
 // DOM helpers (test-only, hardcoded trusted content)
@@ -125,11 +170,9 @@ export const scenarios: readonly ConformanceScenario[] = [
     id: "snapshot-model-ready",
     description: "loadModel resolves → model.status === 'ready'",
     async run(driver) {
-      mockedLoad.mockResolvedValue(fakePipeline())
-      const core = await driver.create()
-      await core.loadModel()
-      assertEqual(core.snapshot.model.status, "ready", "model status")
-      await driver.dispose(core)
+      await withLoadedCore(driver, async (core) => {
+        assertEqual(core.snapshot.model.status, "ready", "model status")
+      })
     },
   },
 
@@ -146,19 +189,19 @@ export const scenarios: readonly ConformanceScenario[] = [
           return fakePipeline()
         },
       )
-      const core = await driver.create()
-      const values: number[] = []
-      core.subscribe((s) => {
-        if (s.model.status === "downloading") values.push(s.model.progress)
+      await withCore(driver, async (core) => {
+        const values: number[] = []
+        core.subscribe((s) => {
+          if (s.model.status === "downloading") values.push(s.model.progress)
+        })
+        await core.loadModel()
+        assert(values.length > 0, "Should have progress snapshots")
+        for (let i = 1; i < values.length; i++)
+          assert(
+            values[i]! >= values[i - 1]!,
+            `Progress decreased: ${values[i - 1]} → ${values[i]}`,
+          )
       })
-      await core.loadModel()
-      assert(values.length > 0, "Should have progress snapshots")
-      for (let i = 1; i < values.length; i++)
-        assert(
-          values[i]! >= values[i - 1]!,
-          `Progress decreased: ${values[i - 1]} → ${values[i]}`,
-        )
-      await driver.dispose(core)
     },
   },
 
@@ -167,18 +210,16 @@ export const scenarios: readonly ConformanceScenario[] = [
     description:
       "Translation state change preserves model/capabilities references",
     async run(driver) {
-      mockedLoad.mockResolvedValue(fakePipeline())
-      const core = await driver.create()
-      await core.loadModel()
-      const before = core.snapshot
-      const snaps = collect(core)
-      await core.translateTo("es")
-      assert(snaps.length >= 2, `Expected ≥2 snapshots, got ${snaps.length}`)
-      for (const s of snaps) {
-        assertEqual(s.model, before.model, "model ref")
-        assertEqual(s.capabilities, before.capabilities, "capabilities ref")
-      }
-      await driver.dispose(core)
+      await withLoadedCore(driver, async (core) => {
+        const before = core.snapshot
+        const snaps = collect(core)
+        await core.translateTo("es")
+        assert(snaps.length >= 2, `Expected ≥2 snapshots, got ${snaps.length}`)
+        for (const s of snaps) {
+          assertEqual(s.model, before.model, "model ref")
+          assertEqual(s.capabilities, before.capabilities, "capabilities ref")
+        }
+      })
     },
   },
 
@@ -186,12 +227,12 @@ export const scenarios: readonly ConformanceScenario[] = [
     id: "snapshot-no-spurious-notify",
     description: "restore() from already-idle does NOT invoke subscribers",
     async run(driver) {
-      const core = await driver.create()
-      const snaps = collect(core)
-      core.restore()
-      core.restore()
-      assertEqual(snaps.length, 0, "No notifications from idle restore")
-      await driver.dispose(core)
+      await withCore(driver, async (core) => {
+        const snaps = collect(core)
+        core.restore()
+        core.restore()
+        assertEqual(snaps.length, 0, "No notifications from idle restore")
+      })
     },
   },
 
@@ -228,10 +269,10 @@ export const scenarios: readonly ConformanceScenario[] = [
       const savedWindow = globalThis.window
       delete (globalThis as Record<string, unknown>).window
       try {
-        const core = await driver.create()
-        assert(core.snapshot.capabilities !== null, "capabilities defined")
-        assertEqual(core.snapshot.capabilities.ready, false, "ready is false before loadModel")
-        await driver.dispose(core)
+        await withCore(driver, async (core) => {
+          assert(core.snapshot.capabilities !== null, "capabilities defined")
+          assertEqual(core.snapshot.capabilities.ready, false, "ready is false before loadModel")
+        })
       } finally {
         globalThis.window = savedWindow
       }
@@ -243,15 +284,21 @@ export const scenarios: readonly ConformanceScenario[] = [
     description: "Two cores share one engine via getEngineIdentity()",
     async run(driver) {
       const a = await driver.create()
-      const b = await driver.create()
-      assert(getEngineIdentity(a) !== undefined, "Core A identity defined")
-      assertEqual(
-        getEngineIdentity(a),
-        getEngineIdentity(b),
-        "Same engine identity",
-      )
-      await driver.dispose(a)
-      await driver.dispose(b)
+      try {
+        const b = await driver.create()
+        try {
+          assert(getEngineIdentity(a) !== undefined, "Core A identity defined")
+          assertEqual(
+            getEngineIdentity(a),
+            getEngineIdentity(b),
+            "Same engine identity",
+          )
+        } finally {
+          await driver.dispose(b)
+        }
+      } finally {
+        await driver.dispose(a)
+      }
     },
   },
 
@@ -264,11 +311,14 @@ export const scenarios: readonly ConformanceScenario[] = [
       const id1 = getEngineIdentity(first)
       await driver.dispose(first)
       const second = await driver.create()
-      assertEqual(getEngineIdentity(second), id1, "Engine identity preserved")
-      assertEqual(second.snapshot.model.status, "idle", "model idle")
-      assertEqual(second.snapshot.translation.status, "idle", "translation idle")
-      assertEqual(second.snapshot.currentLanguage, null, "currentLanguage null")
-      await driver.dispose(second)
+      try {
+        assertEqual(getEngineIdentity(second), id1, "Engine identity preserved")
+        assertEqual(second.snapshot.model.status, "idle", "model idle")
+        assertEqual(second.snapshot.translation.status, "idle", "translation idle")
+        assertEqual(second.snapshot.currentLanguage, null, "currentLanguage null")
+      } finally {
+        await driver.dispose(second)
+      }
     },
   },
 
@@ -278,15 +328,21 @@ export const scenarios: readonly ConformanceScenario[] = [
     async run(driver) {
       mockedLoad.mockResolvedValue(fakePipeline())
       const a = await driver.create()
-      const b = await driver.create()
-      await Promise.all([a.loadModel(), b.loadModel()])
-      assertEqual(
-        mockedLoad.mock.calls.length,
-        1,
-        "loadPipeline call count",
-      )
-      await driver.dispose(a)
-      await driver.dispose(b)
+      try {
+        const b = await driver.create()
+        try {
+          await Promise.all([a.loadModel(), b.loadModel()])
+          assertEqual(
+            mockedLoad.mock.calls.length,
+            1,
+            "loadPipeline call count",
+          )
+        } finally {
+          await driver.dispose(b)
+        }
+      } finally {
+        await driver.dispose(a)
+      }
     },
   },
 
@@ -298,20 +354,29 @@ export const scenarios: readonly ConformanceScenario[] = [
       const { pipeline, resolveAll } = controllablePipeline()
       mockedLoad.mockResolvedValue(pipeline)
       const a = await driver.create()
-      const b = await driver.create()
-      await a.loadModel()
-      const snapBefore = b.snapshot
-      const p = b.translateText("hello", "es")
-      await a.dispose()
-      resolveAll()
-      assertEqual(await p, "translated", "B translates after A disposed")
-      assertEqual(b.snapshot.model.status, "ready", "B model ready")
-      assertEqual(
-        b.snapshot.translation,
-        snapBefore.translation,
-        "B translation unchanged",
-      )
-      await driver.dispose(b)
+      let aDisposed = false
+      try {
+        const b = await driver.create()
+        try {
+          await a.loadModel()
+          const snapBefore = b.snapshot
+          const p = b.translateText("hello", "es")
+          await a.dispose()
+          aDisposed = true
+          resolveAll()
+          assertEqual(await p, "translated", "B translates after A disposed")
+          assertEqual(b.snapshot.model.status, "ready", "B model ready")
+          assertEqual(
+            b.snapshot.translation,
+            snapBefore.translation,
+            "B translation unchanged",
+          )
+        } finally {
+          await driver.dispose(b)
+        }
+      } finally {
+        if (!aDisposed) await driver.dispose(a)
+      }
     },
   },
 
@@ -325,17 +390,17 @@ export const scenarios: readonly ConformanceScenario[] = [
     async run(driver) {
       const { pipeline, resolveAll } = controllablePipeline()
       mockedLoad.mockResolvedValue(pipeline)
-      const core = await driver.create()
-      await core.loadModel()
-      const p1 = core.translateTo("a")
-      p1.catch(() => {})
-      const p2 = core.translateTo("b")
-      await tick()
-      resolveAll()
-      await expectAbortError(p1, "First translateTo")
-      await p2
-      assertEqual(core.snapshot.currentLanguage, "b", "currentLanguage")
-      await driver.dispose(core)
+      await withCore(driver, async (core) => {
+        await core.loadModel()
+        const p1 = core.translateTo("a")
+        p1.catch(() => {})
+        const p2 = core.translateTo("b")
+        await tick()
+        resolveAll()
+        await expectAbortError(p1, "First translateTo")
+        await p2
+        assertEqual(core.snapshot.currentLanguage, "b", "currentLanguage")
+      })
     },
   },
 
@@ -344,18 +409,19 @@ export const scenarios: readonly ConformanceScenario[] = [
     description: "translateTo + external abort() → rejects AbortError",
     requiresDOM: true,
     async run(driver) {
-      const { pipeline, resolveAll } = controllablePipeline()
-      mockedLoad.mockResolvedValue(pipeline)
-      const core = await driver.create()
-      await core.loadModel()
       const ac = new AbortController()
-      const p = core.translateTo("es", { signal: ac.signal })
-      p.catch(() => {})
-      await tick()
-      ac.abort()
-      resolveAll()
-      await expectAbortError(p, "External abort")
-      await driver.dispose(core)
+      const { core, translation, resolve } = await startPendingTranslation(
+        driver,
+        "es",
+        { signal: ac.signal },
+      )
+      try {
+        ac.abort()
+        resolve()
+        await expectAbortError(translation, "External abort")
+      } finally {
+        await driver.dispose(core)
+      }
     },
   },
 
@@ -365,17 +431,14 @@ export const scenarios: readonly ConformanceScenario[] = [
       "dispose() mid-translation rejects pending Promise with AbortError",
     requiresDOM: true,
     async run(driver) {
-      const { pipeline, resolveAll } = controllablePipeline()
-      mockedLoad.mockResolvedValue(pipeline)
-      const core = await driver.create()
-      await core.loadModel()
-      const p = core.translateTo("es")
-      p.catch(() => {})
-      await tick()
-      const dp = driver.dispose(core)
-      resolveAll()
-      await expectAbortError(p, "translateTo during dispose")
-      await dp
+      const { core, translation, resolve } = await startPendingTranslation(
+        driver,
+        "es",
+      )
+      const dispose = driver.dispose(core)
+      resolve()
+      await expectAbortError(translation, "translateTo during dispose")
+      await dispose
     },
   },
 
@@ -385,32 +448,32 @@ export const scenarios: readonly ConformanceScenario[] = [
       "abort() mid-translation → idle; no stale completion to subscribers",
     requiresDOM: true,
     async run(driver) {
-      const { pipeline, resolveAll } = controllablePipeline()
-      mockedLoad.mockResolvedValue(pipeline)
-      const core = await driver.create()
-      await core.loadModel()
-      const p = core.translateTo("es")
-      p.catch(() => {})
-      await tick()
-      const snaps = collect(core)
-      core.abort()
-      resolveAll()
+      const { core, translation, resolve } = await startPendingTranslation(
+        driver,
+        "es",
+      )
       try {
-        await p
-      } catch {
-        /* expected AbortError */
+        const snaps = collect(core)
+        core.abort()
+        resolve()
+        try {
+          await translation
+        } catch {
+          /* expected AbortError */
+        }
+        assertEqual(
+          core.snapshot.translation.status,
+          "idle",
+          "Translation idle after abort",
+        )
+        assertEqual(
+          snaps.filter((s) => s.translation.status !== "idle").length,
+          0,
+          "No stale completion",
+        )
+      } finally {
+        await driver.dispose(core)
       }
-      assertEqual(
-        core.snapshot.translation.status,
-        "idle",
-        "Translation idle after abort",
-      )
-      assertEqual(
-        snaps.filter((s) => s.translation.status !== "idle").length,
-        0,
-        "No stale completion",
-      )
-      await driver.dispose(core)
     },
   },
 
@@ -422,26 +485,24 @@ export const scenarios: readonly ConformanceScenario[] = [
       "translateTo with root override only affects the fragment",
     requiresDOM: true,
     async run(driver) {
-      mockedLoad.mockResolvedValue(fakePipeline("traducido"))
-      const core = await driver.create()
-      await core.loadModel()
-      const root = domRootFor(driver)
-      const original = root.querySelector("#app p")?.textContent ?? ""
-      const doc = ownerDocumentFor(root)
-      const container = doc.createElement("div")
-      // Safe: hardcoded test fixture, not user content
-      setInnerHTML(container, '<div id="app"><p>Override me</p></div>')
-      await core.translateTo("es", { root: container })
-      assert(
-        container.querySelector("#app p")?.textContent !== "Override me",
-        "Fragment text should change",
-      )
-      assertEqual(
-        root.querySelector("#app p")?.textContent ?? "",
-        original,
-        "Default root untouched",
-      )
-      await driver.dispose(core)
+      await withLoadedCore(driver, async (core) => {
+        const root = domRootFor(driver)
+        const original = root.querySelector("#app p")?.textContent ?? ""
+        const doc = ownerDocumentFor(root)
+        const container = doc.createElement("div")
+        // Safe: hardcoded test fixture, not user content
+        setInnerHTML(container, '<div id="app"><p>Override me</p></div>')
+        await core.translateTo("es", { root: container })
+        assert(
+          container.querySelector("#app p")?.textContent !== "Override me",
+          "Fragment text should change",
+        )
+        assertEqual(
+          root.querySelector("#app p")?.textContent ?? "",
+          original,
+          "Default root untouched",
+        )
+      }, "traducido")
     },
   },
 
@@ -452,28 +513,26 @@ export const scenarios: readonly ConformanceScenario[] = [
     description:
       "translateText() does not mutate snapshot or invoke subscribers",
     async run(driver) {
-      mockedLoad.mockResolvedValue(fakePipeline("hola"))
-      const core = await driver.create()
-      await core.loadModel()
-      const before = core.snapshot
-      let notified = false
-      core.subscribe(() => {
-        notified = true
-      })
-      const result = await core.translateText("hello", "es")
-      assertEqual(result, "hola", "Translation result")
-      assertEqual(
-        core.snapshot.translation,
-        before.translation,
-        "translation ref",
-      )
-      assertEqual(
-        core.snapshot.currentLanguage,
-        before.currentLanguage,
-        "currentLanguage",
-      )
-      assert(!notified, "No subscriber notification during translateText")
-      await driver.dispose(core)
+      await withLoadedCore(driver, async (core) => {
+        const before = core.snapshot
+        let notified = false
+        core.subscribe(() => {
+          notified = true
+        })
+        const result = await core.translateText("hello", "es")
+        assertEqual(result, "hola", "Translation result")
+        assertEqual(
+          core.snapshot.translation,
+          before.translation,
+          "translation ref",
+        )
+        assertEqual(
+          core.snapshot.currentLanguage,
+          before.currentLanguage,
+          "currentLanguage",
+        )
+        assert(!notified, "No subscriber notification during translateText")
+      }, "hola")
     },
   },
 ]
