@@ -74,6 +74,19 @@ describe("4.1 — engine singleton + multi-instance", () => {
     expect(getEngineIdentity(a)).toBeDefined()
   })
 
+  it("reset helper clears the shared engine identity", () => {
+    const first = createBabulfish()
+    const firstIdentity = getEngineIdentity(first)
+
+    __resetEngineForTests()
+
+    const second = createBabulfish()
+
+    expect(firstIdentity).toBeDefined()
+    expect(getEngineIdentity(second)).toBeDefined()
+    expect(getEngineIdentity(second)).not.toBe(firstIdentity)
+  })
+
   it("concurrent loadModel from two cores triggers exactly one loadPipeline call", async () => {
     setupPipelineMock()
     const a = createBabulfish()
