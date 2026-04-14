@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest"
 import { createDOMTranslator } from "../index.js"
-import type { DOMTranslatorConfig } from "../index.js"
 
 function uppercaseTranslate(text: string): Promise<string> {
   return Promise.resolve(text.toUpperCase())
@@ -14,24 +13,29 @@ afterEach(() => {
 })
 
 describe("DOMTranslator with custom root", () => {
-  it("translates inside a DocumentFragment without touching global document", async () => {
-    const container = document.createElement("main")
-    const p = document.createElement("p")
-    p.textContent = "hello world"
-    container.appendChild(p)
-    document.body.appendChild(container)
+  it("translates inside a DocumentFragment with two text nodes without touching global document", async () => {
+    const frag = document.createDocumentFragment()
+    const section = document.createElement("section")
+    const p1 = document.createElement("p")
+    p1.textContent = "hello"
+    const p2 = document.createElement("p")
+    p2.textContent = "world"
+    section.appendChild(p1)
+    section.appendChild(p2)
+    frag.appendChild(section)
 
     const spy = vi.spyOn(document, "querySelector")
 
     const translator = createDOMTranslator({
       translate: uppercaseTranslate,
-      roots: ["main"],
-      root: document.body,
+      roots: ["section"],
+      root: frag,
     })
 
     await translator.translate("de")
 
-    expect(p.textContent).toBe("HELLO WORLD")
+    expect(p1.textContent).toBe("HELLO")
+    expect(p2.textContent).toBe("WORLD")
     expect(spy).not.toHaveBeenCalled()
   })
 
