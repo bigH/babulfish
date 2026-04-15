@@ -5,6 +5,15 @@ import type { TaggedTextNode } from "./walker.js"
 
 export const DEFAULT_BATCH_CHAR_LIMIT = 500
 
+function normalizeCharLimit(charLimit: number): number {
+  if (!Number.isFinite(charLimit) || charLimit < 1) {
+    throw new RangeError(
+      `buildBatches: charLimit must be a positive finite number, got ${charLimit}`,
+    )
+  }
+  return charLimit
+}
+
 function crossesParentBoundary(a: Text, b: Text): boolean {
   return a.parentElement !== b.parentElement
 }
@@ -13,6 +22,7 @@ export function buildBatches(
   nodes: readonly TaggedTextNode[],
   charLimit: number,
 ): TaggedTextNode[][] {
+  const limit = normalizeCharLimit(charLimit)
   if (nodes.length === 0) return []
 
   const first = nodes[0]!
@@ -23,7 +33,7 @@ export function buildBatches(
   for (let i = 1; i < nodes.length; i++) {
     const prev = nodes[i - 1]!
     const curr = nodes[i]!
-    const wouldExceed = length + curr.text.length > charLimit
+    const wouldExceed = length + curr.text.length > limit
     const boundary = crossesParentBoundary(prev.node, curr.node)
 
     if (wouldExceed || boundary) {
@@ -44,6 +54,8 @@ export function applyTranslation(
   batch: readonly TaggedTextNode[],
   translated: string,
 ): void {
+  if (batch.length === 0) return
+
   const parts = translated.split("\n")
   if (parts.length === batch.length) {
     for (let i = 0; i < batch.length; i++) {

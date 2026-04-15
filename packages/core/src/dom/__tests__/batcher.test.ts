@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { buildBatches, DEFAULT_BATCH_CHAR_LIMIT } from "../batcher.js"
+import { applyTranslation, buildBatches, DEFAULT_BATCH_CHAR_LIMIT } from "../batcher.js"
 import type { TaggedTextNode } from "../walker.js"
 
 function tagged(node: Text): TaggedTextNode {
@@ -38,5 +38,30 @@ describe("buildBatches", () => {
     expect(batches).toHaveLength(2)
     expect(batches[0]).toEqual([tagged(first)])
     expect(batches[1]).toEqual([tagged(second)])
+  })
+
+  it.each([["zero", 0], ["negative", -1], ["infinite", Number.POSITIVE_INFINITY], ["NaN", Number.NaN]])(
+    "throws for invalid char limit: %s",
+    (_, charLimit) => {
+      const node = document.createTextNode("Hello")
+      expect(() => buildBatches([tagged(node)], charLimit)).toThrow(RangeError)
+    },
+  )
+})
+
+describe("applyTranslation", () => {
+  it("no-ops on empty batch", () => {
+    expect(() => {
+      applyTranslation([], "translated")
+    }).not.toThrow()
+  })
+
+  it("writes fallback translation for uneven newline splits", () => {
+    const nodeA = document.createTextNode("Hello")
+    const nodeB = document.createTextNode("World")
+    applyTranslation([tagged(nodeA), tagged(nodeB)], "HelloWorld")
+
+    expect(nodeA.textContent).toBe("HelloWorld")
+    expect(nodeB.textContent).toBe("")
   })
 })
