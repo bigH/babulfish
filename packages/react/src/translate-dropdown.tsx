@@ -1,8 +1,6 @@
-import { useEffect, useRef, type ReactNode } from "react"
-import {
-  useOptionalTranslatorContext,
-  type TranslatorLanguage,
-} from "./context.js"
+import type { Language } from "@babulfish/core"
+import { useContext, useEffect, useRef, type ReactNode } from "react"
+import { TranslatorContext } from "./context.js"
 
 export type TranslateDropdownProps = {
   readonly onSelect: (code: string) => void
@@ -10,8 +8,8 @@ export type TranslateDropdownProps = {
   readonly value?: string | null
   readonly disabled?: boolean
   readonly className?: string
-  readonly renderOption?: (lang: TranslatorLanguage, active: boolean) => ReactNode
-  readonly languages?: readonly TranslatorLanguage[]
+  readonly renderOption?: (lang: Language, active: boolean) => ReactNode
+  readonly languages?: readonly Language[]
   readonly focusedIndex?: number
 }
 
@@ -43,7 +41,7 @@ export function TranslateDropdown({
   languages: languagesProp,
   focusedIndex = -1,
 }: TranslateDropdownProps) {
-  const ctx = useOptionalTranslatorContext()
+  const ctx = useContext(TranslatorContext)
   const languages = languagesProp ?? ctx?.languages
 
   if (!languages) {
