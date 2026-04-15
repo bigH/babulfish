@@ -4,6 +4,9 @@ import path from "node:path"
 
 const coreSrc = fileURLToPath(new URL("../core/src", import.meta.url))
 const coreSrcFile = (relative: string) => path.join(coreSrc, relative)
+const jestDomSetup = fileURLToPath(
+  new URL(await import.meta.resolve("@testing-library/jest-dom/vitest")),
+)
 
 export default defineConfig({
   resolve: {
@@ -16,6 +19,6 @@ export default defineConfig({
   test: {
     environment: "jsdom",
     include: ["src/**/*.test.ts", "src/**/*.test.tsx"],
-    setupFiles: ["./vitest.setup.ts"],
+    setupFiles: [jestDomSetup],
   },
 })
