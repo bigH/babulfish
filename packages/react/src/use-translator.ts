@@ -1,29 +1,11 @@
 import { useSyncExternalStore } from "react"
 import { useTranslatorContext } from "./context.js"
-import type { TranslatorLanguage } from "./context.js"
-import type { ModelState, TranslationState, Capabilities } from "@babulfish/core"
+import type { ModelState, TranslationState } from "@babulfish/core"
 import { SSR_SNAPSHOT } from "./ssr.js"
 
 export type { ModelState, TranslationState }
 
-export type UseTranslatorReturn = {
-  readonly model: ModelState
-  readonly translation: TranslationState
-  readonly currentLanguage: string | null
-  readonly capabilitiesReady: boolean
-  readonly isSupported: boolean
-  readonly hasWebGPU: boolean
-  readonly canTranslate: boolean
-  readonly device: Capabilities["device"]
-  readonly isMobile: boolean
-  readonly languages: ReadonlyArray<TranslatorLanguage>
-  loadModel(): Promise<void>
-  translateTo(code: string): Promise<void>
-  restore(): void
-  translate(text: string, lang: string): Promise<string>
-}
-
-export function useTranslator(): UseTranslatorReturn {
+export function useTranslator() {
   const core = useTranslatorContext()
   const snapshot = useSyncExternalStore(
     core.subscribe,
