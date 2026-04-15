@@ -6,11 +6,15 @@ import {
   resolveDevice,
 } from "../detect.js"
 
-const originalWindow = Object.getOwnPropertyDescriptor(globalThis, "window")
-const originalNavigator = Object.getOwnPropertyDescriptor(globalThis, "navigator")
+type GlobalKey = "window" | "navigator"
+
+const originalGlobals: Record<GlobalKey, PropertyDescriptor | undefined> = {
+  window: Object.getOwnPropertyDescriptor(globalThis, "window"),
+  navigator: Object.getOwnPropertyDescriptor(globalThis, "navigator"),
+}
 
 function restoreGlobal(
-  key: "window" | "navigator",
+  key: GlobalKey,
   descriptor: PropertyDescriptor | undefined,
 ): void {
   if (descriptor) {
@@ -18,62 +22,59 @@ function restoreGlobal(
     return
   }
 
-  delete (globalThis as Record<string, unknown>)[key]
+  Reflect.deleteProperty(globalThis, key)
 }
 
-function mockWindow(value: object): void {
-  Object.defineProperty(globalThis, "window", {
+function setGlobal(key: GlobalKey, value: object): void {
+  Object.defineProperty(globalThis, key, {
     value,
     configurable: true,
   })
 }
 
-function mockNavigator(value: object): void {
-  Object.defineProperty(globalThis, "navigator", {
-    value,
-    configurable: true,
-  })
+function clearGlobal(key: GlobalKey): void {
+  Reflect.deleteProperty(globalThis, key)
 }
 
 afterEach(() => {
-  restoreGlobal("window", originalWindow)
-  restoreGlobal("navigator", originalNavigator)
+  restoreGlobal("window", originalGlobals.window)
+  restoreGlobal("navigator", originalGlobals.navigator)
 })
 
 describe("isWebGPUAvailable", () => {
   it("returns true when navigator.gpu exists", () => {
-    mockNavigator({ gpu: {} })
+    setGlobal("navigator", { gpu: {} })
     expect(isWebGPUAvailable()).toBe(true)
   })
 
   it("returns false when navigator has no gpu", () => {
-    mockNavigator({})
+    setGlobal("navigator", {})
     expect(isWebGPUAvailable()).toBe(false)
   })
 })
 
 describe("isMobileDevice", () => {
   it("returns true for narrow touch screens", () => {
-    mockWindow({
+    setGlobal("window", {
       innerWidth: 400,
       ontouchstart: null,
     })
-    mockNavigator({ maxTouchPoints: 1 })
+    setGlobal("navigator", { maxTouchPoints: 1 })
     expect(isMobileDevice()).toBe(true)
   })
 
   it("returns false for wide screens", () => {
-    mockWindow({
+    setGlobal("window", {
       innerWidth: 1024,
       ontouchstart: null,
     })
-    mockNavigator({ maxTouchPoints: 1 })
+    setGlobal("navigator", { maxTouchPoints: 1 })
     expect(isMobileDevice()).toBe(false)
   })
 
   it("returns false when navigator is unavailable", () => {
-    mockWindow({ innerWidth: 400 })
-    delete (globalThis as Record<string, unknown>).navigator
+    setGlobal("window", { innerWidth: 400 })
+    clearGlobal("navigator")
 
     expect(isMobileDevice()).toBe(false)
   })
@@ -89,20 +90,20 @@ describe("resolveDevice", () => {
   })
 
   it("returns 'wasm' in auto mode when WebGPU unavailable", () => {
-    mockNavigator({})
+    setGlobal("navigator", {})
     expect(resolveDevice("auto")).toBe("wasm")
   })
 
   it("returns 'webgpu' in auto mode when WebGPU available", () => {
-    mockNavigator({ gpu: {} })
+    setGlobal("navigator", { gpu: {} })
     expect(resolveDevice("auto")).toBe("webgpu")
   })
 })
 
 describe("getTranslationCapabilities", () => {
   it("reports desktop WASM fallback when WebGPU is unavailable", () => {
-    mockWindow({ innerWidth: 1280 })
-    mockNavigator({ maxTouchPoints: 0 })
+    setGlobal("window", { innerWidth: 1280 })
+    setGlobal("navigator", { maxTouchPoints: 0 })
 
     expect(getTranslationCapabilities()).toEqual({
       hasWebGPU: false,
@@ -113,8 +114,8 @@ describe("getTranslationCapabilities", () => {
   })
 
   it("keeps mobile explicit without claiming the default UI path is unavailable", () => {
-    mockWindow({ innerWidth: 400, ontouchstart: null })
-    mockNavigator({ maxTouchPoints: 1 })
+    setGlobal("window", { innerWidth: 400, ontouchstart: null })
+    setGlobal("navigator", { maxTouchPoints: 1 })
 
     expect(getTranslationCapabilities()).toEqual({
       hasWebGPU: false,
@@ -125,8 +126,8 @@ describe("getTranslationCapabilities", () => {
   })
 
   it("reports translation unavailable when WebGPU is forced but missing", () => {
-    mockWindow({ innerWidth: 1280 })
-    mockNavigator({ maxTouchPoints: 0 })
+    setGlobal("window", { innerWidth: 1280 })
+    setGlobal("navigator", { maxTouchPoints: 0 })
 
     expect(getTranslationCapabilities("webgpu")).toEqual({
       hasWebGPU: false,
@@ -137,8 +138,8 @@ describe("getTranslationCapabilities", () => {
   })
 
   it("stays SSR-safe when window is unavailable", () => {
-    delete (globalThis as Record<string, unknown>).window
-    delete (globalThis as Record<string, unknown>).navigator
+    clearGlobal("window")
+    clearGlobal("navigator")
 
     expect(getTranslationCapabilities()).toEqual({
       hasWebGPU: false,
@@ -149,8 +150,8 @@ describe("getTranslationCapabilities", () => {
   })
 
   it("treats missing navigator as no optional browser capabilities", () => {
-    mockWindow({ innerWidth: 400 })
-    delete (globalThis as Record<string, unknown>).navigator
+    setGlobal("window", { innerWidth: 400 })
+    clearGlobal("navigator")
 
     expect(getTranslationCapabilities()).toEqual({
       hasWebGPU: false,
