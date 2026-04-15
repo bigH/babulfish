@@ -12,6 +12,10 @@ function mockTranslate() {
 
 type MockTranslate = ReturnType<typeof mockTranslate>
 
+function expectTranslateCalls(translate: MockTranslate, ...inputs: string[]): void {
+  expect(translate.mock.calls.map((call) => call[0])).toEqual(inputs)
+}
+
 type MainChild =
   | Node
   | {
@@ -197,8 +201,7 @@ describe("DOM translator", () => {
     expect(texts).toContain("Traduceme")
     expect(texts).toContain("const x = 1")
     expect(texts).toContain("preformatted")
-    expect(translate).toHaveBeenCalledTimes(1)
-    expect(translate.mock.calls[0]![0]).toBe("Translate me")
+    expectTranslateCalls(translate, "Translate me")
   })
 
   // -----------------------------------------------------------------------
@@ -257,9 +260,7 @@ describe("DOM translator", () => {
     await t.translate("es-ES")
     await t.translate("fr")
 
-    expect(translate).toHaveBeenCalledTimes(2)
-    expect(translate.mock.calls[0]![0]).toBe("Hello")
-    expect(translate.mock.calls[1]![0]).toBe("Hello")
+    expectTranslateCalls(translate, "Hello", "Hello")
     expect(paragraph.textContent).toBe("Bonjour")
 
     t.restore()
@@ -312,8 +313,7 @@ describe("DOM translator", () => {
     const t = makeTranslator(translate)
     await t.translate("es-ES")
 
-    expect(translate).toHaveBeenCalledTimes(1)
-    expect(translate.mock.calls[0]![0]).toBe("Real text")
+    expectTranslateCalls(translate, "Real text")
   })
 
   // -----------------------------------------------------------------------
@@ -383,8 +383,7 @@ describe("DOM translator", () => {
     const t = makeTranslator(translate)
     await t.translate("es-ES")
 
-    expect(translate).toHaveBeenCalledTimes(1)
-    expect(translate.mock.calls[0]![0]).toBe("Real sentence")
+    expectTranslateCalls(translate, "Real sentence")
     expect(sym1.textContent).toBe("\u25B8")
     expect(sym2.textContent).toBe("\u2014")
   })
@@ -402,8 +401,7 @@ describe("DOM translator", () => {
     const t = makeTranslator(translate)
     await t.translate("es-ES")
 
-    expect(translate).toHaveBeenCalledTimes(1)
-    expect(translate.mock.calls[0]![0]).toBe("Translate me")
+    expectTranslateCalls(translate, "Translate me")
   })
 
   // -----------------------------------------------------------------------
@@ -419,8 +417,7 @@ describe("DOM translator", () => {
     const t = makeTranslator(translate)
     await t.translate("es-ES")
 
-    expect(translate).toHaveBeenCalledTimes(1)
-    expect(translate.mock.calls[0]![0]).toBe("Hello world")
+    expectTranslateCalls(translate, "Hello world")
   })
 
   // -----------------------------------------------------------------------
@@ -438,9 +435,7 @@ describe("DOM translator", () => {
     const t = makeTranslator(translate)
     await t.translate("es-ES")
 
-    expect(translate).toHaveBeenCalledTimes(2)
-    expect(translate.mock.calls[0]![0]).toBe("and")
-    expect(translate.mock.calls[1]![0]).toBe("AI")
+    expectTranslateCalls(translate, "and", "AI")
   })
 
   // -----------------------------------------------------------------------
@@ -525,9 +520,7 @@ describe("DOM translator", () => {
     const t = makeTranslator(translate, { richText: RICH_TEXT_CONFIG })
     await t.translate("es-ES")
 
-    expect(translate).toHaveBeenCalledTimes(2)
-    expect(translate.mock.calls[0]![0]).toBe("**bold**")
-    expect(translate.mock.calls[1]![0]).toBe("Normal text")
+    expectTranslateCalls(translate, "**bold**", "Normal text")
   })
 
   // -----------------------------------------------------------------------
@@ -810,7 +803,7 @@ describe("DOM translator", () => {
     await t.translate("es-ES")
 
     // Called only once for the group, applied to both
-    expect(translate).toHaveBeenCalledTimes(1)
+    expectTranslateCalls(translate, "Introduction")
     expect(a.textContent).toBe("Introduccion")
     expect(b.textContent).toBe("Introduccion")
   })
@@ -833,7 +826,7 @@ describe("DOM translator", () => {
     })
     await t.translate("es-ES")
 
-    expect(translate).toHaveBeenCalledTimes(1)
+    expectTranslateCalls(translate, "Introduction")
     expect(onProgress).toHaveBeenCalledTimes(1)
     expect(onProgress).toHaveBeenNthCalledWith(1, 1, 1)
   })
@@ -858,9 +851,7 @@ describe("DOM translator", () => {
     await t.translate("es-ES")
     await t.translate("fr")
 
-    expect(translate).toHaveBeenCalledTimes(2)
-    expect(translate.mock.calls[0]![0]).toBe("Introduction")
-    expect(translate.mock.calls[1]![0]).toBe("Introduction")
+    expectTranslateCalls(translate, "Introduction", "Introduction")
     expect(a.textContent).toBe("Apercu")
     expect(b.textContent).toBe("Apercu")
 
@@ -894,8 +885,7 @@ describe("DOM translator", () => {
 
     await t.translate("de")
 
-    expect(translate).toHaveBeenCalledTimes(2)
-    expect(translate.mock.calls[1]![0]).toBe("Summary")
+    expectTranslateCalls(translate, "Introduction", "Summary")
     expect(a.textContent).toBe("Zusammenfassung")
     expect(b.textContent).toBe("Zusammenfassung")
   })
@@ -926,8 +916,7 @@ describe("DOM translator", () => {
 
     await t.translate("fr")
 
-    expect(translate).toHaveBeenCalledTimes(2)
-    expect(translate.mock.calls[1]![0]).toBe("Introduction")
+    expectTranslateCalls(translate, "Introduction", "Introduction")
     expect(a.textContent).toBe("Apercu")
     expect(remounted.textContent).toBe("Apercu")
 
@@ -1035,9 +1024,7 @@ describe("DOM translator", () => {
     await t.translate("es-ES")
     await t.translate("fr")
 
-    expect(translate).toHaveBeenCalledTimes(2)
-    expect(translate.mock.calls[0]![0]).toBe("Go home")
-    expect(translate.mock.calls[1]![0]).toBe("Go home")
+    expectTranslateCalls(translate, "Go home", "Go home")
     expect(a.getAttribute("title")).toBe("Aller a la maison")
 
     t.restore()
@@ -1060,8 +1047,7 @@ describe("DOM translator", () => {
     })
     await t.translate("es-ES")
 
-    expect(translate).toHaveBeenCalledTimes(1)
-    expect(translate.mock.calls[0]![0]).toBe("Translate me")
+    expectTranslateCalls(translate, "Translate me")
   })
 
   // -----------------------------------------------------------------------
@@ -1209,8 +1195,7 @@ describe("DOM translator", () => {
     const t = makeTranslator(translate, { skipTags: ["my-widget"] })
     await t.translate("es-ES")
 
-    expect(translate).toHaveBeenCalledTimes(1)
-    expect(translate.mock.calls[0]![0]).toBe("Translate me")
+    expectTranslateCalls(translate, "Translate me")
     expect(custom.textContent).toBe("Skip me")
   })
 })
