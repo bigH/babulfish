@@ -1,8 +1,6 @@
 import { describe, it, expect, afterEach } from "vitest"
 import {
   getTranslationCapabilities,
-  isMobileDevice,
-  isWebGPUAvailable,
   resolveDevice,
 } from "../detect.js"
 
@@ -39,45 +37,6 @@ function clearGlobal(key: GlobalKey): void {
 afterEach(() => {
   restoreGlobal("window", originalGlobals.window)
   restoreGlobal("navigator", originalGlobals.navigator)
-})
-
-describe("isWebGPUAvailable", () => {
-  it("returns true when navigator.gpu exists", () => {
-    setGlobal("navigator", { gpu: {} })
-    expect(isWebGPUAvailable()).toBe(true)
-  })
-
-  it("returns false when navigator has no gpu", () => {
-    setGlobal("navigator", {})
-    expect(isWebGPUAvailable()).toBe(false)
-  })
-})
-
-describe("isMobileDevice", () => {
-  it("returns true for narrow touch screens", () => {
-    setGlobal("window", {
-      innerWidth: 400,
-      ontouchstart: null,
-    })
-    setGlobal("navigator", { maxTouchPoints: 1 })
-    expect(isMobileDevice()).toBe(true)
-  })
-
-  it("returns false for wide screens", () => {
-    setGlobal("window", {
-      innerWidth: 1024,
-      ontouchstart: null,
-    })
-    setGlobal("navigator", { maxTouchPoints: 1 })
-    expect(isMobileDevice()).toBe(false)
-  })
-
-  it("returns false when navigator is unavailable", () => {
-    setGlobal("window", { innerWidth: 400 })
-    clearGlobal("navigator")
-
-    expect(isMobileDevice()).toBe(false)
-  })
 })
 
 describe("resolveDevice", () => {

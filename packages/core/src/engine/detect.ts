@@ -54,14 +54,6 @@ function resolveDeviceWithWebGPU(
   }
 }
 
-export function isWebGPUAvailable(): boolean {
-  return getEnvironmentSnapshot().hasWebGPU
-}
-
-export function isMobileDevice(): boolean {
-  return getEnvironmentSnapshot().isMobile
-}
-
 export function resolveDevice(preference: DevicePreference): ResolvedDevice {
   return resolveDeviceWithWebGPU(
     preference,
