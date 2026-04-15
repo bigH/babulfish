@@ -33,4 +33,20 @@ describe("loadPipeline", () => {
       options,
     )
   })
+
+  it("delegates with no options when unspecified", async () => {
+    const pipelineInstance = {} as TextGenerationPipeline
+    mockPipelineFactory.mockResolvedValue(pipelineInstance)
+
+    await expect(loadPipeline("model-no-options")).resolves.toBe(pipelineInstance)
+
+    expect(mockPipelineFactory).toHaveBeenCalledWith("text-generation", "model-no-options")
+  })
+
+  it("preserves load rejection from transformers", async () => {
+    const cause = new Error("transformers failed")
+    mockPipelineFactory.mockRejectedValue(cause)
+
+    await expect(loadPipeline("model-fails")).rejects.toBe(cause)
+  })
 })

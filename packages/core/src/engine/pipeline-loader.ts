@@ -9,6 +9,8 @@ import type {
   TextGenerationStringOutput,
 } from "@huggingface/transformers"
 
+const TEXT_GENERATION_TASK = "text-generation" as const
+
 export type PipelineOptions = {
   readonly dtype?: DataType
   readonly device?: DeviceType
@@ -20,7 +22,10 @@ export async function loadPipeline(
   opts?: PipelineOptions,
 ): Promise<TextGenerationPipeline> {
   const { pipeline } = await import("@huggingface/transformers")
-  return pipeline("text-generation", model, opts) as Promise<TextGenerationPipeline>
+  const loaded = opts === undefined
+    ? await pipeline(TEXT_GENERATION_TASK, model)
+    : await pipeline(TEXT_GENERATION_TASK, model, opts)
+  return loaded as TextGenerationPipeline
 }
 
 export type {
