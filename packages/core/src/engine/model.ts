@@ -97,9 +97,20 @@ export function createEngine(config?: EngineConfig): Translator {
   function buildProgressCallback(): (event: ProgressInfo) => void {
     const loaded = new Map<string, number>()
     const totals = new Map<string, number>()
+    let hasAggregateProgress = false
 
     return (event: ProgressInfo) => {
-      if (event.status !== "progress") return
+      if (event.status === "progress_total") {
+        hasAggregateProgress = true
+        emit("progress", {
+          loaded: event.loaded,
+          total: event.total,
+          name: event.name,
+        })
+        return
+      }
+
+      if (event.status !== "progress" || hasAggregateProgress) return
       loaded.set(event.file, event.loaded)
       totals.set(event.file, event.total)
 

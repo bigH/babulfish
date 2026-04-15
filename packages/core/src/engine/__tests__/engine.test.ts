@@ -364,6 +364,43 @@ describe("event emitter", () => {
     })
   })
 
+  it("prefers aggregate progress_total events over duplicate per-file progress", async () => {
+    const getProgressCallback = captureProgressCallback()
+    const engine = createEngine()
+    const progressEvents: Array<{ loaded: number; total: number; name?: string }> = []
+    engine.on("progress", (e) => progressEvents.push(e))
+
+    await engine.load()
+
+    getProgressCallback()?.({
+      status: "progress_total",
+      name: "model-id",
+      progress: 50,
+      loaded: 600,
+      total: 1200,
+      files: {
+        "model.bin": { loaded: 500, total: 1000 },
+        "tokenizer.json": { loaded: 100, total: 200 },
+      },
+    })
+    getProgressCallback()?.({
+      status: "progress",
+      name: "model-id",
+      file: "tokenizer.json",
+      progress: 50,
+      loaded: 100,
+      total: 200,
+    })
+
+    expect(progressEvents).toEqual([
+      {
+        loaded: 600,
+        total: 1200,
+        name: "model-id",
+      },
+    ])
+  })
+
   it("ignores non-progress status events", async () => {
     const getProgressCallback = captureProgressCallback()
     const engine = createEngine()
