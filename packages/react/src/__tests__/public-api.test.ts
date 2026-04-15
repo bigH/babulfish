@@ -1,5 +1,6 @@
 import { describe, expect, expectTypeOf, it } from "vitest"
 import * as publicApi from "../index.js"
+import type * as PublicApi from "../index.js"
 
 const EXPECTED_RUNTIME_EXPORTS = [
   "DEFAULT_LANGUAGES",
@@ -8,7 +9,18 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "TranslatorProvider",
   "useTranslateDOM",
   "useTranslator",
-] as const satisfies readonly (keyof typeof publicApi)[]
+] as const satisfies readonly (keyof PublicApi)[]
+
+type ForbiddenReactPublicApiExports = Extract<
+  "BabulfishProvider" | "useBabulfish" | "BabulfishLanguage",
+  keyof PublicApi
+>
+type AssertNoForbiddenReactPublicApiExports =
+  [ForbiddenReactPublicApiExports] extends [never] ? true : never
+
+const assertNoForbiddenReactPublicApiExports:
+  AssertNoForbiddenReactPublicApiExports = true
+void assertNoForbiddenReactPublicApiExports
 
 describe("public React API contract", () => {
   it("exports exactly the documented React runtime names", () => {
@@ -17,48 +29,48 @@ describe("public React API contract", () => {
   })
 
   it("exports the documented React types", () => {
-    expectTypeOf<import("../index.js").TranslatorLanguage>().toEqualTypeOf<{
+    expectTypeOf<PublicApi.TranslatorLanguage>().toEqualTypeOf<{
       readonly label: string
       readonly code: string
     }>()
 
-    expectTypeOf<import("../index.js").TranslatorConfig>().toMatchTypeOf<{
-      readonly languages?: readonly import("../index.js").TranslatorLanguage[]
+    expectTypeOf<PublicApi.TranslatorConfig>().toMatchTypeOf<{
+      readonly languages?: readonly PublicApi.TranslatorLanguage[]
     }>()
 
-    expectTypeOf<import("../index.js").TranslateButtonClassNames>().toMatchTypeOf<{
+    expectTypeOf<PublicApi.TranslateButtonClassNames>().toMatchTypeOf<{
       readonly button?: string
       readonly tooltip?: string
       readonly dropdown?: string
       readonly progressRing?: string
     }>()
 
-    expectTypeOf<import("../index.js").TranslateButtonProps>().toMatchTypeOf<{
-      readonly classNames?: import("../index.js").TranslateButtonClassNames
+    expectTypeOf<PublicApi.TranslateButtonProps>().toMatchTypeOf<{
+      readonly classNames?: PublicApi.TranslateButtonClassNames
     }>()
 
-    expectTypeOf<import("../index.js").TranslateDropdownProps>().toMatchTypeOf<{
+    expectTypeOf<PublicApi.TranslateDropdownProps>().toMatchTypeOf<{
       readonly value?: string | null
-      readonly languages?: readonly import("../index.js").TranslatorLanguage[]
+      readonly languages?: readonly PublicApi.TranslatorLanguage[]
     }>()
 
-    expectTypeOf<import("../index.js").ModelState>().toMatchTypeOf<
+    expectTypeOf<PublicApi.ModelState>().toMatchTypeOf<
       | { readonly status: "idle" }
       | { readonly status: "downloading"; readonly progress: number }
       | { readonly status: "ready" }
       | { readonly status: "error"; readonly error: unknown }
     >()
 
-    expectTypeOf<import("../index.js").TranslationState>().toMatchTypeOf<
+    expectTypeOf<PublicApi.TranslationState>().toMatchTypeOf<
       | { readonly status: "idle" }
       | { readonly status: "translating"; readonly progress: number }
     >()
 
     expectTypeOf<ReturnType<typeof publicApi.useTranslator>>().toMatchTypeOf<{
-      readonly model: import("../index.js").ModelState
-      readonly translation: import("../index.js").TranslationState
+      readonly model: PublicApi.ModelState
+      readonly translation: PublicApi.TranslationState
       readonly currentLanguage: string | null
-      readonly languages: readonly import("../index.js").TranslatorLanguage[]
+      readonly languages: readonly PublicApi.TranslatorLanguage[]
     }>()
 
     expectTypeOf<ReturnType<typeof publicApi.useTranslateDOM>>().toMatchTypeOf<{
@@ -68,12 +80,3 @@ describe("public React API contract", () => {
     }>()
   })
 })
-
-// @ts-expect-error stale alias must not exist in the public barrel
-void publicApi.BabulfishProvider
-
-// @ts-expect-error stale alias must not exist in the public barrel
-void publicApi.useBabulfish
-
-// @ts-expect-error stale alias must not exist in the public barrel
-void (null as import("../index.js").BabulfishLanguage | null)
