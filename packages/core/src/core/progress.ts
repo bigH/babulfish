@@ -1,33 +1,27 @@
-export type ProgressRun = {
+type ProgressRun = {
   readonly runId: number
   readonly signal: AbortSignal
 }
 
-export type ProgressController = {
+type ProgressController = {
   startRun(): ProgressRun
   isCurrentRun(runId: number): boolean
   abortCurrent(): void
   dispose(): void
 }
 
-const abortReasons = {
-  superseded: "Superseded by new translation",
-  aborted: "Translation aborted",
-  disposed: "Core disposed",
-} as const
-
 export function createProgressController(): ProgressController {
   let currentRunId = 0
   let currentController: AbortController | null = null
 
-  function abortCurrentWith(message: (typeof abortReasons)[keyof typeof abortReasons]): void {
+  function abortCurrentWith(message: string): void {
     currentController?.abort(new DOMException(message, "AbortError"))
     currentController = null
   }
 
   return {
     startRun() {
-      abortCurrentWith(abortReasons.superseded)
+      abortCurrentWith("Superseded by new translation")
       currentRunId++
       const controller = new AbortController()
       currentController = controller
@@ -38,10 +32,10 @@ export function createProgressController(): ProgressController {
       return currentRunId === runId
     },
     abortCurrent() {
-      abortCurrentWith(abortReasons.aborted)
+      abortCurrentWith("Translation aborted")
     },
     dispose() {
-      abortCurrentWith(abortReasons.disposed)
+      abortCurrentWith("Core disposed")
     },
   }
 }
