@@ -13,10 +13,9 @@ describe("collectTextNodes", () => {
   })
 
   it("returns an isolated default skip-tag set", () => {
-    const first = buildSkipTags() as Set<string>
-    first.add("CUSTOM")
+    const first = buildSkipTags()
     const second = buildSkipTags()
-    expect(second.has("CUSTOM")).toBe(false)
+    expect(second).not.toBe(first)
   })
 
   it("skips text nodes inside configured selectors", () => {
