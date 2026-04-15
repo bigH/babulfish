@@ -4,19 +4,11 @@ import type { ReactNode } from "react"
 import { TranslatorProvider, TranslateButton } from "@babulfish/react"
 import type { TranslatorConfig } from "@babulfish/react"
 
-const DEMO_TRANSLATION_ROOTS = ["main"] as const
-const DEMO_PRESERVED_TERMS = [
-  "babulfish",
-  "Next.js",
-  "TranslateGemma",
-  "WebGPU",
-] as const
-
 const DEMO_TRANSLATOR_CONFIG: TranslatorConfig = {
   dom: {
-    roots: [...DEMO_TRANSLATION_ROOTS],
+    roots: ["main"],
     preserve: {
-      matchers: [...DEMO_PRESERVED_TERMS],
+      matchers: ["babulfish", "Next.js", "TranslateGemma", "WebGPU"],
     },
   },
 }
