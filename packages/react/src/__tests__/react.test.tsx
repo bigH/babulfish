@@ -1,6 +1,7 @@
 /// <reference types="@testing-library/jest-dom" />
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import { render, screen, fireEvent, act, cleanup } from "@testing-library/react"
+import { Profiler } from "react"
 import type { Snapshot } from "@babulfish/core"
 
 // ---------------------------------------------------------------------------
@@ -715,6 +716,73 @@ describe("TranslateButton", () => {
     })
 
     expect(button).not.toHaveTextContent("25%")
+  })
+
+  it("does not mirror download progress through an extra local render", async () => {
+    let commitCount = 0
+
+    render(
+      <Wrapper config={DOM_CONFIG}>
+        <Profiler id="translate-button" onRender={() => { commitCount += 1 }}>
+          <TranslateButton />
+        </Profiler>
+      </Wrapper>,
+    )
+
+    await act(async () => {
+      setMockSnapshot({
+        model: { status: "downloading", progress: 0.1 },
+      })
+      await Promise.resolve()
+    })
+
+    const button = screen.getByRole("button")
+    expect(button).toHaveTextContent("10%")
+
+    commitCount = 0
+
+    await act(async () => {
+      setMockSnapshot({
+        model: { status: "downloading", progress: 0.2 },
+      })
+      await Promise.resolve()
+    })
+
+    expect(button).toHaveTextContent("20%")
+    expect(commitCount).toBe(1)
+  })
+
+  it("handles a burst of download progress snapshots without a depth warning", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {})
+
+    try {
+      render(
+        <Wrapper config={DOM_CONFIG}>
+          <TranslateButton />
+        </Wrapper>,
+      )
+
+      await act(async () => {
+        for (let step = 1; step <= 80; step += 1) {
+          setMockSnapshot({
+            model: { status: "downloading", progress: step / 80 },
+          })
+        }
+        await Promise.resolve()
+      })
+
+      expect(screen.getByRole("button")).toHaveTextContent("100%")
+
+      const loggedMaximumDepth = errorSpy.mock.calls.some((call) =>
+        call.some((arg) =>
+          String(arg).includes("Maximum update depth exceeded"),
+        ),
+      )
+
+      expect(loggedMaximumDepth).toBe(false)
+    } finally {
+      errorSpy.mockRestore()
+    }
   })
 })
 

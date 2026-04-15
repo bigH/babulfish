@@ -42,9 +42,9 @@ type TooltipRenderProps = {
 type ButtonState =
   | { readonly kind: "idle" }
   | { readonly kind: "confirm" }
-  | { readonly kind: "downloading"; readonly progress: number }
+  | { readonly kind: "downloading" }
   | { readonly kind: "ready"; readonly dropdownOpen: boolean }
-  | { readonly kind: "translating"; readonly dropdownOpen: boolean; readonly progress: number }
+  | { readonly kind: "translating"; readonly dropdownOpen: boolean }
 
 function dismissTransientState(state: ButtonState): ButtonState {
   if (state.kind === "confirm") return { kind: "idle" }
@@ -241,18 +241,26 @@ export function TranslateButton({
   const modelProgress = model.status === "downloading" ? model.progress : 0
   useEffect(() => {
     if (model.status === "downloading") {
-      setState({ kind: "downloading", progress: modelProgress })
-    } else if (model.status === "ready" && state.kind === "downloading") {
-      setState({ kind: "ready", dropdownOpen: false })
+      setState((prev) => (
+        prev.kind === "downloading"
+          ? prev
+          : { kind: "downloading" }
+      ))
+    } else if (model.status === "ready") {
+      setState((prev) => (
+        prev.kind === "downloading"
+          ? { kind: "ready", dropdownOpen: false }
+          : prev
+      ))
     } else if (model.status === "error") {
-      setState({ kind: "idle" })
+      setState((prev) => (prev.kind === "idle" ? prev : { kind: "idle" }))
     }
-  }, [model.status, modelProgress, state.kind])
+  }, [model.status])
 
   const translationProgress =
     translation.status === "translating" ? translation.progress : null
   useEffect(() => {
-    if (translationProgress === null) {
+    if (translation.status !== "translating") {
       setState((prev) =>
         prev.kind === "translating"
           ? { kind: "ready", dropdownOpen: false }
@@ -269,7 +277,6 @@ export function TranslateButton({
 
       if (
         prev.kind === "translating" &&
-        prev.progress === translationProgress &&
         prev.dropdownOpen === dropdownOpen
       ) {
         return prev
@@ -278,10 +285,9 @@ export function TranslateButton({
       return {
         kind: "translating",
         dropdownOpen,
-        progress: translationProgress,
       }
     })
-  }, [translationProgress])
+  }, [translation.status])
 
   // Auto-show tooltip peek
   useEffect(() => {
@@ -383,7 +389,7 @@ export function TranslateButton({
   }
 
   async function startDownload() {
-    setState({ kind: "downloading", progress: 0 })
+    setState({ kind: "downloading" })
     try {
       await loadModel()
     } catch {
@@ -399,7 +405,7 @@ export function TranslateButton({
   async function handleLanguageSelect(code: string) {
     if (state.kind !== "ready") return
 
-    setState({ kind: "translating", dropdownOpen: true, progress: 0 })
+    setState({ kind: "translating", dropdownOpen: true })
     try {
       await translateTo(code)
     } catch {
@@ -435,8 +441,11 @@ export function TranslateButton({
   const isDownloading = state.kind === "downloading"
   const isTranslating = state.kind === "translating"
   const isProgressState = isDownloading || isTranslating
+  const progressValue = isDownloading
+    ? modelProgress
+    : translationProgress ?? 0
   const progressText = isProgressState
-    ? `${Math.round(state.progress * 100)}%`
+    ? `${Math.round(progressValue * 100)}%`
     : null
   const activeProgressRingColor = isDownloading ? downloadColor : translateColor
 
@@ -549,7 +558,7 @@ export function TranslateButton({
 
           {isProgressState && (
             <ProgressRing
-              progress={state.progress}
+              progress={progressValue}
               color={activeProgressRingColor}
               className={classNames?.progressRing}
             />
