@@ -188,10 +188,10 @@ export function createBabulfish(config?: BabulfishConfig): BabulfishCore {
   async function translateText(
     text: string,
     lang: string,
-    _opts?: { signal?: AbortSignal },
+    opts?: { signal?: AbortSignal },
   ): Promise<string> {
     if (disposed) throw new Error("Core is disposed")
-    return engine.translate(text, lang)
+    return raceWithAbort(engine.translate(text, lang), opts?.signal)
   }
 
   function restore(opts?: { root?: ParentNode | Document }): void {

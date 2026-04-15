@@ -207,6 +207,34 @@ describe("4.3 — cancellation", () => {
     await expect(core.loadModel({ signal: controller.signal })).rejects.toThrow()
   })
 
+  it("translateText rejects when signal is pre-aborted", async () => {
+    setupPipelineMock()
+    const core = createBabulfish()
+    const controller = new AbortController()
+    await core.loadModel()
+    controller.abort()
+
+    await expect(core.translateText("hello", "es", { signal: controller.signal }))
+      .rejects.toBeInstanceOf(DOMException)
+  })
+
+  it("translateText removes external abort listener after success", async () => {
+    setupPipelineMock()
+    const core = createBabulfish()
+    const controller = new AbortController()
+    const addEventListener = vi.spyOn(controller.signal, "addEventListener")
+    const removeEventListener = vi.spyOn(controller.signal, "removeEventListener")
+
+    await core.loadModel()
+    await core.translateText("hello", "es", { signal: controller.signal })
+
+    expect(addEventListener).toHaveBeenCalledWith("abort", expect.any(Function), { once: true })
+    expect(removeEventListener).toHaveBeenCalledWith(
+      "abort",
+      addEventListener.mock.calls[0]?.[1] as EventListener,
+    )
+  })
+
   it("loadModel removes external abort listener after success", async () => {
     setupPipelineMock()
     const core = createBabulfish()
