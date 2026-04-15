@@ -87,7 +87,7 @@ type ProgressCallback = NonNullable<PipelineOptions["progress_callback"]>
 function captureProgressCallback() {
   let callback: ProgressCallback | undefined
 
-  mockLoadPipeline.mockImplementation((_task, _model, opts) => {
+  mockLoadPipeline.mockImplementation((_model, opts) => {
     callback = opts?.progress_callback
     return resolveMockPipeline()
   })
@@ -149,7 +149,6 @@ describe("load", () => {
     await engine.load()
 
     expect(mockLoadPipeline).toHaveBeenCalledWith(
-      "text-generation",
       "onnx-community/translategemma-text-4b-it-ONNX",
       expect.objectContaining({
         dtype: "q4",
@@ -168,7 +167,6 @@ describe("load", () => {
     await engine.load()
 
     expect(mockLoadPipeline).toHaveBeenCalledWith(
-      "text-generation",
       "my-model",
       expect.objectContaining({
         dtype: "fp16",

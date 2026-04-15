@@ -14,7 +14,7 @@ beforeEach(() => {
 })
 
 describe("loadPipeline", () => {
-  it("delegates to transformers pipeline with the provided task, model, and options", async () => {
+  it("delegates to transformers pipeline with model and options", async () => {
     const pipelineInstance = {} as TextGenerationPipeline
     const options: PipelineOptions = {
       dtype: "q4",
@@ -23,7 +23,7 @@ describe("loadPipeline", () => {
     }
     mockPipelineFactory.mockResolvedValue(pipelineInstance)
 
-    await expect(loadPipeline("text-generation", "test-model", options)).resolves.toBe(
+    await expect(loadPipeline("test-model", options)).resolves.toBe(
       pipelineInstance,
     )
 

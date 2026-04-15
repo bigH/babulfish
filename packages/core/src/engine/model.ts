@@ -130,7 +130,7 @@ export function createEngine(config?: EngineConfig): Translator {
     loadPromise = (async () => {
       const resolvedDevice = resolveDevice(device)
 
-      pipelinePromise = loadPipeline("text-generation", modelId, {
+      pipelinePromise = loadPipeline(modelId, {
         dtype,
         device: resolvedDevice,
         progress_callback: buildProgressCallback(),
