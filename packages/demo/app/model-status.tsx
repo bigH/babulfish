@@ -9,21 +9,12 @@ type StatusRow = {
   readonly value: string
 }
 
-function formatCapabilityLabel(
-  capabilitiesReady: boolean,
-  resolve: () => string,
-): string {
-  return capabilitiesReady ? resolve() : CHECKING_LABEL
-}
-
 function formatWebGPUStatus(
   capabilitiesReady: boolean,
   hasWebGPU: boolean,
 ): string {
-  return formatCapabilityLabel(
-    capabilitiesReady,
-    () => (hasWebGPU ? "Supported" : "Not available"),
-  )
+  if (!capabilitiesReady) return CHECKING_LABEL
+  return hasWebGPU ? "Supported" : "Not available"
 }
 
 function formatTranslationPath(
@@ -31,10 +22,9 @@ function formatTranslationPath(
   canTranslate: boolean,
   device: ReturnType<typeof useTranslator>["device"],
 ): string {
-  return formatCapabilityLabel(capabilitiesReady, () => {
-    if (!canTranslate) return "Unavailable"
-    return device === "webgpu" ? "WebGPU" : "WASM fallback"
-  })
+  if (!capabilitiesReady) return CHECKING_LABEL
+  if (!canTranslate) return "Unavailable"
+  return device === "webgpu" ? "WebGPU" : "WASM fallback"
 }
 
 function formatDefaultButtonStatus(
@@ -42,10 +32,9 @@ function formatDefaultButtonStatus(
   isMobile: boolean,
   canTranslate: boolean,
 ): string {
-  return formatCapabilityLabel(capabilitiesReady, () => {
-    if (isMobile) return "Desktop only for now"
-    return canTranslate ? "Available" : "Unavailable"
-  })
+  if (!capabilitiesReady) return CHECKING_LABEL
+  if (isMobile) return "Desktop only for now"
+  return canTranslate ? "Available" : "Unavailable"
 }
 
 function formatModelStatus(model: ModelState): string {
