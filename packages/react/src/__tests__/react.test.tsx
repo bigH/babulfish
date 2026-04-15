@@ -175,22 +175,57 @@ function createDeferred<T>() {
   return { promise, resolve, reject }
 }
 
+type SnapshotOverrides = {
+  model?: Partial<Snapshot["model"]>
+  translation?: Partial<Snapshot["translation"]>
+  currentLanguage?: Snapshot["currentLanguage"]
+  capabilities?: Partial<Snapshot["capabilities"]>
+}
+
+function setMockSnapshot(overrides: SnapshotOverrides = {}) {
+  setSnapshot((prev) => {
+    const hasCurrentLanguage = Object.prototype.hasOwnProperty.call(
+      overrides,
+      "currentLanguage",
+    )
+
+    return Object.freeze({
+      ...prev,
+      model: Object.freeze({
+        ...prev.model,
+        ...(overrides.model ?? {}),
+      }),
+      translation: Object.freeze({
+        ...prev.translation,
+        ...(overrides.translation ?? {}),
+      }),
+      currentLanguage: hasCurrentLanguage
+        ? overrides.currentLanguage
+        : prev.currentLanguage,
+      capabilities: Object.freeze({
+        ...prev.capabilities,
+        ...(overrides.capabilities ?? {}),
+      }),
+    })
+  })
+}
+
+beforeEach(() => {
+  vi.clearAllMocks()
+  listeners.clear()
+  mockSnapshot = createDefaultSnapshot()
+  mockLoadModel.mockResolvedValue(undefined)
+  mockTranslateTo.mockResolvedValue(undefined)
+  mockTranslateText.mockResolvedValue("translated")
+})
+
+afterEach(cleanup)
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
 describe("TranslatorProvider", () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-    listeners.clear()
-    mockSnapshot = createDefaultSnapshot()
-    mockLoadModel.mockResolvedValue(undefined)
-    mockTranslateTo.mockResolvedValue(undefined)
-    mockTranslateText.mockResolvedValue("translated")
-  })
-
-  afterEach(cleanup)
-
   it("renders children", () => {
     render(
       <TranslatorProvider>
@@ -268,17 +303,6 @@ describe("TranslatorProvider", () => {
 })
 
 describe("useTranslator", () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-    listeners.clear()
-    mockSnapshot = createDefaultSnapshot()
-    mockLoadModel.mockResolvedValue(undefined)
-    mockTranslateTo.mockResolvedValue(undefined)
-    mockTranslateText.mockResolvedValue("translated")
-  })
-
-  afterEach(cleanup)
-
   it("returns correct initial state", () => {
     render(
       <Wrapper config={DOM_CONFIG}>
@@ -298,15 +322,12 @@ describe("useTranslator", () => {
   })
 
   it("reports translation support with WASM fallback when WebGPU is unavailable", () => {
-    mockSnapshot = Object.freeze({
-      ...mockSnapshot,
-      capabilities: Object.freeze({
-        ready: true,
+    setMockSnapshot({
+      capabilities: {
         hasWebGPU: false,
         canTranslate: true,
         device: "wasm" as const,
-        isMobile: false,
-      }),
+      },
     })
 
     render(
@@ -322,12 +343,8 @@ describe("useTranslator", () => {
   })
 
   it("reports isMobile=true on mobile device", () => {
-    mockSnapshot = Object.freeze({
-      ...mockSnapshot,
-      capabilities: Object.freeze({
-        ...mockSnapshot.capabilities,
-        isMobile: true,
-      }),
+    setMockSnapshot({
+      capabilities: { isMobile: true },
     })
 
     render(
@@ -340,15 +357,8 @@ describe("useTranslator", () => {
   })
 
   it("reports unsupported when translation is unavailable", () => {
-    mockSnapshot = Object.freeze({
-      ...mockSnapshot,
-      capabilities: Object.freeze({
-        ready: true,
-        hasWebGPU: true,
-        canTranslate: false,
-        device: "webgpu" as const,
-        isMobile: false,
-      }),
+    setMockSnapshot({
+      capabilities: { hasWebGPU: true, canTranslate: false, device: "webgpu" as const },
     })
 
     render(
@@ -389,17 +399,6 @@ describe("useTranslator", () => {
 })
 
 describe("TranslateButton", () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-    listeners.clear()
-    mockSnapshot = createDefaultSnapshot()
-    mockLoadModel.mockResolvedValue(undefined)
-    mockTranslateTo.mockResolvedValue(undefined)
-    mockTranslateText.mockResolvedValue("translated")
-  })
-
-  afterEach(cleanup)
-
   it("shows explainer tooltip on hover", () => {
     render(
       <Wrapper config={DOM_CONFIG}>
@@ -458,10 +457,9 @@ describe("TranslateButton", () => {
 
   it("dismisses ready dropdown on click outside", async () => {
     mockLoadModel.mockImplementation(async () => {
-      setSnapshot((prev) => ({
-        ...prev,
-        model: Object.freeze({ status: "ready" as const }),
-      }))
+      setMockSnapshot({
+        model: { status: "ready" as const },
+      })
     })
 
     render(
@@ -486,10 +484,9 @@ describe("TranslateButton", () => {
 
   it("dismisses ready dropdown on Escape key", async () => {
     mockLoadModel.mockImplementation(async () => {
-      setSnapshot((prev) => ({
-        ...prev,
-        model: Object.freeze({ status: "ready" as const }),
-      }))
+      setMockSnapshot({
+        model: { status: "ready" as const },
+      })
     })
 
     render(
@@ -534,10 +531,9 @@ describe("TranslateButton", () => {
 
   it("shows language dropdown when button clicked in ready state", async () => {
     mockLoadModel.mockImplementation(async () => {
-      setSnapshot((prev) => ({
-        ...prev,
-        model: Object.freeze({ status: "ready" as const }),
-      }))
+      setMockSnapshot({
+        model: { status: "ready" as const },
+      })
     })
 
     render(
@@ -563,15 +559,13 @@ describe("TranslateButton", () => {
   })
 
   it("shows an explicit mobile warning state", () => {
-    mockSnapshot = Object.freeze({
-      ...mockSnapshot,
-      capabilities: Object.freeze({
-        ready: true,
+    setMockSnapshot({
+      capabilities: {
         hasWebGPU: false,
         canTranslate: true,
         device: "wasm" as const,
         isMobile: true,
-      }),
+      },
     })
 
     render(
@@ -589,15 +583,12 @@ describe("TranslateButton", () => {
   })
 
   it("renders and explains the WASM fallback on desktop", async () => {
-    mockSnapshot = Object.freeze({
-      ...mockSnapshot,
-      capabilities: Object.freeze({
-        ready: true,
+    setMockSnapshot({
+      capabilities: {
         hasWebGPU: false,
         canTranslate: true,
         device: "wasm" as const,
-        isMobile: false,
-      }),
+      },
     })
 
     render(
@@ -622,15 +613,12 @@ describe("TranslateButton", () => {
   })
 
   it("does not render when canTranslate is false", () => {
-    mockSnapshot = Object.freeze({
-      ...mockSnapshot,
-      capabilities: Object.freeze({
-        ready: true,
+    setMockSnapshot({
+      capabilities: {
         hasWebGPU: false,
         canTranslate: false,
         device: "webgpu" as const,
-        isMobile: false,
-      }),
+      },
     })
 
     const { container } = render(
@@ -644,27 +632,21 @@ describe("TranslateButton", () => {
 
   it("shows non-zero translation progress from hook state", async () => {
     mockLoadModel.mockImplementation(async () => {
-      setSnapshot((prev) => ({
-        ...prev,
-        model: Object.freeze({ status: "ready" as const }),
-      }))
+      setMockSnapshot({
+        model: { status: "ready" as const },
+      })
     })
 
     const deferred = createDeferred<void>()
     mockTranslateTo.mockImplementation(async (lang) => {
-      setSnapshot((prev) => ({
-        ...prev,
-        translation: Object.freeze({
-          status: "translating" as const,
-          progress: 0.5,
-        }),
+      setMockSnapshot({
+        translation: { status: "translating", progress: 0.5 },
         currentLanguage: lang,
-      }))
+      })
       await deferred.promise
-      setSnapshot((prev) => ({
-        ...prev,
-        translation: Object.freeze({ status: "idle" as const }),
-      }))
+      setMockSnapshot({
+        translation: { status: "idle" as const },
+      })
     })
 
     render(
@@ -701,18 +683,13 @@ describe("TranslateButton", () => {
   it("shows non-zero download progress from hook state", async () => {
     const deferred = createDeferred<void>()
     mockLoadModel.mockImplementation(async () => {
-      setSnapshot((prev) => ({
-        ...prev,
-        model: Object.freeze({
-          status: "downloading" as const,
-          progress: 0.25,
-        }),
-      }))
+      setMockSnapshot({
+        model: { status: "downloading", progress: 0.25 },
+      })
       await deferred.promise
-      setSnapshot((prev) => ({
-        ...prev,
-        model: Object.freeze({ status: "ready" as const }),
-      }))
+      setMockSnapshot({
+        model: { status: "ready" as const },
+      })
     })
 
     render(
@@ -758,14 +735,6 @@ describe("TranslateDropdown", () => {
       />,
     )
   }
-
-  beforeEach(() => {
-    vi.clearAllMocks()
-    listeners.clear()
-    mockSnapshot = createDefaultSnapshot()
-  })
-
-  afterEach(cleanup)
 
   it("renders all languages from props without a provider", () => {
     renderDropdown()
@@ -908,15 +877,6 @@ describe("TranslateDropdown", () => {
 })
 
 describe("useTranslateDOM", () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-    listeners.clear()
-    mockSnapshot = createDefaultSnapshot()
-    mockTranslateTo.mockResolvedValue(undefined)
-  })
-
-  afterEach(cleanup)
-
   it("calls core.translateTo on translatePage", async () => {
     render(
       <Wrapper config={DOM_CONFIG}>
@@ -955,18 +915,13 @@ describe("useTranslateDOM", () => {
   it("reports translation progress from snapshot", async () => {
     const deferred = createDeferred<void>()
     mockTranslateTo.mockImplementation(async () => {
-      setSnapshot((prev) => ({
-        ...prev,
-        translation: Object.freeze({
-          status: "translating" as const,
-          progress: 0.5,
-        }),
-      }))
+      setMockSnapshot({
+        translation: { status: "translating", progress: 0.5 },
+      })
       await deferred.promise
-      setSnapshot((prev) => ({
-        ...prev,
-        translation: Object.freeze({ status: "idle" as const }),
-      }))
+      setMockSnapshot({
+        translation: { status: "idle" as const },
+      })
     })
 
     render(
