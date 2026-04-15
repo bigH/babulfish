@@ -6,14 +6,10 @@
     "build": "pnpm -r run build",
     "test": "pnpm -r run test",
     "lint": "pnpm -r run lint",
-    "changeset": "changeset",
-    "version": "changeset version",
     "consumer:smoke": "node scripts/consumer-smoke.mjs",
     "docs:check": "pnpm --filter babulfish lint && pnpm --filter @babulfish/styles lint && pnpm run consumer:smoke",
-    "release": "pnpm build && pnpm test && pnpm docs:check && changeset publish"
-  },
-  "devDependencies": {
-    "@changesets/cli": "^2.29.7"
+    "release:check": "pnpm build && pnpm test && pnpm docs:check",
+    "release": "pnpm run release:check && pnpm --filter @babulfish/styles publish --access public && pnpm --filter @babulfish/core publish --access public && pnpm --filter @babulfish/react publish --access public && pnpm --filter babulfish publish --access public"
   },
   "engines": {
     "node": ">=20"

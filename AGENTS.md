@@ -24,8 +24,8 @@ Treat package READMEs, `package.json` files, and contract/conformance tests as t
 - `tsup` for published package builds.
 - Vite for `demo-vanilla` and `demo-webcomponent`.
 - Next.js for the private React demo in [`packages/demo`](packages/demo/README.md).
-- Changesets for versioning and release orchestration.
-- GitHub Actions as the CI and publish path.
+- GitHub Actions for CI only.
+- Local `pnpm release` publishing from a developer machine.
 
 ## Validation
 
@@ -45,34 +45,42 @@ If you only need to iterate on one package, use `pnpm --filter <package> ...`, t
 
 - Only [`packages/core/src/engine/pipeline-loader.ts`](packages/core/src/engine/pipeline-loader.ts) may import `@huggingface/transformers`. That restriction is enforced in [`eslint.config.js`](eslint.config.js).
 - CSS exports must stay local bridge files such as [`packages/react/src/babulfish.css`](packages/react/src/babulfish.css) and [`packages/babulfish/src/babulfish.css`](packages/babulfish/src/babulfish.css). Do not point package `exports` at another package specifier for CSS.
-- `@babulfish/core`, `@babulfish/react`, `@babulfish/styles`, and `babulfish` version together as a fixed Changesets group. Demo packages are private and are not published.
+- `@babulfish/core`, `@babulfish/react`, `@babulfish/styles`, and `babulfish` version together manually. Demo packages are private and are not published.
 
-## Publishing And Changesets
+## Publishing
 
 When a change affects a published package or its public contract:
 
-1. Create a changeset:
+1. Update the version in each published package manifest:
 
    ```bash
-   pnpm changeset
+   packages/core/package.json
+   packages/react/package.json
+   packages/styles/package.json
+   packages/babulfish/package.json
    ```
 
-2. Pick the correct bump type and write a short, user-facing summary.
-3. Commit the generated `.changeset/*.md` file with the code change.
-4. If you need to apply version bumps locally, run:
+2. Keep those four versions in lockstep.
+3. Run the release checks:
 
    ```bash
-   pnpm version
+   pnpm release:check
    ```
 
-5. Publishing is automated through [`.github/workflows/release.yml`](.github/workflows/release.yml) on `main`.
-6. Local publishing uses:
+4. Publish locally from a machine that is already authenticated with npm:
 
    ```bash
    pnpm release
    ```
 
-   That path runs `build`, `test`, `docs:check`, and `changeset publish`, so only use it when you intentionally mean to publish.
+   That path runs `build`, `test`, `docs:check`, then publishes in dependency order: `@babulfish/styles`, `@babulfish/core`, `@babulfish/react`, `babulfish`.
+
+### Release Requests
+
+- When the user says "release everything" or equivalent, use the code-driven local publish flow above.
+- Release from a clean git worktree unless the user explicitly approves bypassing git checks.
+- Confirm the four published package versions first. If they are not aligned, stop and fix the manifests before publishing.
+- Treat `pnpm release:check` as the rehearsal and `pnpm release` as the real publish.
 
 ## Workspace Packages
 
