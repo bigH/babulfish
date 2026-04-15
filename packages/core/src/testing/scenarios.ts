@@ -9,6 +9,7 @@ import type {
   ConformanceScenario,
   DomConformanceDriver,
 } from "./drivers/types.js"
+import { makeFakePipeline } from "./conformance-helpers.js"
 
 // ---------------------------------------------------------------------------
 // Mock access — test file MUST vi.mock("../engine/pipeline-loader.js") first
@@ -57,13 +58,6 @@ async function expectAbortError(
 // Fake pipeline helpers
 // ---------------------------------------------------------------------------
 
-function fakePipeline(translation = "translated"): unknown {
-  const generate = async () => [
-    { generated_text: [{ role: "assistant", content: translation }] },
-  ]
-  return Object.assign(generate, { dispose: async () => {} })
-}
-
 function controllablePipeline() {
   const barriers: Array<() => void> = []
   const generate = async () => {
@@ -105,7 +99,7 @@ async function withLoadedCore<T>(
   run: (core: BabulfishCore) => Promise<T>,
   translation = "translated",
 ): Promise<T> {
-  mockedLoad.mockResolvedValue(fakePipeline(translation))
+  mockedLoad.mockResolvedValue(makeFakePipeline(translation))
   return withCore(driver, async (core) => {
     await core.loadModel()
     return run(core)
@@ -186,7 +180,7 @@ export const scenarios: readonly ConformanceScenario[] = [
           cb?.({ status: "progress", file: "m.onnx", loaded: 25, total: 100 })
           cb?.({ status: "progress", file: "m.onnx", loaded: 50, total: 100 })
           cb?.({ status: "progress", file: "m.onnx", loaded: 100, total: 100 })
-          return fakePipeline()
+          return makeFakePipeline()
         },
       )
       await withCore(driver, async (core) => {
@@ -326,7 +320,7 @@ export const scenarios: readonly ConformanceScenario[] = [
     id: "lifecycle-concurrent-load-dedup",
     description: "Two cores loadModel() → loadPipeline called exactly once",
     async run(driver) {
-      mockedLoad.mockResolvedValue(fakePipeline())
+      mockedLoad.mockResolvedValue(makeFakePipeline())
       const a = await driver.create()
       try {
         const b = await driver.create()
