@@ -2,6 +2,7 @@
 
 import type { BabulfishCore, TranslateOptions } from "../core/babulfish.js"
 import type { Snapshot } from "../core/store.js"
+import type { PipelineOptions } from "../engine/pipeline-loader.js"
 import { loadPipeline } from "../engine/pipeline-loader.js"
 import { getEngineIdentity } from "../engine/testing/index.js"
 import type {
@@ -9,20 +10,29 @@ import type {
   ConformanceScenario,
   DomConformanceDriver,
 } from "./drivers/types.js"
-import { makeFakePipeline } from "./conformance-helpers.js"
+import { makeFakePipeline, type ConformancePipeline } from "./conformance-helpers.js"
 
 // ---------------------------------------------------------------------------
 // Mock access — test file MUST vi.mock("../engine/pipeline-loader.js") first
 // ---------------------------------------------------------------------------
 
-type MockFn = {
-  (...args: any[]): any
-  mock: { calls: any[][] }
-  mockImplementation(fn: (...args: any[]) => any): void
-  mockResolvedValue(value: any): void
+type MockLoadPipelineResult =
+  | Awaited<ReturnType<typeof loadPipeline>>
+  | ConformancePipeline
+
+type MockedLoadPipeline = {
+  (model: string, opts?: PipelineOptions): Promise<MockLoadPipelineResult>
+  mock: { calls: Array<[string, PipelineOptions?]> }
+  mockImplementation(
+    fn: (
+      model: string,
+      opts?: PipelineOptions,
+    ) => MockLoadPipelineResult | Promise<MockLoadPipelineResult>,
+  ): void
+  mockResolvedValue(value: MockLoadPipelineResult): void
 }
 
-const mockedLoad = loadPipeline as unknown as MockFn
+const mockedLoad = loadPipeline as unknown as MockedLoadPipeline
 
 // ---------------------------------------------------------------------------
 // Assertions (no vitest dependency — plain throws)
@@ -58,16 +68,20 @@ async function expectAbortError(
 // Fake pipeline helpers
 // ---------------------------------------------------------------------------
 
-function controllablePipeline() {
+function controllablePipeline(): {
+  pipeline: ConformancePipeline
+  resolveAll: () => void
+} {
   const barriers: Array<() => void> = []
   const generate = async () => {
     await new Promise<void>((r) => barriers.push(r))
     return [
       { generated_text: [{ role: "assistant", content: "translated" }] },
-    ]
+    ] as const
   }
+  const pipeline = Object.assign(generate, { dispose: async () => {} }) as ConformancePipeline
   return {
-    pipeline: Object.assign(generate, { dispose: async () => {} }),
+    pipeline,
     resolveAll() {
       barriers.forEach((r) => r())
     },
@@ -175,11 +189,11 @@ export const scenarios: readonly ConformanceScenario[] = [
     description: "Downloading progress is non-decreasing within a load",
     async run(driver) {
       mockedLoad.mockImplementation(
-        async (_t: any, _m: any, opts: any) => {
-          const cb = opts?.progress_callback
-          cb?.({ status: "progress", file: "m.onnx", loaded: 25, total: 100 })
-          cb?.({ status: "progress", file: "m.onnx", loaded: 50, total: 100 })
-          cb?.({ status: "progress", file: "m.onnx", loaded: 100, total: 100 })
+        async (_model: string, _options?: PipelineOptions) => {
+          const cb = _options?.progress_callback
+          cb?.({ status: "progress", name: "m.onnx", progress: 25, file: "m.onnx", loaded: 25, total: 100 })
+          cb?.({ status: "progress", name: "m.onnx", progress: 50, file: "m.onnx", loaded: 50, total: 100 })
+          cb?.({ status: "progress", name: "m.onnx", progress: 100, file: "m.onnx", loaded: 100, total: 100 })
           return makeFakePipeline()
         },
       )
