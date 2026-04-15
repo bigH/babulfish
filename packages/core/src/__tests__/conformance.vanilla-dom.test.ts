@@ -9,6 +9,7 @@ import { loadPipeline } from "../engine/pipeline-loader.js"
 import { scenariosForDriver } from "../testing/index.js"
 import { createVanillaDomDriver } from "../testing/drivers/vanilla-dom.js"
 import { __resetEngineForTests } from "../engine/testing/index.js"
+import { makeFakePipeline, resetConformanceDocument } from "./conformance.helpers.js"
 
 const mockedLoadPipeline = vi.mocked(loadPipeline)
 const driver = createVanillaDomDriver()
@@ -16,22 +17,10 @@ const rootOverrideScenario = scenariosForDriver(driver).find(
   (scenario) => scenario.id === "root-override",
 )
 
-function fakePipeline(translation = "translated") {
-  return Object.assign(
-    async () => [{ generated_text: [{ role: "assistant", content: translation }] }],
-    { dispose: async () => {} },
-  )
-}
-
-function resetDOM(): void {
-  // Safe: hardcoded test fixture, not user content
-  document.body.innerHTML = '<div id="app"><p>Hello world</p></div>' // eslint-disable-line no-unsanitized/property
-}
-
 beforeEach(() => {
   vi.clearAllMocks()
   __resetEngineForTests()
-  resetDOM()
+  resetConformanceDocument()
 })
 
 describe("conformance — vanilla DOM driver", () => {
@@ -54,7 +43,7 @@ describe("conformance — vanilla DOM driver", () => {
       },
     })
 
-    mockedLoadPipeline.mockResolvedValue(fakePipeline())
+    mockedLoadPipeline.mockResolvedValue(makeFakePipeline())
     await core.loadModel()
     await core.translateTo("es")
 
@@ -74,7 +63,7 @@ describe("conformance — vanilla DOM driver", () => {
       },
     })
 
-    mockedLoadPipeline.mockResolvedValue(fakePipeline("traducido"))
+    mockedLoadPipeline.mockResolvedValue(makeFakePipeline("traducido"))
     await core.loadModel()
     await core.translateTo("es")
 

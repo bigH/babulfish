@@ -9,22 +9,16 @@ import { loadPipeline } from "../engine/pipeline-loader.js"
 import { scenarios, scenariosForDriver } from "../testing/index.js"
 import { createDirectDriver } from "../testing/drivers/direct.js"
 import { __resetEngineForTests } from "../engine/testing/index.js"
+import { makeFakePipeline, resetConformanceDocument } from "./conformance.helpers.js"
 
+const mockedLoadPipeline = vi.mocked(loadPipeline)
 const driver = createDirectDriver()
 const applicable = scenariosForDriver(driver)
-const mockedLoadPipeline = vi.mocked(loadPipeline)
-
-function fakePipeline(translation = "translated"): unknown {
-  const generate = async () => [
-    { generated_text: [{ role: "assistant", content: translation }] },
-  ]
-  return Object.assign(generate, { dispose: async () => {} })
-}
 
 beforeEach(() => {
   vi.clearAllMocks()
   __resetEngineForTests()
-  document.body.innerHTML = ""
+  resetConformanceDocument("")
 })
 
 describe("conformance — direct driver", () => {
@@ -38,8 +32,8 @@ describe("conformance — direct driver", () => {
   })
 
   it("ignores DOM config and leaves the document untouched", async () => {
-    document.body.innerHTML = '<div id="app"><p>Hello world</p></div>' // eslint-disable-line no-unsanitized/property
-    mockedLoadPipeline.mockResolvedValue(fakePipeline())
+    resetConformanceDocument()
+    mockedLoadPipeline.mockResolvedValue(makeFakePipeline())
 
     const core = await driver.create({
       dom: { roots: ["#app"] },
