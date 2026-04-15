@@ -1,46 +1,36 @@
 // @vitest-environment node
 
 import path from "node:path"
-import type { AliasOptions } from "vite"
 import { describe, expect, it } from "vitest"
 
 import viteConfig from "../vite.config"
+
+const coreSrc = path.resolve(__dirname, "..", "..", "core", "src")
 
 const expectedHeaders = {
   "Cross-Origin-Opener-Policy": "same-origin",
   "Cross-Origin-Embedder-Policy": "require-corp",
 }
 
-function expectAliasTarget(alias: unknown, relativePath: string): void {
-  expect(alias).toBe(path.resolve(__dirname, "..", "..", "core", "src", relativePath))
-}
-
-function readAliasEntries(aliases: AliasOptions | undefined): Record<string, string> {
-  if (!aliases) {
+function readAliasEntries(aliases: unknown): Record<string, string> {
+  if (!aliases || typeof aliases !== "object" || Array.isArray(aliases)) {
     throw new Error("Expected demo-webcomponent vite config to define aliases")
   }
 
-  if (!Array.isArray(aliases)) {
-    return aliases as Record<string, string>
-  }
-
-  return Object.fromEntries(
-    aliases
-      .filter((alias): alias is { find: string; replacement: string } => typeof alias.find === "string")
-      .map((alias) => [alias.find, alias.replacement]),
-  )
+  return aliases as Record<string, string>
 }
 
 describe("demo-webcomponent vite config", () => {
   it("keeps source aliases pointed at core source entrypoints", () => {
     const aliases = readAliasEntries(viteConfig.resolve?.alias)
 
-    expectAliasTarget(aliases["@babulfish/core"], "index.ts")
-    expectAliasTarget(aliases["@babulfish/core/engine"], path.join("engine", "index.ts"))
-    expectAliasTarget(aliases["@babulfish/core/dom"], path.join("dom", "index.ts"))
+    expect(aliases["@babulfish/core"]).toBe(path.resolve(coreSrc, "index.ts"))
+    expect(aliases["@babulfish/core/engine"]).toBe(path.resolve(coreSrc, "engine", "index.ts"))
+    expect(aliases["@babulfish/core/dom"]).toBe(path.resolve(coreSrc, "dom", "index.ts"))
   })
 
   it("applies the same cross-origin isolation headers to dev and preview", () => {
+    expect(viteConfig.server?.headers).toBe(viteConfig.preview?.headers)
     expect(viteConfig.server?.headers).toEqual(viteConfig.preview?.headers)
     expect(viteConfig.server?.headers).toMatchObject(expectedHeaders)
   })
