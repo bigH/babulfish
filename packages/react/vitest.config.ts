@@ -1,28 +1,17 @@
 import { defineConfig } from "vitest/config"
-import { fileURLToPath } from "url"
-import path from "path"
+import { fileURLToPath } from "node:url"
+import path from "node:path"
 
-const coreSrc = path.resolve(
-  path.dirname(fileURLToPath(import.meta.url)),
-  "../core/src",
-)
+const coreSrc = fileURLToPath(new URL("../core/src", import.meta.url))
+const coreSrcFile = (relative: string) => path.join(coreSrc, relative)
 
 export default defineConfig({
   resolve: {
-    alias: [
-      {
-        find: "@babulfish/core/engine/testing",
-        replacement: path.join(coreSrc, "engine/testing/index.ts"),
-      },
-      {
-        find: "@babulfish/core/testing",
-        replacement: path.join(coreSrc, "testing/index.ts"),
-      },
-      {
-        find: /^@babulfish\/core$/,
-        replacement: path.join(coreSrc, "index.ts"),
-      },
-    ],
+    alias: {
+      "@babulfish/core/engine/testing": coreSrcFile("engine/testing/index.ts"),
+      "@babulfish/core/testing": coreSrcFile("testing/index.ts"),
+      "@babulfish/core": coreSrcFile("index.ts"),
+    },
   },
   test: {
     environment: "jsdom",
