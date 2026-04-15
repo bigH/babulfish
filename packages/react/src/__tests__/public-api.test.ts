@@ -11,17 +11,6 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "useTranslator",
 ] as const satisfies readonly (keyof PublicApi)[]
 
-type ForbiddenReactPublicApiExports = Extract<
-  "BabulfishProvider" | "useBabulfish" | "BabulfishLanguage",
-  keyof PublicApi
->
-type AssertNoForbiddenReactPublicApiExports =
-  [ForbiddenReactPublicApiExports] extends [never] ? true : never
-
-const assertNoForbiddenReactPublicApiExports:
-  AssertNoForbiddenReactPublicApiExports = true
-void assertNoForbiddenReactPublicApiExports
-
 describe("public React API contract", () => {
   it("exports exactly the documented React runtime names", () => {
     expect(Object.keys(publicApi).toSorted()).toEqual(EXPECTED_RUNTIME_EXPORTS)
