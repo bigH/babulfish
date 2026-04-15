@@ -75,19 +75,19 @@ export function createBabulfish(config?: BabulfishConfig): BabulfishCore {
       let model: ModelState
       switch (to) {
         case "downloading":
-          model = Object.freeze({
+          model = {
             status: "downloading" as const,
             progress: prev.model.status === "downloading" ? prev.model.progress : 0,
-          })
+          }
           break
         case "ready":
-          model = Object.freeze({ status: "ready" as const })
+          model = { status: "ready" as const }
           break
         case "error":
-          model = Object.freeze({ status: "error" as const, error })
+          model = { status: "error" as const, error }
           break
         default:
-          model = Object.freeze({ status: "idle" as const })
+          model = { status: "idle" as const }
       }
       return { ...prev, model }
     })
@@ -97,7 +97,7 @@ export function createBabulfish(config?: BabulfishConfig): BabulfishCore {
     store.set((prev) => {
       const p = total > 0 ? loaded / total : 0
       if (prev.model.status === "downloading" && prev.model.progress === p) return prev
-      return { ...prev, model: Object.freeze({ status: "downloading" as const, progress: p }) }
+      return { ...prev, model: { status: "downloading" as const, progress: p } }
     })
   })
 
@@ -149,7 +149,7 @@ export function createBabulfish(config?: BabulfishConfig): BabulfishCore {
 
     store.set((prev) => ({
       ...prev,
-      translation: Object.freeze({ status: "translating" as const, progress: 0 }),
+      translation: { status: "translating" as const, progress: 0 },
       currentLanguage: lang,
     }))
 
@@ -159,7 +159,7 @@ export function createBabulfish(config?: BabulfishConfig): BabulfishCore {
         if (prev.translation.status === "idle") return prev
         return {
           ...prev,
-          translation: Object.freeze({ status: "idle" as const }),
+          translation: { status: "idle" as const },
         }
       })
     }
@@ -206,7 +206,7 @@ export function createBabulfish(config?: BabulfishConfig): BabulfishCore {
       if (prev.translation.status === "idle" && prev.currentLanguage === null) return prev
       return {
         ...prev,
-        translation: Object.freeze({ status: "idle" as const }),
+        translation: { status: "idle" as const },
         currentLanguage: null,
       }
     })
@@ -218,7 +218,7 @@ export function createBabulfish(config?: BabulfishConfig): BabulfishCore {
     if (domTranslator) domTranslator.abort()
     store.set((prev) => {
       if (prev.translation.status === "idle") return prev
-      return { ...prev, translation: Object.freeze({ status: "idle" as const }) }
+      return { ...prev, translation: { status: "idle" as const } }
     })
   }
 

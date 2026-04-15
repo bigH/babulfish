@@ -37,6 +37,22 @@ describe("createStore", () => {
     freeze.mockRestore()
   })
 
+  it("freezes snapshot slices for updated state", () => {
+    const store = createStore()
+
+    store.set((snapshot) => ({
+      ...snapshot,
+      translation: { status: "translating", progress: 0.5 },
+      currentLanguage: "es",
+    }))
+
+    const snapshot = store.get()
+    expect(Object.isFrozen(snapshot)).toBe(true)
+    expect(Object.isFrozen(snapshot.model)).toBe(true)
+    expect(Object.isFrozen(snapshot.translation)).toBe(true)
+    expect(Object.isFrozen(snapshot.capabilities)).toBe(true)
+  })
+
   it("becomes inert after dispose", () => {
     const store = createStore()
     const listener = vi.fn()

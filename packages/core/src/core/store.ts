@@ -18,11 +18,22 @@ export type Snapshot = {
   readonly capabilities: Capabilities
 }
 
-const IDLE_MODEL: ModelState = Object.freeze({ status: "idle" as const })
-const IDLE_TRANSLATION: TranslationState = Object.freeze({ status: "idle" as const })
-const INITIAL_SNAPSHOT: Snapshot = Object.freeze({
-  model: IDLE_MODEL,
-  translation: IDLE_TRANSLATION,
+function freezeValue<T extends object>(value: T): T {
+  return Object.isFrozen(value) ? value : Object.freeze(value)
+}
+
+function normalizeSnapshot(snapshot: Snapshot): Snapshot {
+  return Object.freeze({
+    ...snapshot,
+    model: freezeValue(snapshot.model),
+    translation: freezeValue(snapshot.translation),
+    capabilities: freezeValue(snapshot.capabilities),
+  })
+}
+
+const INITIAL_SNAPSHOT: Snapshot = normalizeSnapshot({
+  model: { status: "idle" as const },
+  translation: { status: "idle" as const },
   currentLanguage: null,
   capabilities: SSR_CAPABILITIES,
 })
@@ -47,7 +58,7 @@ export function createStore(): Store {
       if (disposed) return
       const next = updater(current)
       if (next === current) return
-      current = Object.freeze(next)
+      current = normalizeSnapshot(next)
       for (const listener of listeners) {
         listener(current)
       }
