@@ -27,8 +27,18 @@ export function defaultShouldSkip(text: string): boolean {
 }
 
 export function buildSkipTags(extra?: readonly string[]): ReadonlySet<string> {
-  if (!extra || extra.length === 0) return DEFAULT_SKIP_TAGS
-  return new Set([...DEFAULT_SKIP_TAGS, ...extra.map((t) => t.toUpperCase())])
+  const skipTags = new Set(DEFAULT_SKIP_TAGS)
+  for (const tag of extra ?? []) {
+    skipTags.add(tag.toUpperCase())
+  }
+  return skipTags
+}
+
+function getSourceText(
+  node: Text,
+  originalTexts: WeakMap<Text, string>,
+): string {
+  return originalTexts.get(node) ?? node.textContent ?? ""
 }
 
 function isInsideSkipped(
@@ -57,7 +67,7 @@ export function collectTextNodes(
     acceptNode(node: Text) {
       if (isInsideSkipped(node, config.skipTags, skipSelectors))
         return NodeFilter.FILTER_REJECT
-      const sourceText = originalTexts.get(node) ?? node.textContent ?? ""
+      const sourceText = getSourceText(node, originalTexts)
       const trimmed = sourceText.trim()
       if (!trimmed) return NodeFilter.FILTER_REJECT
       if (config.shouldSkip(trimmed)) return NodeFilter.FILTER_REJECT
@@ -68,7 +78,7 @@ export function collectTextNodes(
   const nodes: TaggedTextNode[] = []
   let current = walker.nextNode() as Text | null
   while (current) {
-    const sourceText = originalTexts.get(current) ?? current.textContent ?? ""
+    const sourceText = getSourceText(current, originalTexts)
     if (!originalTexts.has(current)) {
       originalTexts.set(current, sourceText)
     }
