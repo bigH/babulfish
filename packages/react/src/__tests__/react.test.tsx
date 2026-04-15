@@ -279,7 +279,7 @@ describe("useTranslator", () => {
     expect(screen.getByTestId("is-mobile")).toHaveTextContent("false")
   })
 
-  it("reports WASM fallback when WebGPU is unavailable", () => {
+  it("reports translation support with WASM fallback when WebGPU is unavailable", () => {
     mockSnapshot = Object.freeze({
       ...mockSnapshot,
       capabilities: Object.freeze({
@@ -297,7 +297,7 @@ describe("useTranslator", () => {
       </Wrapper>,
     )
 
-    expect(screen.getByTestId("is-supported")).toHaveTextContent("false")
+    expect(screen.getByTestId("is-supported")).toHaveTextContent("true")
     expect(screen.getByTestId("has-webgpu")).toHaveTextContent("false")
     expect(screen.getByTestId("can-translate")).toHaveTextContent("true")
     expect(screen.getByTestId("device")).toHaveTextContent("wasm")
@@ -319,6 +319,29 @@ describe("useTranslator", () => {
     )
 
     expect(screen.getByTestId("is-mobile")).toHaveTextContent("true")
+  })
+
+  it("reports unsupported when translation is unavailable", () => {
+    mockSnapshot = Object.freeze({
+      ...mockSnapshot,
+      capabilities: Object.freeze({
+        ready: true,
+        hasWebGPU: true,
+        canTranslate: false,
+        device: "webgpu" as const,
+        isMobile: false,
+      }),
+    })
+
+    render(
+      <Wrapper config={DOM_CONFIG}>
+        <HookInspector />
+      </Wrapper>,
+    )
+
+    expect(screen.getByTestId("is-supported")).toHaveTextContent("false")
+    expect(screen.getByTestId("can-translate")).toHaveTextContent("false")
+    expect(screen.getByTestId("has-webgpu")).toHaveTextContent("true")
   })
 
   it("calls core.loadModel on loadModel", async () => {

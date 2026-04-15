@@ -18,7 +18,7 @@ export function useTranslator() {
     translation: snapshot.translation,
     currentLanguage: snapshot.currentLanguage,
     capabilitiesReady: snapshot.capabilities.ready,
-    isSupported: snapshot.capabilities.hasWebGPU,
+    isSupported: snapshot.capabilities.canTranslate,
     hasWebGPU: snapshot.capabilities.hasWebGPU,
     canTranslate: snapshot.capabilities.canTranslate,
     device: snapshot.capabilities.device,
