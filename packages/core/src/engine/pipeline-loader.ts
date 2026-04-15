@@ -1,7 +1,7 @@
 import type {
   DataType,
-  DeviceType as TransformersDeviceType,
   Message,
+  DeviceType,
   ProgressCallback,
   ProgressInfo,
   TextGenerationChatOutput,
@@ -9,12 +9,8 @@ import type {
   TextGenerationStringOutput,
 } from "@huggingface/transformers"
 
-export type DeviceType = TransformersDeviceType
-
-export type DtypeType = DataType
-
 export type PipelineOptions = {
-  readonly dtype?: DtypeType
+  readonly dtype?: DataType
   readonly device?: DeviceType
   readonly progress_callback?: ProgressCallback
 }
