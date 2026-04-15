@@ -10,6 +10,8 @@ type ScopedRootFixture = {
   readonly texts: readonly HTMLElement[]
 }
 
+type ScopedRootMode = "fragment" | "shadow"
+
 function appendSection(
   root: ParentNode,
   texts: readonly string[],
@@ -25,25 +27,26 @@ function appendSection(
   return nodes
 }
 
-function setUpFragmentRoot(texts: readonly string[]): ScopedRootFixture {
-  const root = document.createDocumentFragment()
+function setUpScopedRoot(
+  mode: ScopedRootMode,
+  texts: readonly string[],
+): ScopedRootFixture {
+  let root: ParentNode
+  if (mode === "shadow") {
+    const host = document.createElement("div")
+    document.body.appendChild(host)
+    root = host.attachShadow({ mode: "open" })
+  } else {
+    root = document.createDocumentFragment()
+  }
+
   return {
     root,
     texts: appendSection(root, texts),
   }
 }
 
-function setUpShadowRoot(texts: readonly string[]): ScopedRootFixture {
-  const host = document.createElement("div")
-  document.body.appendChild(host)
-  const root = host.attachShadow({ mode: "open" })
-  return {
-    root,
-    texts: appendSection(root, texts),
-  }
-}
-
-function createTranslator(root?: ParentNode | Document) {
+function createTranslator(root?: ParentNode) {
   return createDOMTranslator({
     translate: uppercaseTranslate,
     roots: ["section"],
@@ -60,19 +63,22 @@ describe("DOMTranslator with custom root", () => {
   it.each([
     {
       label: "DocumentFragment",
-      setUp: () => setUpFragmentRoot(["hello", "world"]),
+      mode: "fragment" as const,
+      texts: ["hello", "world"] as const,
       expected: ["HELLO", "WORLD"],
     },
     {
       label: "ShadowRoot",
-      setUp: () => setUpShadowRoot(["shadow text"]),
+      mode: "shadow" as const,
+      texts: ["shadow text"] as const,
       expected: ["SHADOW TEXT"],
     },
   ])("translates inside a $label without touching global document", async ({
-    setUp,
+    mode,
+    texts,
     expected,
   }) => {
-    const fixture = setUp()
+    const fixture = setUpScopedRoot(mode, texts)
     const spy = vi.spyOn(document, "querySelector")
 
     const translator = createTranslator(fixture.root)
@@ -89,6 +95,7 @@ describe("DOMTranslator with custom root", () => {
     p.textContent = "default root"
     main.appendChild(p)
     document.body.appendChild(main)
+    const spy = vi.spyOn(document, "querySelector")
 
     const translator = createDOMTranslator({
       translate: uppercaseTranslate,
@@ -97,11 +104,12 @@ describe("DOMTranslator with custom root", () => {
 
     await translator.translate("es")
 
+    expect(spy).toHaveBeenCalled()
     expect(p.textContent).toBe("DEFAULT ROOT")
   })
 
   it("restore works with scoped root", async () => {
-    const fixture = setUpShadowRoot(["original"])
+    const fixture = setUpScopedRoot("shadow", ["original"])
     const translator = createTranslator(fixture.root)
 
     await translator.translate("de")
