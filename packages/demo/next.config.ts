@@ -6,11 +6,11 @@ import type { NextConfig } from "next"
 const demoDir = path.dirname(fileURLToPath(import.meta.url))
 const coreSrcDir = path.resolve(demoDir, "../core/src")
 const reactSrcDir = path.resolve(demoDir, "../react/src")
-const demoSourceAliases = {
+const demoSourceAliases: Record<string, string> = {
   "@babulfish/react$": path.join(reactSrcDir, "index.ts"),
   "@babulfish/core$": path.join(coreSrcDir, "index.ts"),
   "@babulfish/core/engine$": path.join(coreSrcDir, "engine/index.ts"),
-} as const
+}
 
 const config: NextConfig = {
   experimental: {
@@ -38,12 +38,13 @@ const config: NextConfig = {
   transpilePackages: ["@babulfish/react", "@babulfish/core"],
   webpack: (webpackConfig) => {
     webpackConfig.resolve ??= {}
+    webpackConfig.resolve.alias ??= {}
     webpackConfig.resolve.extensionAlias = {
       ...(webpackConfig.resolve.extensionAlias ?? {}),
       ".js": [".ts", ".tsx", ".js"],
     }
     webpackConfig.resolve.alias = {
-      ...(webpackConfig.resolve.alias as Record<string, string | false>),
+      ...webpackConfig.resolve.alias,
       ...demoSourceAliases,
     }
 
