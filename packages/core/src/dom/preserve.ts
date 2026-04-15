@@ -8,6 +8,9 @@ export type PreserveMatcher = string | RegExp | ((text: string) => string[])
 const PLACEHOLDER_OPEN = "\u27EA"
 const PLACEHOLDER_CLOSE = "\u27EB"
 
+const placeholder = (index: number): string =>
+  `${PLACEHOLDER_OPEN}${index}${PLACEHOLDER_CLOSE}`
+
 /** Collect all strings matched by a single matcher. */
 function matchAll(matcher: PreserveMatcher, text: string): string[] {
   if (typeof matcher === "string") {
@@ -41,7 +44,7 @@ export function insertPlaceholders(
 
   for (const matcher of matchers) {
     for (const word of matchAll(matcher, masked)) {
-      const tag = `${PLACEHOLDER_OPEN}${slots.length}${PLACEHOLDER_CLOSE}`
+      const tag = placeholder(slots.length)
       const nextMasked = masked.replaceAll(word, tag)
       if (nextMasked === masked) continue
       slots.push(word)
@@ -58,10 +61,7 @@ export function restorePlaceholders(
 ): string {
   let result = translated
   for (let i = 0; i < slots.length; i++) {
-    result = result.replaceAll(
-      `${PLACEHOLDER_OPEN}${i}${PLACEHOLDER_CLOSE}`,
-      slots[i]!,
-    )
+    result = result.replaceAll(placeholder(i), slots[i]!)
   }
   return result
 }
