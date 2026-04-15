@@ -3,37 +3,29 @@ import {
   detectCapabilities,
   SSR_CAPABILITIES,
 } from "../capabilities.js"
+import {
+  captureGlobalDescriptors,
+  clearGlobal,
+  restoreGlobals,
+  setGlobal,
+} from "../../__tests__/globals.test-utils.js"
 
 describe("detectCapabilities", () => {
-  const originalWindow = globalThis.window
-  const originalNavigator = globalThis.navigator
+  const originalGlobals = captureGlobalDescriptors()
 
   afterEach(() => {
-    Object.defineProperty(globalThis, "window", {
-      value: originalWindow,
-      configurable: true,
-    })
-    Object.defineProperty(globalThis, "navigator", {
-      value: originalNavigator,
-      configurable: true,
-    })
+    restoreGlobals(originalGlobals)
   })
 
   it("returns the shared SSR capabilities snapshot when window is unavailable", () => {
-    delete (globalThis as Record<string, unknown>).window
+    clearGlobal("window")
 
     expect(detectCapabilities()).toBe(SSR_CAPABILITIES)
   })
 
   it("returns a frozen browser snapshot that mirrors engine detection", () => {
-    Object.defineProperty(globalThis, "window", {
-      value: { innerWidth: 400, ontouchstart: null },
-      configurable: true,
-    })
-    Object.defineProperty(globalThis, "navigator", {
-      value: { maxTouchPoints: 1 },
-      configurable: true,
-    })
+    setGlobal("window", { innerWidth: 400, ontouchstart: null })
+    setGlobal("navigator", { maxTouchPoints: 1 })
 
     const capabilities = detectCapabilities("webgpu")
 

@@ -3,40 +3,17 @@ import {
   getTranslationCapabilities,
   resolveDevice,
 } from "../detect.js"
+import {
+  captureGlobalDescriptors,
+  clearGlobal,
+  restoreGlobals,
+  setGlobal,
+} from "../../__tests__/globals.test-utils.js"
 
-type GlobalKey = "window" | "navigator"
-
-const originalGlobals: Record<GlobalKey, PropertyDescriptor | undefined> = {
-  window: Object.getOwnPropertyDescriptor(globalThis, "window"),
-  navigator: Object.getOwnPropertyDescriptor(globalThis, "navigator"),
-}
-
-function restoreGlobal(
-  key: GlobalKey,
-  descriptor: PropertyDescriptor | undefined,
-): void {
-  if (descriptor) {
-    Object.defineProperty(globalThis, key, descriptor)
-    return
-  }
-
-  Reflect.deleteProperty(globalThis, key)
-}
-
-function setGlobal(key: GlobalKey, value: object): void {
-  Object.defineProperty(globalThis, key, {
-    value,
-    configurable: true,
-  })
-}
-
-function clearGlobal(key: GlobalKey): void {
-  Reflect.deleteProperty(globalThis, key)
-}
+const originalGlobals = captureGlobalDescriptors()
 
 afterEach(() => {
-  restoreGlobal("window", originalGlobals.window)
-  restoreGlobal("navigator", originalGlobals.navigator)
+  restoreGlobals(originalGlobals)
 })
 
 describe("resolveDevice", () => {
