@@ -8,7 +8,6 @@ export type EngineHandle = {
 
 let sharedEngine: Translator | null = null
 let sharedEngineId: symbol | null = null
-let refCount = 0
 
 const coreEngineMap = new WeakMap<object, symbol>()
 
@@ -17,12 +16,11 @@ export function acquireEngine(config?: EngineConfig): EngineHandle {
     sharedEngine = createEngine(config)
     sharedEngineId = Symbol("engine")
   }
-  refCount++
   return { engine: sharedEngine, id: sharedEngineId! }
 }
 
 export function releaseEngine(_handle: EngineHandle): void {
-  refCount = Math.max(0, refCount - 1)
+  return
 }
 
 export function registerCoreEngine(core: object, id: symbol): void {
@@ -39,5 +37,4 @@ export function __resetSharedEngine(): void {
   }
   sharedEngine = null
   sharedEngineId = null
-  refCount = 0
 }
