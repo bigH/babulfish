@@ -26,7 +26,6 @@ const INITIAL_SNAPSHOT: Snapshot = Object.freeze({
   currentLanguage: null,
   capabilities: SSR_CAPABILITIES,
 })
-const NOOP_UNSUBSCRIBE = () => {}
 
 export type Store = {
   get(): Snapshot
@@ -46,15 +45,15 @@ export function createStore(): Store {
     },
     set(updater) {
       if (disposed) return
-      const next = Object.freeze(updater(current))
+      const next = updater(current)
       if (next === current) return
-      current = next
+      current = Object.freeze(next)
       for (const listener of listeners) {
         listener(current)
       }
     },
     subscribe(listener) {
-      if (disposed) return NOOP_UNSUBSCRIBE
+      if (disposed) return () => {}
       listeners.add(listener)
       return () => { listeners.delete(listener) }
     },

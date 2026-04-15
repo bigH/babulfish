@@ -25,6 +25,18 @@ describe("createStore", () => {
     expect(listener).not.toHaveBeenCalled()
   })
 
+  it("does not re-freeze snapshots on no-op updates", () => {
+    const store = createStore()
+    const freeze = vi.spyOn(Object, "freeze")
+
+    store.set((snapshot) => snapshot)
+
+    expect(freeze).not.toHaveBeenCalled()
+    expect(store.get()).toBe(store.get())
+
+    freeze.mockRestore()
+  })
+
   it("becomes inert after dispose", () => {
     const store = createStore()
     const listener = vi.fn()
