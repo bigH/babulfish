@@ -3,7 +3,6 @@ import { createBabulfish } from "./core/babulfish.js"
 import { DEFAULT_LANGUAGES } from "./core/languages.js"
 import * as domBarrel from "./dom/index.js"
 import * as markdown from "./dom/markdown.js"
-import type * as preserve from "./dom/preserve.js"
 import * as domTranslator from "./dom/translator.js"
 import * as engineBarrel from "./engine/index.js"
 import * as detect from "./engine/detect.js"
@@ -19,13 +18,14 @@ function expectValueReExports(
   expectedExports: Record<string, unknown>,
 ): void {
   for (const [name, expectedValue] of Object.entries(expectedExports)) {
+    expect(Object.hasOwn(actualModule, name)).toBe(true)
     expect(actualModule[name]).toBe(expectedValue)
   }
 }
 
 function expectMissingExports(moduleExports: Record<string, unknown>, names: readonly string[]): void {
   for (const name of names) {
-    expect(name in moduleExports).toBe(false)
+    expect(Object.hasOwn(moduleExports, name)).toBe(false)
   }
 }
 
@@ -76,7 +76,7 @@ describe("smoke tests", () => {
     expectTypeOf<domTranslator.DOMTranslator>().toEqualTypeOf<barrel.DOMTranslator>()
     expectTypeOf<domTranslator.RichTextConfig>().toEqualTypeOf<barrel.RichTextConfig>()
     expectTypeOf<domTranslator.LinkedConfig>().toEqualTypeOf<barrel.LinkedConfig>()
-    expectTypeOf<preserve.PreserveMatcher>().toEqualTypeOf<barrel.PreserveMatcher>()
+    expectTypeOf<domBarrel.PreserveMatcher>().toEqualTypeOf<barrel.PreserveMatcher>()
   })
 
   it("engine barrel re-exports the public engine surface without detection internals", () => {
@@ -119,7 +119,7 @@ describe("smoke tests", () => {
     expectTypeOf<domTranslator.DOMTranslator>().toEqualTypeOf<domBarrel.DOMTranslator>()
     expectTypeOf<domTranslator.RichTextConfig>().toEqualTypeOf<domBarrel.RichTextConfig>()
     expectTypeOf<domTranslator.LinkedConfig>().toEqualTypeOf<domBarrel.LinkedConfig>()
-    expectTypeOf<preserve.PreserveMatcher>().toEqualTypeOf<domBarrel.PreserveMatcher>()
+    expectTypeOf<barrel.PreserveMatcher>().toEqualTypeOf<domBarrel.PreserveMatcher>()
   })
 
   it("testing barrel re-exports the public conformance surface with truthful driver types", () => {
