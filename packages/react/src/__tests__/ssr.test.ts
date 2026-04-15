@@ -22,4 +22,17 @@ describe("SSR fallback", () => {
     }).toThrow(TypeError)
     expect(SSR_CORE.languages).toEqual([])
   })
+
+  it("keeps SSR operations as immediate no-ops", async () => {
+    expect(typeof SSR_CORE.subscribe(() => {})).toBe("function")
+    expect(SSR_CORE.snapshot).toBe(SSR_SNAPSHOT)
+    await expect(SSR_CORE.loadModel()).resolves.toBeUndefined()
+    await expect(SSR_CORE.translateTo("fr")).resolves.toBeUndefined()
+    await expect(SSR_CORE.translateText("hello", "fr")).resolves.toBe("")
+    await expect(SSR_CORE.dispose()).resolves.toBeUndefined()
+    expect(() => {
+      SSR_CORE.restore()
+      SSR_CORE.abort()
+    }).not.toThrow()
+  })
 })
