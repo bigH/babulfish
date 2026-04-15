@@ -80,6 +80,10 @@ describe("smoke tests", () => {
   })
 
   it("engine barrel re-exports the public engine surface without detection internals", () => {
+    expect(Object.keys(engineBarrel).sort()).toEqual(
+      ["createEngine", "getTranslationCapabilities"].sort(),
+    )
+
     expectValueReExports(engineBarrel, {
       createEngine: engineModel.createEngine,
       getTranslationCapabilities: detect.getTranslationCapabilities,

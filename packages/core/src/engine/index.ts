@@ -1,5 +1,13 @@
-export type { EngineConfig, Translator, TranslatorEvents, TranslatorStatus } from "./model.js"
-export { createEngine } from "./model.js"
-
-export type { DevicePreference, ResolvedDevice, TranslationCapabilities } from "./detect.js"
-export { getTranslationCapabilities } from "./detect.js"
+export {
+  type EngineConfig,
+  type Translator,
+  type TranslatorEvents,
+  type TranslatorStatus,
+  createEngine,
+} from "./model.js"
+export {
+  type DevicePreference,
+  type ResolvedDevice,
+  type TranslationCapabilities,
+  getTranslationCapabilities,
+} from "./detect.js"
