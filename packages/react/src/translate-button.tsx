@@ -126,7 +126,6 @@ function ProgressRing({
         strokeDasharray={RING_CIRCUMFERENCE}
         strokeDashoffset={offset}
         strokeLinecap="round"
-        style={{ transition: "stroke-dashoffset 300ms ease-out" }}
       />
     </svg>
   )

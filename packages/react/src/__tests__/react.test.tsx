@@ -718,6 +718,22 @@ describe("TranslateButton", () => {
     expect(button).not.toHaveTextContent("25%")
   })
 
+  it("renders the progress ring without dashoffset easing lag", () => {
+    setMockSnapshot({
+      model: { status: "downloading", progress: 0.9 },
+    })
+
+    const { container } = render(
+      <Wrapper config={DOM_CONFIG}>
+        <TranslateButton />
+      </Wrapper>,
+    )
+
+    const ring = container.querySelector('svg[viewBox="0 0 54 54"] circle')
+    expect(ring).not.toBeNull()
+    expect(ring?.getAttribute("style") ?? "").not.toContain("stroke-dashoffset")
+  })
+
   it("does not mirror download progress through an extra local render", async () => {
     let commitCount = 0
 
