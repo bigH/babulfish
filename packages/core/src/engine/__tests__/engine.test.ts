@@ -14,26 +14,11 @@ import type {
 function createMockTextGenerationPipeline() {
   const generate = vi.fn<TextGenerationPipeline["_call"]>()
   const dispose = vi.fn(async () => {})
+  type GenerateInput = Parameters<TextGenerationPipeline["_call"]>[0]
   type GenerateOptions = Parameters<TextGenerationPipeline["_call"]>[1]
 
   function mockGenerator(
-    texts: string,
-    options?: GenerateOptions,
-  ): Promise<TextGenerationStringOutput>
-  function mockGenerator(
-    texts: Message[],
-    options?: GenerateOptions,
-  ): Promise<TextGenerationChatOutput>
-  function mockGenerator(
-    texts: string[],
-    options?: GenerateOptions,
-  ): Promise<TextGenerationStringOutput[]>
-  function mockGenerator(
-    texts: Message[][],
-    options?: GenerateOptions,
-  ): Promise<TextGenerationChatOutput[]>
-  function mockGenerator(
-    texts: string | string[] | Message[] | Message[][],
+    texts: GenerateInput,
     options?: GenerateOptions,
   ) {
     return generate(texts, options)
@@ -85,14 +70,7 @@ function statusChanges(engine: ReturnType<typeof createEngine>) {
 type ProgressCallback = NonNullable<PipelineOptions["progress_callback"]>
 
 function captureProgressCallback() {
-  let callback: ProgressCallback | undefined
-
-  mockLoadPipeline.mockImplementation((_model, opts) => {
-    callback = opts?.progress_callback
-    return resolveMockPipeline()
-  })
-
-  return () => callback
+  return () => mockLoadPipeline.mock.lastCall?.[1]?.progress_callback
 }
 
 function createDeferred<T>() {
@@ -106,7 +84,7 @@ function createDeferred<T>() {
 }
 
 beforeEach(() => {
-  vi.clearAllMocks()
+  mockLoadPipeline.mockReset()
   mockGenerate.mockReset()
   mockLoadPipeline.mockImplementation(resolveMockPipeline)
 })
