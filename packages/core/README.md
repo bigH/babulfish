@@ -30,7 +30,7 @@ core.restore()
 
 ## API summary
 
-See [design doc §2.2](../../docs/ui-agnostic-core.md#22-typescript-interface) for the full interface specification.
+The public API centers on `createBabulfish(config?)`, which returns a `BabulfishCore` instance for model lifecycle, DOM translation, and snapshot subscriptions.
 
 ### `createBabulfish(config?): BabulfishCore`
 
@@ -80,6 +80,3 @@ This export is marked `@experimental` — the scenario list and driver interface
 
 - [`@babulfish/react`](../react/README.md) — React binding
 - [`@babulfish/styles`](../styles/README.md) — CSS custom properties and animations
-- [`@babulfish/demo-vanilla`](../demo-vanilla/README.md) — Zero-framework demo
-- [`@babulfish/demo-webcomponent`](../demo-webcomponent/README.md) — Shadow DOM custom element demo
-- [Design document](../../docs/ui-agnostic-core.md)

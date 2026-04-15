@@ -57,6 +57,3 @@ The stylesheet includes keyframes used by `@babulfish/react` components:
 
 - [`@babulfish/core`](../core/README.md) — UI-agnostic engine and contract
 - [`@babulfish/react`](../react/README.md) — React binding
-- [`@babulfish/demo-vanilla`](../demo-vanilla/README.md) — Zero-framework demo (imports these styles)
-- [`@babulfish/demo-webcomponent`](../demo-webcomponent/README.md) — Shadow DOM custom element demo
-- [Root README](../../README.md) — "Pick your binding" overview

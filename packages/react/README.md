@@ -118,5 +118,3 @@ Convenience hook for page-level translate/restore:
 
 - [`@babulfish/core`](../core/README.md) — UI-agnostic engine and contract
 - [`@babulfish/styles`](../styles/README.md) — CSS custom properties and animations
-- [React demo app](../demo/) — Full Next.js example
-- [Root README](../../README.md) — "Pick your binding" overview
