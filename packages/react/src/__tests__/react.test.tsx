@@ -656,6 +656,48 @@ describe("TranslateButton", () => {
 
     expect(button).not.toHaveTextContent("50%")
   })
+
+  it("shows non-zero download progress from hook state", async () => {
+    const deferred = createDeferred<void>()
+    mockLoadModel.mockImplementation(async () => {
+      setSnapshot((prev) => ({
+        ...prev,
+        model: Object.freeze({
+          status: "downloading" as const,
+          progress: 0.25,
+        }),
+      }))
+      await deferred.promise
+      setSnapshot((prev) => ({
+        ...prev,
+        model: Object.freeze({ status: "ready" as const }),
+      }))
+    })
+
+    render(
+      <Wrapper config={DOM_CONFIG}>
+        <TranslateButton />
+      </Wrapper>,
+    )
+
+    const button = screen.getByRole("button")
+
+    // Get to confirm state
+    fireEvent.click(button)
+    await act(async () => {
+      fireEvent.click(button)
+      await Promise.resolve()
+    })
+
+    expect(button).toHaveTextContent("25%")
+
+    await act(async () => {
+      deferred.resolve()
+      await Promise.resolve()
+    })
+
+    expect(button).not.toHaveTextContent("25%")
+  })
 })
 
 describe("TranslateDropdown", () => {

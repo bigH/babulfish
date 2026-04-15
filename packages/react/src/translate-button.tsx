@@ -413,7 +413,7 @@ export function TranslateButton({
 
   if (!canTranslate) return null
 
-  const defaultUIEnabled = canTranslate && !isMobile
+  const defaultUIEnabled = !isMobile
   const confirmDisabled = state.kind === "confirm" && !defaultUIEnabled
 
   const isInteractive =
@@ -432,10 +432,18 @@ export function TranslateButton({
   const translateColor =
     progressRing?.translateColor ?? "rgb(248 113 113)"
 
+  const isDownloading = state.kind === "downloading"
+  const isTranslating = state.kind === "translating"
+  const isProgressState = isDownloading || isTranslating
+  const progressText = isProgressState
+    ? `${Math.round(state.progress * 100)}%`
+    : null
+  const activeProgressRingColor = isDownloading ? downloadColor : translateColor
+
   const ariaLabel =
-    state.kind === "downloading"
-      ? `Downloading translation model: ${Math.round(state.progress * 100)}%`
-      : state.kind === "translating"
+    isDownloading
+      ? `Downloading translation model: ${progressText}`
+      : isTranslating
         ? "Translating page"
         : state.kind === "confirm" && !defaultUIEnabled
           ? "Translation is currently desktop-only"
@@ -444,12 +452,12 @@ export function TranslateButton({
           : "Translate page"
 
   const liveText =
-    state.kind === "downloading"
-      ? `Downloading translation model: ${Math.round(state.progress * 100)}%`
-      : state.kind === "ready"
-        ? "Translation model ready"
-        : state.kind === "translating"
-          ? "Translating page"
+    isDownloading
+      ? `Downloading translation model: ${progressText}`
+      : isProgressState
+        ? "Translating page"
+        : state.kind === "ready"
+          ? "Translation model ready"
           : ""
 
   const buttonAnimClass =
@@ -525,29 +533,24 @@ export function TranslateButton({
             cursor: isInteractive ? "pointer" : "default",
           }}
         >
-          {state.kind === "translating" ? (
-            <span style={{ fontSize: "10px", fontWeight: 500, fontVariantNumeric: "tabular-nums" }}>
-              {Math.round(state.progress * 100)}%
-            </span>
-          ) : state.kind === "downloading" ? (
-            <span style={{ fontSize: "10px", fontWeight: 500, fontVariantNumeric: "tabular-nums" }}>
-              {Math.round(state.progress * 100)}%
+          {isProgressState ? (
+            <span
+              style={{
+                fontSize: "10px",
+                fontWeight: 500,
+                fontVariantNumeric: "tabular-nums",
+              }}
+            >
+              {progressText}
             </span>
           ) : (
             iconElement
           )}
 
-          {state.kind === "downloading" && (
+          {isProgressState && (
             <ProgressRing
               progress={state.progress}
-              color={downloadColor}
-              className={classNames?.progressRing}
-            />
-          )}
-          {state.kind === "translating" && (
-            <ProgressRing
-              progress={state.progress}
-              color={translateColor}
+              color={activeProgressRingColor}
               className={classNames?.progressRing}
             />
           )}
