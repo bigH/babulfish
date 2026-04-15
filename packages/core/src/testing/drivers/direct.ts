@@ -9,12 +9,13 @@ export function createDirectDriver(): NonDomConformanceDriver {
   return {
     id: "direct",
     supportsDOM: false,
-    async create(config?: BabulfishConfig) {
-      const { dom: _dom, ...directConfig } = config ?? {}
-      return createBabulfish(directConfig)
+    create(config?: BabulfishConfig) {
+      const configWithoutDom =
+        config?.dom == null ? config : { ...config, dom: undefined }
+      return Promise.resolve(createBabulfish(configWithoutDom))
     },
-    async dispose(core: BabulfishCore) {
-      await core.dispose()
+    dispose(core: BabulfishCore) {
+      return core.dispose()
     },
   }
 }
