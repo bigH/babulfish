@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode } from "react"
+import { useEffect, useState, type ReactNode } from "react"
 import { createBabulfish } from "@babulfish/core"
 import type { BabulfishConfig, BabulfishCore } from "@babulfish/core"
 import { TranslatorContext } from "./context.js"
@@ -15,17 +15,18 @@ export function TranslatorProvider({
   config?: TranslatorConfig
   children: ReactNode
 }) {
-  const coreRef = useRef<BabulfishCore | null>(null)
-  if (typeof document !== "undefined" && !coreRef.current) {
-    coreRef.current = createBabulfish(config)
-  }
-  const core = coreRef.current ?? SSR_CORE
+  const [core] = useState<BabulfishCore>(() => {
+    if (typeof document === "undefined") {
+      return SSR_CORE
+    }
+    return createBabulfish(config)
+  })
 
   useEffect(() => {
     return () => {
-      coreRef.current?.dispose()
+      core.dispose()
     }
-  }, [])
+  }, [core])
 
   return (
     <TranslatorContext.Provider value={core}>

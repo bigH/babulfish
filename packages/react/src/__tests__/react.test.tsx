@@ -235,6 +235,24 @@ describe("TranslatorProvider", () => {
     expect(mockCreateBabulfish).toHaveBeenCalledTimes(1)
   })
 
+  it("does not recreate core when config changes after mount", () => {
+    const initialConfig = { dom: { roots: ["main"] } }
+    const updatedConfig = { dom: { roots: ["body"] } }
+    const { rerender } = render(
+      <TranslatorProvider config={initialConfig}>
+        <span data-testid="child">hello</span>
+      </TranslatorProvider>,
+    )
+
+    rerender(
+      <TranslatorProvider config={updatedConfig}>
+        <span data-testid="child">updated</span>
+      </TranslatorProvider>,
+    )
+
+    expect(mockCreateBabulfish).toHaveBeenCalledTimes(1)
+  })
+
   it("disposes the created core on unmount", () => {
     const { unmount } = render(
       <TranslatorProvider>
