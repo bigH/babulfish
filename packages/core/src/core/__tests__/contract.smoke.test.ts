@@ -20,19 +20,21 @@ const mockLoadPipeline = vi.mocked(loadPipeline)
 // Helpers
 // ---------------------------------------------------------------------------
 
-function createMockGenerator() {
-  return vi.fn(async () => [
-    {
-      generated_text: [
-        { role: "user", content: "hello" },
-        { role: "assistant", content: "hola" },
-      ],
-    },
-  ])
+function createMockResult(
+  source = "hello",
+  translated = "hola",
+): Array<{ role: string; content: string }> {
+  return [
+    { role: "user", content: source },
+    { role: "assistant", content: translated },
+  ]
 }
 
-function createMockPipeline() {
-  const generate = createMockGenerator()
+function createMockGenerator() {
+  return vi.fn(async () => [{ generated_text: createMockResult() }])
+}
+
+function createMockPipeline(generate = createMockGenerator()) {
   const pipeline = Object.assign(generate, {
     _call: generate,
     task: "text-generation" as const,
@@ -47,6 +49,14 @@ function setupPipelineMock() {
   const { generate, pipeline } = createMockPipeline()
   mockLoadPipeline.mockResolvedValue(pipeline)
   return { generate, pipeline }
+}
+
+function setupFailingPipelineMock(error: string): void {
+  const generate = vi.fn(async () => {
+    throw new Error(error)
+  })
+  const pipeline = createMockPipeline(generate).pipeline
+  mockLoadPipeline.mockResolvedValue(pipeline)
 }
 
 function snapshots(core: ReturnType<typeof createBabulfish>) {
@@ -106,14 +116,7 @@ describe("4.1 — engine singleton + multi-instance", () => {
     const snapsB = snapshots(b)
     await a.dispose()
 
-    generate.mockResolvedValueOnce([
-      {
-        generated_text: [
-          { role: "user", content: "test" },
-          { role: "assistant", content: "prueba" },
-        ],
-      },
-    ])
+    generate.mockResolvedValueOnce([{ generated_text: createMockResult("test", "prueba") }])
     const result = await b.translateText("test", "es")
     expect(result).toBe("prueba")
 
@@ -221,17 +224,7 @@ describe("4.3 — cancellation", () => {
   })
 
   it("translateTo failure resets translation status to idle", async () => {
-    const generate = vi.fn(async () => {
-      throw new Error("translation failed")
-    })
-    const pipeline = Object.assign(generate, {
-      _call: generate,
-      task: "text-generation" as const,
-      model: {} as unknown,
-      tokenizer: {} as unknown,
-      dispose: vi.fn(async () => {}),
-    })
-    mockLoadPipeline.mockResolvedValue(pipeline)
+    setupFailingPipelineMock("translation failed")
 
     const root = document.createElement("div")
     root.innerHTML = '<div id="app"><p>Hello</p></div>'
@@ -280,14 +273,7 @@ describe("4.3 — cancellation", () => {
 describe("4.4 — root lifetime", () => {
   it("translateText is root-free (works without dom config)", async () => {
     const { generate } = setupPipelineMock()
-    generate.mockResolvedValueOnce([
-      {
-        generated_text: [
-          { role: "user", content: "hello" },
-          { role: "assistant", content: "hola" },
-        ],
-      },
-    ])
+    generate.mockResolvedValueOnce([{ generated_text: createMockResult("hello", "hola") }])
     const core = createBabulfish()
     await core.loadModel()
     const result = await core.translateText("hello", "es")
@@ -309,14 +295,7 @@ describe("4.4 — root lifetime", () => {
 describe("4.5 — translateText snapshot purity", () => {
   it("translateText does not mutate snapshot.translation or currentLanguage", async () => {
     const { generate } = setupPipelineMock()
-    generate.mockResolvedValueOnce([
-      {
-        generated_text: [
-          { role: "user", content: "hello" },
-          { role: "assistant", content: "hola" },
-        ],
-      },
-    ])
+    generate.mockResolvedValueOnce([{ generated_text: createMockResult("hello", "hola") }])
 
     const core = createBabulfish()
     await core.loadModel()
