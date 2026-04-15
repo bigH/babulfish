@@ -7,6 +7,7 @@ const crossOriginIsolationHeaders = {
   "Cross-Origin-Opener-Policy": "same-origin",
   "Cross-Origin-Embedder-Policy": "require-corp",
 }
+const buildCrossOriginIsolationHeaders = () => ({ ...crossOriginIsolationHeaders })
 
 export default defineConfig({
   resolve: {
@@ -21,9 +22,9 @@ export default defineConfig({
     include: ["src/**/*.test.ts"],
   },
   server: {
-    headers: crossOriginIsolationHeaders,
+    headers: buildCrossOriginIsolationHeaders(),
   },
   preview: {
-    headers: crossOriginIsolationHeaders,
+    headers: buildCrossOriginIsolationHeaders(),
   },
 })

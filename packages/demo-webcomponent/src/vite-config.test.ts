@@ -30,9 +30,9 @@ describe("demo-webcomponent vite config", () => {
   })
 
   it("applies the same cross-origin isolation headers to dev and preview", () => {
-    expect(viteConfig.server?.headers).toBe(viteConfig.preview?.headers)
     expect(viteConfig.server?.headers).toEqual(viteConfig.preview?.headers)
     expect(viteConfig.server?.headers).toMatchObject(expectedHeaders)
+    expect(viteConfig.server?.headers).not.toBe(viteConfig.preview?.headers)
   })
 
   it("keeps vitest running in jsdom against the package test files", () => {
