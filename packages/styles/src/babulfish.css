@@ -91,6 +91,8 @@
   position: absolute;
   top: 100%;
   right: 0;
+  width: max-content;
+  max-width: calc(100vw - 1rem);
   margin-top: 0.5rem;
   animation: babulfish-fade-slide-in 150ms ease-out both;
 }

@@ -38,4 +38,9 @@ describe("@babulfish/styles CSS contract", () => {
     expect(css).toContain("--babulfish-border: var(--border, #e5e7eb);")
     expect(css).toContain("--babulfish-surface: var(--surface, #fff);")
   })
+
+  it("sizes popups to their content instead of the trigger width", () => {
+    expect(css).toContain("width: max-content;")
+    expect(css).toContain("max-width: calc(100vw - 1rem);")
+  })
 })

@@ -159,7 +159,8 @@ function DefaultTooltip({
 }) {
   const baseStyle: React.CSSProperties = {
     whiteSpace: "normal",
-    maxWidth: "18rem",
+    width: "max-content",
+    maxWidth: "min(18rem, calc(100vw - 1rem))",
     padding: "0.5rem 0.75rem",
     borderRadius: "0.5rem",
     background: "var(--babulfish-surface, #fff)",
