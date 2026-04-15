@@ -1,12 +1,8 @@
-import type { ReactNode } from "react"
+import type { PropsWithChildren } from "react"
 import "./globals.css"
 import { DemoTranslatorShell } from "./demo-translator-shell"
 
-export default function RootLayout({
-  children,
-}: {
-  children: ReactNode
-}) {
+export default function RootLayout({ children }: PropsWithChildren) {
   return (
     <html lang="en">
       <body className="bg-white text-gray-900 antialiased">
