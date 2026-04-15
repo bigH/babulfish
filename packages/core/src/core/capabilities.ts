@@ -30,21 +30,13 @@ export const SSR_CAPABILITIES: SSRCapabilities = Object.freeze({
   isMobile: false,
 })
 
-function createBrowserCapabilities(
-  capabilities: TranslationCapabilities,
-): BrowserCapabilities {
-  return Object.freeze({
-    ready: true,
-    ...capabilities,
-  })
-}
-
 export function detectCapabilities(
   devicePreference?: DevicePreference,
 ): Capabilities {
   if (typeof window === "undefined") return SSR_CAPABILITIES
 
-  return createBrowserCapabilities(
-    getTranslationCapabilities(devicePreference),
-  )
+  return Object.freeze({
+    ready: true,
+    ...getTranslationCapabilities(devicePreference),
+  })
 }
