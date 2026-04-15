@@ -1,7 +1,7 @@
 import type { EngineConfig } from "../engine/model.js"
 import type { DOMTranslatorConfig, DOMTranslator } from "../dom/translator.js"
 import { createDOMTranslator } from "../dom/translator.js"
-import { acquireEngine, releaseEngine, registerCoreEngine } from "./engine-handle.js"
+import { acquireEngine, registerCoreEngine } from "./engine-handle.js"
 import { createStore, type Snapshot } from "./store.js"
 import type { ModelState } from "./store.js"
 import { createProgressController } from "./progress.js"
@@ -229,7 +229,6 @@ export function createBabulfish(config?: BabulfishConfig): BabulfishCore {
     unsubStatus()
     unsubProgress()
     store.dispose()
-    releaseEngine(handle)
   }
 
   const core: BabulfishCore = {

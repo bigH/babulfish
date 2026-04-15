@@ -19,10 +19,6 @@ export function acquireEngine(config?: EngineConfig): EngineHandle {
   return { engine: sharedEngine, id: sharedEngineId! }
 }
 
-export function releaseEngine(_handle: EngineHandle): void {
-  return
-}
-
 export function registerCoreEngine(core: object, id: symbol): void {
   coreEngineMap.set(core, id)
 }
