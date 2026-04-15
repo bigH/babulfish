@@ -1,6 +1,6 @@
 {
   "name": "@babulfish/styles",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Base styles and animations for babulfish translation UI.",
   "license": "MIT",
   "type": "module",
@@ -17,5 +17,14 @@
   },
   "files": [
     "src/babulfish.css"
-  ]
+  ],
+  "scripts": {
+    "test": "vitest run",
+    "lint": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^24.7.2",
+    "typescript": "^5.8.3",
+    "vitest": "^3.1.1"
+  }
 }

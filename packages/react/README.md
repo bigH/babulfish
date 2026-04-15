@@ -6,7 +6,7 @@ Thin projection of [`@babulfish/core`](../core/README.md) — all state flows th
 ## Quick start
 
 ```bash
-npm install @babulfish/react
+npm install @babulfish/react @huggingface/transformers
 ```
 
 ```tsx
@@ -37,6 +37,8 @@ function YourPage() {
   )
 }
 ```
+
+`@huggingface/transformers` provides the model runtime used by `loadModel()` and translation calls.
 
 ## CSS
 

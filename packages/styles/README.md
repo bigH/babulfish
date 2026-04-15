@@ -12,7 +12,7 @@ npm install @babulfish/styles
 import "@babulfish/styles/css"
 ```
 
-If you use `@babulfish/react`, the convenience re-export `import "@babulfish/react/css"` resolves to this same stylesheet.
+If you use `@babulfish/react` or `babulfish`, the convenience re-exports `import "@babulfish/react/css"` and `import "babulfish/css"` resolve to this same stylesheet.
 
 ## Custom properties
 

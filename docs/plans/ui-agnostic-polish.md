@@ -1,25 +1,32 @@
 # Execution Plan — UI-Agnostic Core: Pre-Publish Polish
 
-**Source design:** [`docs/ui-agnostic-core.md`](../ui-agnostic-core.md)
-**Predecessor plan:** [`docs/plans/ui-agnostic-core.md`](./ui-agnostic-core.md)
+**Source design:** historical `docs/ui-agnostic-core.md` no longer exists; current repo truth lives in package READMEs, package manifests, and contract/conformance tests.
+**Predecessor plan:** historical `docs/plans/ui-agnostic-core.md` no longer exists in-tree.
 **Date split off:** 2026-04-13
-**Status:** deferred. Do **NOT** start until we are within days of cutting a first npm release (0.1.0). Everything here is pre-publish tax until then.
+**Last refreshed:** 2026-04-15
+**Status:** active. This plan was written while deferred, then refreshed against the current repo state before implementation.
 
 ---
 
 ## Why this plan exists
 
-The main `ui-agnostic-core.md` plan delivers the UI-agnostic framework and its per-UI demos while the library is still unshipped. These tasks only earn their keep once we are about to publish to npm: they exist to lock in the published contract (meta-package, release pipeline, scoped consumer smoke, final review + coverage gates).
+The main structural split already landed: the repo now publishes a UI-agnostic core, a React binding, a styles package, and demos. What is still missing is the actual release-facing polish: the permanent unscoped compat package, a real release pipeline, a tarball consumer smoke test, and a final repo-state review/coverage pass that points at files that still exist.
 
-Doing them early is wasted motion — there are no external consumers to protect, no versions to coordinate, and no tarball contract to test.
+Doing this polish before the package layout stabilized would have been churn. Doing it now matters because the repo already exposes the publishable surfaces and currently has release drift:
+
+- `packages/babulfish/` no longer exists, but CI still points at it.
+- There is no repo-root consumer smoke.
+- There is no Changesets setup.
+- `@babulfish/react/css` currently uses an invalid package `exports` target and will not survive a real tarball install.
+- The docs linked by this plan's original draft are gone.
 
 ---
 
-## Decisions (deferred from the main plan)
+## Decisions
 
 | # | Question | Decision | Notes |
 |---|---|---|---|
-| Q1 | Root `babulfish` post-publish | **A** — permanent alias to `@babulfish/react` | Under Tier 3, the unscoped `babulfish` becomes a permanent (not deprecated) compat meta-package. Implement at publish time, not before. |
+| Q1 | Root `babulfish` post-publish | **A** — permanent alias to `@babulfish/react` | Keep the unscoped package forever as a convenience meta-package. It is not deprecated. |
 
 ---
 
@@ -34,13 +41,13 @@ graph TD
   P4 --> P5[P-5 coverage audit]
 ```
 
-All tasks in this plan blocked by the main `ui-agnostic-core.md` plan completing.
+Execution order is unchanged. Repo drift changed the file paths and acceptance details, not the dependency graph.
 
 ---
 
-## Common PR constraints (apply to every dispatch template)
+## Common PR constraints
 
-Same as the main plan — one task = one PR, Mermaid diagram in the PR description, cross-linked siblings, Critic + Test Maven gates, Claude Code footer.
+Same as the original plan intent: one task = one PR, Mermaid diagram in the PR description, cross-linked siblings, Critic + Test Maven gates, Claude Code footer.
 
 ---
 
@@ -48,46 +55,44 @@ Same as the main plan — one task = one PR, Mermaid diagram in the PR descripti
 
 - **Owner:** `[Artisan]`
 - **Blocks:** P-2, P-3
-- **Blocked by:** main plan complete (through T-7 demo migration, T-11 docs)
+- **Blocked by:** none
 - **Files:**
-  - Replace: `packages/babulfish/package.json` (thin shell depending on `@babulfish/react` workspace exact)
-  - Replace: `packages/babulfish/src/index.ts` (re-exports React surface from `@babulfish/react`)
-  - Replace: `packages/babulfish/tsup.config.ts` (single entry; minimal)
-  - New: `packages/babulfish/README.md` (one paragraph: "convenience meta-package; prefer `@babulfish/react` for clarity")
-  - Add: `packages/babulfish/src/css/index.ts` (or exports map entry) re-exporting `@babulfish/styles/css` so `babulfish/css` keeps working
+  - New: `packages/babulfish/package.json`
+  - New: `packages/babulfish/src/index.ts`
+  - New: `packages/babulfish/src/babulfish.css`
+  - New: `packages/babulfish/tsup.config.ts`
+  - New: `packages/babulfish/README.md`
 - **Acceptance:**
-  - `import { TranslatorProvider } from "babulfish"` resolves to `@babulfish/react`'s export.
-  - `import "babulfish/css"` resolves to the same stylesheet `@babulfish/styles/css` does.
-  - `packages/babulfish/src/` contains ONLY the meta-package shim (an `index.ts` re-export and a `css/` resolver if needed). All real source has already moved out in the main plan.
-  - JSDoc on the meta-package's `index.ts` says: *"This is a convenience meta-package re-exporting `@babulfish/react`. New code can import from `@babulfish/react` directly for explicit-binding clarity. This package is permanent and not deprecated."*
+  - `import { TranslatorProvider } from "babulfish"` resolves to `@babulfish/react`'s export surface.
+  - `import "babulfish/css"` resolves to a local CSS bridge that delegates to `@babulfish/styles/css`.
+  - `packages/babulfish/src/` contains only the compat shim: a JS/TS barrel plus the CSS bridge asset.
+  - `src/index.ts` carries JSDoc stating that `babulfish` is a permanent convenience meta-package re-exporting `@babulfish/react`, not a deprecated path.
+  - `pnpm --filter babulfish build` produces a tiny `dist/index.js`.
 - **Dispatch template:**
   ```
   [Artisan] P-1 — Unscoped `babulfish` becomes permanent compat meta-package
 
-  Goal: keep `import "babulfish"` working forever as a permanent (not deprecated) re-export of @babulfish/react.
+  Goal: create the missing unscoped `babulfish` package as a permanent convenience re-export of `@babulfish/react`.
 
-  Context: the main ui-agnostic-core plan emptied packages/babulfish/src/ of real source. This task replaces what's left with a thin shell that depends on @babulfish/react and re-exports it. The package is NOT deprecated — it's a convenience. We are about to publish 0.1.0; this is the point at which the meta-package earns its keep.
+  Context: the earlier plan draft assumed `packages/babulfish/` still existed and needed replacement. It does not exist anymore. Build it from scratch.
 
   Inputs to read first:
-  - packages/react/src/index.ts (the surface you're re-exporting).
-  - packages/styles/package.json (for the css re-export).
+  - packages/react/src/index.ts
+  - packages/react/package.json
+  - packages/styles/package.json
 
   Task:
-  1. Replace packages/babulfish/package.json. Name: `babulfish` (unscoped). dependencies: `"@babulfish/react": "workspace:^"`, `"@babulfish/styles": "workspace:^"`. peerDependencies: `react ^18 || ^19`, `@huggingface/transformers ^4` (both optional). Exports: `.` and `./css`.
-  2. Replace packages/babulfish/src/index.ts with `export * from "@babulfish/react"` (or named re-exports if `*` causes type issues). Add a JSDoc banner stating this is a permanent convenience meta-package, not deprecated.
-  3. Replace packages/babulfish/tsup.config.ts with a minimal config: one entry (index.ts), externalize @babulfish/react and @babulfish/styles.
-  4. For `babulfish/css`, the package.json exports map points directly at @babulfish/styles' css file (or a thin local file that re-exports it).
-  5. Write packages/babulfish/README.md as a one-paragraph note + import example.
-  6. `pnpm install`, `pnpm --filter babulfish build`. Build produces a tiny dist/index.js.
-  7. Smoke: in a scratch dir, `pnpm --filter babulfish pack`, install the tarball with @babulfish/react and @babulfish/styles, run `node -e 'import("babulfish").then(m => console.log(Object.keys(m)))'`. Should list TranslatorProvider, TranslateButton, etc.
-
-  Deliverable: a single PR titled `P-1 — Unscoped babulfish meta-package`.
+  1. Create `packages/babulfish/package.json`. Name: `babulfish`. Dependencies: `@babulfish/react` and `@babulfish/styles` on `workspace:^`. Peer deps: `react ^18 || ^19`, `@huggingface/transformers ^4` (optional). Exports: `.` and `./css`.
+  2. Create `packages/babulfish/src/index.ts` with a JSDoc banner and `export * from "@babulfish/react"`.
+  3. Create `packages/babulfish/src/babulfish.css` containing `@import "@babulfish/styles/css";`.
+  4. Create `packages/babulfish/tsup.config.ts` with one entry (`src/index.ts`) and externals for `react`, `@babulfish/react`, and `@babulfish/styles`.
+  5. Write `packages/babulfish/README.md` as a short note + import example. Tone: convenience, not deprecation.
+  6. Build and pack the package, then verify it installs alongside packed `@babulfish/react` and `@babulfish/styles`.
 
   Constraints:
-  - The meta-package is NOT deprecated. Wording must be neutral / convenience-flavored.
-  - Do NOT publish. Versions stay at 0.1.0 on disk.
-  - Do NOT try to re-export from @babulfish/core through the meta-package. The meta-package is React-flavored by design (Q1=A).
-  - Do NOT delete packages/babulfish/. Its existence is the point.
+  - Do NOT point package `exports` directly at another package specifier for `./css`; Node rejects that.
+  - Do NOT deprecate the package in wording or metadata.
+  - Do NOT re-export `@babulfish/core` from the unscoped package. Q1 is still React-flavored by design.
   ```
 
 ---
@@ -98,40 +103,45 @@ Same as the main plan — one task = one PR, Mermaid diagram in the PR descripti
 - **Blocks:** P-4
 - **Blocked by:** P-1
 - **Files:**
-  - New: `.changeset/config.json` (fixed-versioning across `@babulfish/core`, `@babulfish/react`, `@babulfish/styles`, `babulfish`)
-  - New: `.github/workflows/release.yml` (uses `changesets/action`)
-  - Update: root `package.json` scripts (add `release`, `version`, `changeset`)
-  - Update: `pnpm-workspace.yaml` if needed
+  - New: `.changeset/config.json`
+  - New: `.github/workflows/release.yml`
+  - Update: root `package.json`
+  - Update: `.github/workflows/ci.yml`
 - **Acceptance:**
-  - `pnpm changeset` interactively creates a changeset.
-  - `pnpm changeset version` bumps all four packages in lockstep.
-  - `pnpm changeset publish --dry-run` reports an intent to publish all four packages.
-  - `release.yml` triggers on `main` push, runs install/build/test, opens a versioning PR via `changesets/action`.
+  - `pnpm changeset` works at the repo root.
+  - `pnpm changeset version` bumps `@babulfish/core`, `@babulfish/react`, `@babulfish/styles`, and `babulfish` in lockstep.
+  - Private demo packages are not versioned or tagged by Changesets.
+  - `release.yml` triggers on `main` push, installs dependencies, runs release-safe build/test checks, and opens a version PR or publishes via `changesets/action`.
+  - `ci.yml` no longer points at a missing `packages/babulfish` path or missing root scripts.
 - **Dispatch template:**
   ```
   [Artisan] P-2 — Changesets + release tooling
 
-  Goal: stand up the publish pipeline so we can ship @babulfish/core, @babulfish/react, @babulfish/styles, and the unscoped `babulfish` meta together in lockstep.
+  Goal: stand up the publish pipeline so `@babulfish/core`, `@babulfish/react`, `@babulfish/styles`, and `babulfish` ship in lockstep once P-1 exists.
 
-  Context: we are preparing for 0.1.0. Fixed-versioning across all four packages until 1.0. After 1.0 we may relax — out of scope here.
+  Context: the original plan assumed four public packages already existed and ignored private-workspace handling. The refreshed repo needs both Changesets setup and CI drift cleanup.
 
   Inputs to read first:
-  - Current root package.json and any existing CI under .github/workflows/.
+  - root package.json
+  - pnpm-workspace.yaml
+  - .github/workflows/ci.yml
 
   Task:
-  1. Add @changesets/cli as a root devDependency.
-  2. Create .changeset/config.json with `"fixed": [["@babulfish/core", "@babulfish/react", "@babulfish/styles", "babulfish"]]`, `"baseBranch": "main"`, `"access": "public"`.
-  3. Add root package.json scripts: `"changeset": "changeset"`, `"version": "changeset version"`, `"release": "pnpm -r build && changeset publish"`.
-  4. Create .github/workflows/release.yml using changesets/action. On push to main: install, build, test, then either open a Version PR or publish (token via NPM_TOKEN secret). Reference docs at https://github.com/changesets/changesets/blob/main/docs/automating-changesets.md.
-  5. Add an initial empty changeset to confirm the flow (optional).
-  6. Run `pnpm changeset version --snapshot dev` locally as a smoke test to confirm all four packages bump together. Revert the bump after.
-
-  Deliverable: a single PR titled `P-2 — Changesets + release pipeline`.
+  1. Add `@changesets/cli` as a root dev dependency.
+  2. Create `.changeset/config.json` with:
+     - `baseBranch: "main"`
+     - `access: "public"`
+     - `fixed: [["@babulfish/core", "@babulfish/react", "@babulfish/styles", "babulfish"]]`
+     - `updateInternalDependencies: "patch"`
+  3. Add root scripts: `changeset`, `version`, `release`.
+  4. Create `.github/workflows/release.yml` using `changesets/action`. Install, run release-safe build/test commands, then open a version PR or publish with `NPM_TOKEN`.
+  5. Update `.github/workflows/ci.yml` so it runs against the current repo shape instead of a deleted package path.
 
   Constraints:
-  - Do NOT publish in this PR. Setup only.
-  - Do NOT make NPM_TOKEN required at install/build time. Only at publish.
-  - The fixed-versioning array MUST include the unscoped `babulfish`. We never want the meta-package to drift from @babulfish/react.
+  - Do NOT publish in this task.
+  - Do NOT make `NPM_TOKEN` required before the publish step.
+  - Keep the unscoped `babulfish` package in the fixed group so it never drifts from `@babulfish/react`.
+  - Keep the build/test/docs gates in the root `release` script so the publish path and local dry-run path match.
   ```
 
 ---
@@ -142,43 +152,52 @@ Same as the main plan — one task = one PR, Mermaid diagram in the PR descripti
 - **Blocks:** P-4
 - **Blocked by:** P-1
 - **Files:**
-  - Move: `packages/babulfish/scripts/consumer-smoke.mjs` (if still present) → repo-root `scripts/consumer-smoke.mjs` (or under `packages/core/scripts/`)
-  - Update assertions per the scoped layout
+  - New: `scripts/consumer-smoke.mjs`
+  - Update: root `package.json`
+  - Update: `.github/workflows/ci.yml`
+  - Update: `packages/react/package.json`
+  - New: `packages/react/src/babulfish.css`
 - **Acceptance:**
-  - Smoke packs all four workspace packages, installs them in a temp React-free project, asserts:
-    1. `await import("@babulfish/core")` succeeds; `Object.keys` contain `createBabulfish`; a call to `createBabulfish(config)` returns an object with `subscribe`, `snapshot`, `dispose`.
-    2. `await import("@babulfish/core/testing")` succeeds; exports include `scenarios`; at least one scenario runs green against a direct core driver.
-    3. `await import("@babulfish/core/dom")` succeeds, no React in resolved deps.
+  - The smoke packs and installs the publishable tarballs in a temp project.
+  - In a React-free temp project with peer auto-install disabled:
+    1. `await import("@babulfish/core")` succeeds and `createBabulfish()` returns an object with `subscribe`, `snapshot`, and `dispose`.
+    2. `await import("@babulfish/core/testing")` succeeds, `createDirectDriver()` succeeds, and a safe no-pipeline scenario such as `snapshot-no-spurious-notify` or `lifecycle-dispose-detaches` runs green.
+    3. `await import("@babulfish/core/dom")` succeeds.
     4. `await import("@babulfish/core/engine")` succeeds.
-    5. `await import("@babulfish/styles/css")` resolves to a `.css` file path.
-    6. `await import("@babulfish/react")` fails or warns when `react` is not installed (peer-dep check).
-    7. `await import("babulfish")` (unscoped) fails or warns the same way (since meta depends on @babulfish/react).
-    8. With React installed, `import("babulfish")` and `import("@babulfish/react")` both resolve and expose the same surface.
-  - Smoke exits 0.
+    5. `import.meta.resolve("@babulfish/styles/css")` and `import.meta.resolve("@babulfish/react/css")` resolve to `.css` URLs.
+    6. `await import("@babulfish/react")` fails before `react` is installed.
+  - After installing `react` and `react-dom`, `@babulfish/react` imports successfully.
+  - After P-1 lands, `babulfish` imports successfully with React installed, and `import.meta.resolve("babulfish/css")` resolves to the compat CSS bridge.
+  - Smoke exits `0`.
 - **Dispatch template:**
   ```
-  [Artisan] P-3 — Consumer smoke for the scoped published layout
+  [Artisan] P-3 — Consumer smoke for the published layout
 
-  Goal: prove the Tier-3 packaging contract holds end-to-end against real tarballs. This is the last gate before publish: if this smoke goes green, the tarballs are installable.
+  Goal: prove the tarball contract holds end-to-end for the publishable packages.
 
-  Context: we are about to publish 0.1.0 to npm. The main plan's workspace-level build + demo boot already prove imports resolve in dev. This PR is about the published-tarball contract, which workspace symlinks don't exercise.
+  Context: there is no existing consumer smoke anymore. The old plan assumed a script under `packages/babulfish/`; create a repo-root smoke from scratch.
 
   Inputs to read first:
-  - Existing smoke (if any) at packages/core/scripts/ or packages/babulfish/scripts/.
+  - packages/demo/scripts/smoke.mjs
+  - packages/core/package.json
+  - packages/react/package.json
+  - packages/styles/package.json
+  - packages/core/src/testing/scenarios.ts
 
   Task:
-  1. Move (or create) the smoke at scripts/consumer-smoke.mjs at repo root. Wire it into root package.json `consumer:smoke` and `docs:check` scripts (the latter still runs tsc first, then smoke).
-  2. Pack all four packages using `pnpm -r pack` or per-package pack. Resolve workspace `*` deps in the temp project's package.json to point at the packed tarballs.
-  3. Build a temp dir with a minimal package.json, install the four tarballs, then run `node -e '...'` snippets to assert the contract from the Acceptance list above. Include a scenario-runner call against @babulfish/core/testing so the smoke exercises real behavior, not just `Object.keys`.
-  4. Make assertions clear: log `OK [@babulfish/core]: createBabulfish present` and so on.
-  5. Exit 0 on full success; nonzero on first failure.
-
-  Deliverable: a single PR titled `P-3 — Scoped consumer smoke`.
+  1. Create `scripts/consumer-smoke.mjs` at repo root.
+  2. Pack the publishable packages and install them together into a temp project.
+  3. Disable peer auto-install for the no-React phase so missing `react` stays observable.
+  4. Assert the core/runtime contract, core subpaths, CSS resolution, and missing-React failure mode.
+  5. Fix `@babulfish/react/css` so it uses a local CSS bridge file instead of an invalid external-package `exports` target.
+  6. After adding React to the temp project, assert positive imports for `@babulfish/react` and, once P-1 lands, `babulfish`.
+  7. Wire the smoke into root scripts and CI.
 
   Constraints:
-  - The temp project must NOT have react in its dependencies for the React-free assertions; install react separately for the with-React assertions.
-  - Exercise at least one @babulfish/core/testing scenario. A packaging check that never calls createBabulfish is too shallow.
-  - Clean up the temp dir on exit.
+  - CSS should be resolved, not imported, in plain Node.
+  - Install the packed tarballs together; do not rely on the registry.
+  - Use an explicit safe no-pipeline conformance scenario. Do not assume all testing scenarios can run without mocks.
+  - Clean up temp dirs and tarballs on exit.
   ```
 
 ---
@@ -188,38 +207,46 @@ Same as the main plan — one task = one PR, Mermaid diagram in the PR descripti
 - **Owner:** `[Critic]`
 - **Blocks:** P-5
 - **Blocked by:** P-2, P-3
-- **Files:** Review packet at `.scratchpad/ui-agnostic-polish/critic-final/manifest.md` (no source changes; review only)
+- **Files:** review packet at `.scratchpad/ui-agnostic-polish/p4-critic/manifest.md` plus `details/`
 - **Acceptance:**
-  - Multi-pass review: skeptic (does the contract leak framework types?), user advocate (is the install story clear?), maintainer (can a stranger find their way?), security (no new globals or eval introduced?).
-  - Every issue reported includes a concrete fix suggestion.
-  - Includes commendations.
-  - Issues filed as follow-up tasks (P-6+) added to this plan, OR as PR comments on the relevant PRs if they're still open.
+  - Multi-pass review: skeptic, user advocate, maintainer, security.
+  - Every issue includes a concrete fix suggestion.
+  - Includes at least three commendations.
+  - Uses current repo-local truth, not missing predecessor docs or unavailable PR threads.
 - **Dispatch template:**
   ```
   [Critic] P-4 — Final review before publish
 
-  Goal: independent review of everything shipped in the main plan plus P-1..P-3. Surface issues with concrete fixes; commend what worked.
-
-  Context: this is the last gate before publishing 0.1.0 to npm. No more code changes from prior tasks should land before you finish; if you find blocking issues, file them as new tasks.
+  Goal: independent review of the publishable repo state after P-1 through P-3 land.
 
   Inputs to read first:
-  - All PRs in the main ui-agnostic-core plan (or their merged commits) + P-1..P-3.
-  - docs/plans/ui-agnostic-core.md and docs/plans/ui-agnostic-polish.md (this file) — every task's acceptance criteria.
-  - docs/ui-agnostic-core.md (design decisions).
+  - README.md
+  - package.json
+  - scripts/consumer-smoke.mjs
+  - packages/*/README.md
+  - packages/*/package.json
+  - .github/workflows/{ci,release}.yml
+  - packages/core/src/core/__tests__/contract.smoke.test.ts
+  - packages/core/src/testing/scenarios.ts
+  - packages/core/src/__tests__/conformance.direct.test.ts
+  - packages/core/src/__tests__/conformance.vanilla-dom.test.ts
+  - packages/react/src/__tests__/conformance.test.tsx
+  - packages/react/src/__tests__/public-api.test.ts
 
-  Task: do four review passes:
-  1. SKEPTIC: does the BabulfishCore contract leak any framework types? Is `Snapshot` actually frozen end-to-end? Does the race guard in core actually serialize on the run-id? Are `dispose` semantics tight (no leaked timers, no orphan AbortController)? Is the engine a single module-level instance across multiple createBabulfish calls?
-  2. USER ADVOCATE: is the install story coherent? Does a reader of root README in <2 minutes know which package to install? Are quick-starts copy-pastable? Is the vanilla demo a true no-framework path?
-  3. MAINTAINER: can a stranger to the repo trace the dependency edges? Are workspace deps consistent? Is there dead code left in packages/babulfish/src/ from incomplete moves?
-  4. SECURITY: any new globals introduced? Any eval / Function constructor / dynamic require? Any user-supplied data flowing into innerHTML or DOM construction without sanitization?
+  Review passes:
+  1. SKEPTIC: framework leaks, snapshot freezing, shared engine identity, run-id cancellation, dispose semantics.
+  2. USER ADVOCATE: install story, broken links, README/API truthfulness, copy-pastable quick starts.
+  3. MAINTAINER: dependency edges, workspace consistency, stale references to removed paths, workflow command drift.
+  4. SECURITY: globals, eval / Function constructor / dynamic require, unsafe HTML/DOM writes.
 
-  Output: .scratchpad/ui-agnostic-polish/critic-final/manifest.md (max 30 lines, executive summary) + details/{skeptic,user-advocate,maintainer,security,commendations}.md. For each issue, include: severity (block/strong-suggest/nit), the smallest concrete fix, and a proposed task (P-6+) if it warrants its own PR.
-
-  Deliverable: review packet only. No source changes. Reply summarizes the top 5 issues + commendations.
+  Output:
+  - `.scratchpad/ui-agnostic-polish/p4-critic/manifest.md`
+  - `details/{skeptic,user-advocate,maintainer,security,commendations}.md`
 
   Constraints:
-  - Every issue has a concrete suggestion. "Could be better" without a fix is not allowed.
-  - Include at least three commendations. Negative-only review is incomplete review.
+  - Every issue needs a concrete fix.
+  - Include at least three commendations.
+  - If PR threads do not exist, file follow-ups in this plan or scratchpad instead.
   ```
 
 ---
@@ -229,44 +256,54 @@ Same as the main plan — one task = one PR, Mermaid diagram in the PR descripti
 - **Owner:** `[Test Maven]`
 - **Blocks:** —
 - **Blocked by:** P-4
-- **Files:** Audit at `.scratchpad/ui-agnostic-polish/test-maven-coverage/manifest.md`. New tests filed as follow-up tasks (P-6+) if needed.
+- **Files:** audit at `.scratchpad/ui-agnostic-polish/p5-test-maven/manifest.md`
 - **Acceptance:**
-  - Audit confirms every public symbol in `@babulfish/core`, `@babulfish/react`, and `@babulfish/styles` (CSS contract) has at least one test exercising it.
-  - The four invariants from design doc §6.2 are tested per binding (core directly, React via conformance, vanilla DOM via conformance).
-  - Audit lists all uncovered surfaces with proposed test specs.
+  - Audit enumerates every public export from `@babulfish/core`, `@babulfish/react`, `@babulfish/styles`, and `babulfish`.
+  - Audit includes `@babulfish/core/engine/testing`, `@babulfish/react/css`, `@babulfish/styles/css`, and `babulfish/css`.
+  - Audit maps each public surface to a test or smoke check that exercises it.
+  - Audit uses current invariant sources: `packages/core/src/testing/scenarios.ts` and `packages/core/src/core/__tests__/contract.smoke.test.ts`.
+  - Audit lists uncovered surfaces with concrete proposed test specs.
 - **Dispatch template:**
   ```
   [Test Maven] P-5 — Public-surface coverage audit
 
-  Goal: confirm every public symbol shipped by @babulfish/* has at least one test exercising it, and the binding-conformance invariants are tested per binding.
-
-  Context: P-4 is the last code/docs review. P-5 is the test-coverage gate before we cut 0.1.0.
+  Goal: confirm every shipped public surface has at least one meaningful exercise, then list the gaps.
 
   Inputs to read first:
-  - packages/core/src/index.ts, packages/core/src/{engine,dom,testing}/index.ts (the public surface).
-  - packages/react/src/index.ts.
-  - packages/styles/README.md (the CSS contract).
-  - docs/ui-agnostic-core.md §6.2 invariants.
-  - All existing test files under packages/{core,react}/src/__tests__/ and adjacent, including the vanilla DOM conformance from main-plan T-8.
+  - packages/core/package.json
+  - packages/core/src/index.ts
+  - packages/core/src/engine/index.ts
+  - packages/core/src/engine/testing/index.ts
+  - packages/core/src/dom/index.ts
+  - packages/core/src/testing/index.ts
+  - packages/react/package.json
+  - packages/react/src/index.ts
+  - packages/styles/package.json
+  - packages/styles/README.md
+  - packages/babulfish/package.json
+  - packages/core/src/testing/scenarios.ts
+  - packages/core/src/core/__tests__/contract.smoke.test.ts
+  - existing tests under packages/core and packages/react
+  - consumer smoke under scripts/consumer-smoke.mjs
 
   Task:
-  1. Enumerate every public export from each @babulfish/* package.
-  2. For each export, identify a test that exercises it. If none, list it as a gap.
-  3. Confirm each of the four invariants is tested at least once for core directly, once per binding (React, vanilla DOM).
-  4. Confirm the CSS contract: at least one test asserts the documented custom properties are settable (this can be a tiny JSDOM test in packages/styles/src/__tests__/contract.test.ts).
-  5. For each gap, draft a one-paragraph test spec.
+  1. Enumerate every public export path and symbol.
+  2. Map each one to a test or smoke check.
+  3. Verify shared conformance scenario groups per binding plus core-only contract checks.
+  4. Verify the CSS contract: documented custom properties, animation/class hooks, and CSS path resolution.
+  5. For every uncovered surface, write a one-paragraph test spec.
 
-  Output: .scratchpad/ui-agnostic-polish/test-maven-coverage/manifest.md (max 30 lines) + details/{coverage-table.md, gaps-and-specs.md}. For each gap, propose a follow-up task (P-6+).
-
-  Deliverable: audit only. No new tests in this PR (gaps become their own PRs).
+  Output:
+  - `.scratchpad/ui-agnostic-polish/p5-test-maven/manifest.md`
+  - `details/{coverage-table,gaps-and-specs}.md`
 
   Constraints:
-  - Do NOT add tests in this PR; the audit's value is in the surface inventory + gap list.
-  - Do NOT count `expect(true).toBe(true)` smoke tests as coverage.
+  - Audit only. Do not add tests in this task.
+  - Do not count trivial smoke with no behavioral assertion.
   ```
 
 ---
 
 ## Smallest first PR
 
-**P-1** is the entrypoint. The rest stack on top.
+**P-1** is still the entrypoint. `P-2` and `P-3` stack on it; `P-4` and `P-5` stay review/audit gates.

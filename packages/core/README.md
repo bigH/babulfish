@@ -6,7 +6,7 @@ Use this package directly when building framework-agnostic integrations, custom 
 ## Quick start
 
 ```bash
-npm install @babulfish/core @babulfish/styles
+npm install @babulfish/core @babulfish/styles @huggingface/transformers
 ```
 
 ```ts
@@ -27,6 +27,7 @@ core.restore()
 ```
 
 `createBabulfish` returns a `BabulfishCore` instance that manages model lifecycle, DOM translation, and snapshot subscriptions. The `dom.roots` option accepts CSS selectors identifying which subtrees to translate.
+`@huggingface/transformers` provides the model runtime used by `loadModel()` and translation calls.
 
 ## API summary
 

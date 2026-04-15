@@ -18,7 +18,6 @@ Renders a self-contained translation UI into its Shadow DOM: language selector, 
 
 | Attribute      | Type     | Description                                                                 |
 |----------------|----------|-----------------------------------------------------------------------------|
-| `data-model`   | `string` | Decorative hint for the model name (does not affect engine selection).       |
 | `target-lang`  | `string` | Setting this attribute triggers `core.translateTo(value)` if a model is loaded. |
 
 ### Events

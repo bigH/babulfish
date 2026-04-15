@@ -8,16 +8,18 @@ No server round-trips, no API keys — the model runs entirely in the user's bro
 | You want... | Package | Demo |
 |---|---|---|
 | React UI (batteries included) | [`@babulfish/react`](packages/react/README.md) | [`packages/demo`](packages/demo/) |
+| Permanent unscoped React alias | [`babulfish`](packages/babulfish/README.md) | same surface as `@babulfish/react` |
 | Any framework or no framework | [`@babulfish/core`](packages/core/README.md) | [`packages/demo-vanilla`](packages/demo-vanilla/README.md) |
 | Web Components (`<babulfish-translator>`) | [`@babulfish/core`](packages/core/README.md) | [`packages/demo-webcomponent`](packages/demo-webcomponent/README.md) |
 
 `@babulfish/react` is a thin projection of `@babulfish/core` — both share one engine singleton.
 Use `@babulfish/core` directly when you need framework-agnostic access or are building your own binding.
+`babulfish` is a permanent compat alias for `@babulfish/react`; new code should prefer the scoped package.
 
 ## Quick start (React)
 
 ```bash
-npm install @babulfish/react
+npm install @babulfish/react @huggingface/transformers
 ```
 
 ```tsx
@@ -51,6 +53,7 @@ function TranslatePage() {
 ```
 
 See [`packages/react/README.md`](packages/react/README.md) for the full API.
+`@huggingface/transformers` provides the model runtime behind `loadModel()` and translation calls.
 
 ## Architecture
 
@@ -79,6 +82,7 @@ graph TD
 
 ```
 packages/
+  babulfish/          babulfish — permanent compat alias for @babulfish/react
   core/               @babulfish/core — engine + DOM + contract
   react/              @babulfish/react — React binding
   styles/             @babulfish/styles — CSS custom properties and animations
@@ -86,11 +90,9 @@ packages/
   demo-vanilla/       Zero-framework vanilla DOM demo
   demo-webcomponent/  Shadow DOM custom element demo
 docs/
-  ui-agnostic-core.md Design document
   plans/              Execution plans
 ```
 
 ## Links
 
-- [Design document](docs/ui-agnostic-core.md)
-- [Execution plan](docs/plans/ui-agnostic-core.md)
+- [Pre-publish polish plan](docs/plans/ui-agnostic-polish.md)

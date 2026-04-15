@@ -1,6 +1,6 @@
 {
   "name": "@babulfish/core",
-  "version": "0.0.0",
+  "version": "0.0.2",
   "description": "UI-agnostic translation engine and DOM orchestrator.",
   "license": "MIT",
   "type": "module",
