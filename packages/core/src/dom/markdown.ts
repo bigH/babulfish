@@ -6,15 +6,19 @@ type InlineSegment =
   | { type: "strong"; content: string }
   | { type: "em"; content: string }
 
-type ParsedInlineMarkdown = {
-  segments: InlineSegment[]
-  wellFormed: boolean
-}
-
-const MARKERS: ReadonlyArray<{ kind: "strong" | "em"; pattern: string }> = [
+const MARKERS = [
   { kind: "strong", pattern: "**" },
   { kind: "em", pattern: "*" },
-]
+] as const
+
+type InlineMarker = (typeof MARKERS)[number]
+
+function findMarkerAt(source: string, cursor: number): InlineMarker | null {
+  for (const marker of MARKERS) {
+    if (source.startsWith(marker.pattern, cursor)) return marker
+  }
+  return null
+}
 
 function pushText(segments: InlineSegment[], text: string): void {
   if (text.length === 0) return
@@ -50,41 +54,60 @@ function segmentToHtml(segment: InlineSegment): string {
   }
 }
 
-function parseInlineMarkdownResult(source: string): ParsedInlineMarkdown {
+function parseInlineMarkdownSegments(source: string): InlineSegment[] {
   const segments: InlineSegment[] = []
   let cursor = 0
-  let wellFormed = true
+  let marker: InlineMarker | null
 
   while (cursor < source.length) {
-    let matched = false
-
-    for (const { kind, pattern } of MARKERS) {
-      if (!source.startsWith(pattern, cursor)) continue
-      const contentStart = cursor + pattern.length
-      const close = source.indexOf(pattern, contentStart)
-      if (close === -1) {
-        pushText(segments, pattern)
-        cursor += pattern.length
-        wellFormed = false
-        matched = true
-        break
-      }
-      segments.push({ type: kind, content: source.slice(contentStart, close) })
-      cursor = close + pattern.length
-      matched = true
-      break
+    marker = findMarkerAt(source, cursor)
+    if (!marker) {
+      pushText(segments, source[cursor]!)
+      cursor++
+      continue
     }
 
-    if (matched) continue
-    pushText(segments, source[cursor]!)
-    cursor++
+    const contentStart = cursor + marker.pattern.length
+    const close = source.indexOf(marker.pattern, contentStart)
+    if (close === -1) {
+      pushText(segments, marker.pattern)
+      cursor = contentStart
+      continue
+    }
+
+    segments.push({
+      type: marker.kind,
+      content: source.slice(contentStart, close),
+    })
+    cursor = close + marker.pattern.length
   }
 
-  return { segments, wellFormed }
+  return segments
+}
+
+function isWellFormedMarkdownText(text: string): boolean {
+  let cursor = 0
+  let marker: InlineMarker | null
+
+  while (cursor < text.length) {
+    marker = findMarkerAt(text, cursor)
+    if (!marker) {
+      cursor++
+      continue
+    }
+
+    const close = text.indexOf(marker.pattern, cursor + marker.pattern.length)
+    if (close === -1) {
+      return false
+    }
+    cursor = close + marker.pattern.length
+  }
+
+  return true
 }
 
 export function parseInlineMarkdown(source: string): InlineSegment[] {
-  return parseInlineMarkdownResult(source).segments
+  return parseInlineMarkdownSegments(source)
 }
 
 export function renderInlineMarkdownToHtml(source: string): string {
@@ -92,5 +115,5 @@ export function renderInlineMarkdownToHtml(source: string): string {
 }
 
 export function isWellFormedMarkdown(text: string): boolean {
-  return parseInlineMarkdownResult(text).wellFormed
+  return isWellFormedMarkdownText(text)
 }
