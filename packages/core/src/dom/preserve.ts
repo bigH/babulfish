@@ -5,6 +5,9 @@
 
 export type PreserveMatcher = string | RegExp | ((text: string) => string[])
 
+const PLACEHOLDER_OPEN = "\u27EA"
+const PLACEHOLDER_CLOSE = "\u27EB"
+
 /** Collect all strings matched by a single matcher. */
 function matchAll(matcher: PreserveMatcher, text: string): string[] {
   if (typeof matcher === "string") {
@@ -14,14 +17,14 @@ function matchAll(matcher: PreserveMatcher, text: string): string[] {
     const flags = matcher.flags.includes("g")
       ? matcher.flags
       : matcher.flags + "g"
-    return uniqueNonEmpty(
+    return collectUniqueNonEmptyMatches(
       Array.from(text.matchAll(new RegExp(matcher.source, flags)), (m) => m[0]),
     )
   }
-  return uniqueNonEmpty(matcher(text))
+  return collectUniqueNonEmptyMatches(matcher(text))
 }
 
-function uniqueNonEmpty(matches: Iterable<string>): string[] {
+function collectUniqueNonEmptyMatches(matches: Iterable<string>): string[] {
   const values = new Set<string>()
   for (const match of matches) {
     if (match.length > 0) values.add(match)
@@ -38,7 +41,7 @@ export function insertPlaceholders(
 
   for (const matcher of matchers) {
     for (const word of matchAll(matcher, masked)) {
-      const tag = `\u27EA${slots.length}\u27EB`
+      const tag = `${PLACEHOLDER_OPEN}${slots.length}${PLACEHOLDER_CLOSE}`
       const nextMasked = masked.replaceAll(word, tag)
       if (nextMasked === masked) continue
       slots.push(word)
@@ -55,7 +58,10 @@ export function restorePlaceholders(
 ): string {
   let result = translated
   for (let i = 0; i < slots.length; i++) {
-    result = result.replaceAll(`\u27EA${i}\u27EB`, slots[i]!)
+    result = result.replaceAll(
+      `${PLACEHOLDER_OPEN}${i}${PLACEHOLDER_CLOSE}`,
+      slots[i]!,
+    )
   }
   return result
 }
