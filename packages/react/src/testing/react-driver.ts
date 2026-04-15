@@ -13,31 +13,47 @@ type BridgeState = {
   core: BabulfishCore | null
   snapshot: Snapshot | null
   getSnapshot: (() => Snapshot) | null
+  snapshotDescriptor: PropertyDescriptor | null
 }
 
 type DriverRegistration = {
   readonly unmount: () => void
-  readonly snapshotDescriptor: PropertyDescriptor
+  readonly restoreSnapshot: () => void
 }
 
-function captureSnapshotGetter(core: BabulfishCore): () => Snapshot {
-  const getter = Object.getOwnPropertyDescriptor(core, "snapshot")?.get
-  if (!getter) {
+type SnapshotContract = {
+  descriptor: PropertyDescriptor & { get: () => Snapshot }
+  getSnapshot: () => Snapshot
+}
+
+function captureSnapshotContract(core: BabulfishCore): SnapshotContract {
+  const descriptor = Object.getOwnPropertyDescriptor(core, "snapshot")
+  const unboundGetSnapshot = descriptor?.get
+  if (!unboundGetSnapshot) {
     throw new Error("React conformance driver requires core.snapshot to be a getter")
   }
-  return () => getter.call(core)
+  const getSnapshot = unboundGetSnapshot.bind(core)
+  return {
+    descriptor,
+    getSnapshot,
+  }
 }
 
 function SnapshotBridge({ bridge }: { bridge: BridgeState }): null {
   const core = useTranslatorContext()
 
-  bridge.getSnapshot ??= captureSnapshotGetter(core)
+  if (!bridge.snapshotDescriptor || !bridge.getSnapshot) {
+    const contract = captureSnapshotContract(core)
+    bridge.snapshotDescriptor = contract.descriptor
+    bridge.getSnapshot = contract.getSnapshot
+  }
+  const getSnapshot = bridge.getSnapshot
 
-  const snapshot = useSyncExternalStore(
-    core.subscribe,
-    bridge.getSnapshot,
-    bridge.getSnapshot,
-  )
+  if (!getSnapshot) {
+    throw new Error("React conformance driver requires core.snapshot to be a getter")
+  }
+
+  const snapshot = useSyncExternalStore(core.subscribe, getSnapshot, getSnapshot)
 
   bridge.core = core
   bridge.snapshot = snapshot
@@ -64,6 +80,7 @@ export function ReactConformanceDriver(): ConformanceDriver {
         core: null,
         snapshot: null,
         getSnapshot: null,
+        snapshotDescriptor: null,
       }
 
       const mergedConfig: BabulfishConfig = {
@@ -71,34 +88,36 @@ export function ReactConformanceDriver(): ConformanceDriver {
         dom: { roots: ["#app"], root: document, ...config?.dom },
       }
 
-      let unmount!: () => void
-      await act(async () => {
-        const result = render(
+      const { unmount } = await act(async () =>
+        render(
           createElement(TranslatorProvider, {
             config: mergedConfig,
             children: createElement(SnapshotBridge, { bridge }),
           }),
-        )
-        unmount = result.unmount
-      })
+        ),
+      )
 
       const core = bridge.core
-      if (!core || !bridge.snapshot) {
+      if (
+        !core ||
+        !bridge.snapshot ||
+        !bridge.snapshotDescriptor ||
+        !bridge.getSnapshot
+      ) {
         throw new Error("React conformance driver failed to capture the provider core snapshot")
       }
 
-      const snapshotDescriptor = Object.getOwnPropertyDescriptor(core, "snapshot")
-      if (!snapshotDescriptor?.get) {
-        throw new Error("React conformance driver requires core.snapshot to be a getter")
-      }
+      const { snapshotDescriptor } = bridge
+      const restoreSnapshot = () =>
+        Object.defineProperty(core, "snapshot", snapshotDescriptor)
 
       Object.defineProperty(core, "snapshot", {
-        get: () => bridge.snapshot,
+        get: () => bridge.snapshot!,
         configurable: true,
         enumerable: true,
       })
 
-      registry.set(core, { unmount, snapshotDescriptor })
+      registry.set(core, { unmount, restoreSnapshot })
       return core
     },
 
@@ -108,7 +127,7 @@ export function ReactConformanceDriver(): ConformanceDriver {
       await act(async () => {
         registration.unmount()
       })
-      Object.defineProperty(core, "snapshot", registration.snapshotDescriptor)
+      registration.restoreSnapshot()
       registry.delete(core)
     },
   }
