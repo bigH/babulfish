@@ -10,7 +10,11 @@ import type {
   ConformanceScenario,
   DomConformanceDriver,
 } from "./drivers/types.js"
-import { makeFakePipeline, type ConformancePipeline } from "./conformance-helpers.js"
+import {
+  makeControllablePipeline,
+  makeFakePipeline,
+  type ConformancePipeline,
+} from "./conformance-helpers.js"
 
 // ---------------------------------------------------------------------------
 // Mock access — test file MUST vi.mock("../engine/pipeline-loader.js") first
@@ -64,43 +68,6 @@ async function expectAbortError(
   }
 }
 
-// ---------------------------------------------------------------------------
-// Fake pipeline helpers
-// ---------------------------------------------------------------------------
-
-function controllablePipeline(): {
-  pipeline: ConformancePipeline
-  waitForStart: () => Promise<void>
-  resolveAll: () => void
-} {
-  const barriers: Array<() => void> = []
-  let resolveStart = () => {}
-  let released = false
-  const started = new Promise<void>((resolve) => {
-    resolveStart = resolve
-  })
-  const generate = async () => {
-    resolveStart()
-    if (!released) {
-      await new Promise<void>((r) => barriers.push(r))
-    }
-    return [
-      { generated_text: [{ role: "assistant", content: "translated" }] },
-    ] as const
-  }
-  const pipeline = Object.assign(generate, { dispose: async () => {} }) as ConformancePipeline
-  return {
-    pipeline,
-    waitForStart() {
-      return started
-    },
-    resolveAll() {
-      released = true
-      barriers.splice(0).forEach((r) => r())
-    },
-  }
-}
-
 function collect(core: Pick<BabulfishCore, "subscribe">): Snapshot[] {
   const out: Snapshot[] = []
   core.subscribe((s) => out.push(s))
@@ -138,9 +105,9 @@ async function startPendingTranslation(
 ): Promise<{
   readonly core: BabulfishCore
   readonly translation: Promise<void>
-  readonly resolve: () => void
+  readonly release: () => void
 }> {
-  const { pipeline, waitForStart, resolveAll } = controllablePipeline()
+  const { pipeline, waitForStart, release } = makeControllablePipeline()
   mockedLoad.mockResolvedValue(pipeline)
   const core = await driver.create()
   await core.loadModel()
@@ -150,7 +117,7 @@ async function startPendingTranslation(
   return {
     core,
     translation,
-    resolve: resolveAll,
+    release,
   }
 }
 
@@ -370,7 +337,7 @@ export const scenarios: readonly ConformanceScenario[] = [
     description:
       "Dispose core A mid-flight; core B translateText resolves normally",
     async run(driver) {
-      const { pipeline, resolveAll } = controllablePipeline()
+      const { pipeline, release } = makeControllablePipeline()
       mockedLoad.mockResolvedValue(pipeline)
       const a = await driver.create()
       let aDisposed = false
@@ -382,7 +349,7 @@ export const scenarios: readonly ConformanceScenario[] = [
           const p = b.translateText("hello", "es")
           await a.dispose()
           aDisposed = true
-          resolveAll()
+          release()
           assertEqual(await p, "translated", "B translates after A disposed")
           assertEqual(b.snapshot.model.status, "ready", "B model ready")
           assertEqual(
@@ -407,7 +374,7 @@ export const scenarios: readonly ConformanceScenario[] = [
       "translateTo(a) then (b): first rejects AbortError, second resolves",
     requiresDOM: true,
     async run(driver) {
-      const { pipeline, waitForStart, resolveAll } = controllablePipeline()
+      const { pipeline, waitForStart, release } = makeControllablePipeline()
       mockedLoad.mockResolvedValue(pipeline)
       await withCore(driver, async (core) => {
         await core.loadModel()
@@ -415,7 +382,7 @@ export const scenarios: readonly ConformanceScenario[] = [
         p1.catch(() => {})
         const p2 = core.translateTo("b")
         await waitForStart()
-        resolveAll()
+        release()
         await expectAbortError(p1, "First translateTo")
         await p2
         assertEqual(core.snapshot.currentLanguage, "b", "currentLanguage")
@@ -429,14 +396,14 @@ export const scenarios: readonly ConformanceScenario[] = [
     requiresDOM: true,
     async run(driver) {
       const ac = new AbortController()
-      const { core, translation, resolve } = await startPendingTranslation(
+      const { core, translation, release } = await startPendingTranslation(
         driver,
         "es",
         { signal: ac.signal },
       )
       try {
         ac.abort()
-        resolve()
+        release()
         await expectAbortError(translation, "External abort")
       } finally {
         await driver.dispose(core)
@@ -450,12 +417,12 @@ export const scenarios: readonly ConformanceScenario[] = [
       "dispose() mid-translation rejects pending Promise with AbortError",
     requiresDOM: true,
     async run(driver) {
-      const { core, translation, resolve } = await startPendingTranslation(
+      const { core, translation, release } = await startPendingTranslation(
         driver,
         "es",
       )
       const dispose = driver.dispose(core)
-      resolve()
+      release()
       await expectAbortError(translation, "translateTo during dispose")
       await dispose
     },
@@ -467,14 +434,14 @@ export const scenarios: readonly ConformanceScenario[] = [
       "abort() mid-translation → idle; no stale completion to subscribers",
     requiresDOM: true,
     async run(driver) {
-      const { core, translation, resolve } = await startPendingTranslation(
+      const { core, translation, release } = await startPendingTranslation(
         driver,
         "es",
       )
       try {
         const snaps = collect(core)
         core.abort()
-        resolve()
+        release()
         await expectAbortError(translation, "abort() mid-translation")
         assertEqual(
           core.snapshot.translation.status,
