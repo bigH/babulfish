@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 import {
   appendStatusEntry,
   observeHostDocument,
+  requireButton,
   requireEventLog,
   restoreTranslators,
   setTranslatorLanguage,
@@ -39,6 +40,18 @@ describe("demo main helpers", () => {
     )
   })
 
+  it("fails fast when the host page is missing a required control button", () => {
+    expect(() => requireButton(document, "host-restore")).toThrowError(
+      "Expected #host-restore button for demo host controls",
+    )
+  })
+
+  it("returns the requested host control button", () => {
+    document.body.innerHTML = `<button id="host-restore" type="button">Restore</button>`
+
+    expect(requireButton(document, "host-restore")).toBeInstanceOf(HTMLButtonElement)
+  })
+
   it("prepends formatted status entries and mirrors them to the console", () => {
     document.body.innerHTML = `<div id="event-log"><div class="entry">older</div></div>`
     const eventLog = requireEventLog(document)
@@ -59,6 +72,18 @@ describe("demo main helpers", () => {
     expect(entries[0]?.textContent).toContain("lang=es")
     expect(entries[1]?.textContent).toBe("older")
     expect(logger.log).toHaveBeenCalledWith("[babulfish-translator #2]", snapshot)
+  })
+
+  it("creates status log entries in the event log's owner document", () => {
+    const hostDocument = document.implementation.createHTMLDocument("demo")
+    hostDocument.body.innerHTML = `<div id="event-log"></div>`
+    const eventLog = requireEventLog(hostDocument)
+
+    appendStatusEntry(eventLog, 0, createSnapshot(), { log: vi.fn() })
+
+    const entry = eventLog.firstElementChild
+    expect(entry?.tagName).toBe("DIV")
+    expect(entry?.ownerDocument).toBe(hostDocument)
   })
 
   it("ignores mutations inside #event-log but warns on host document mutations", async () => {

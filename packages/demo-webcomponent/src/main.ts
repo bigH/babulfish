@@ -2,27 +2,20 @@ import "./babulfish-translator.js"
 import {
   appendStatusEntry,
   observeHostDocument,
+  requireButton,
   requireEventLog,
   restoreTranslators,
   setTranslatorLanguage,
   type TranslatorHostElement,
 } from "./main-helpers.js"
 
-function requireButton(id: string): HTMLButtonElement {
-  const button = document.getElementById(id)
-  if (!(button instanceof HTMLButtonElement)) {
-    throw new Error(`Expected #${id} button for demo host controls`)
-  }
-  return button
-}
-
 const eventLog = requireEventLog(document)
 const translators = Array.from(
   document.querySelectorAll("babulfish-translator"),
 ) as TranslatorHostElement[]
-const translateSpanishButton = requireButton("host-translate-es")
-const translateArabicButton = requireButton("host-translate-ar")
-const restoreButton = requireButton("host-restore")
+const translateSpanishButton = requireButton(document, "host-translate-es")
+const translateArabicButton = requireButton(document, "host-translate-ar")
+const restoreButton = requireButton(document, "host-restore")
 
 translateSpanishButton.addEventListener("click", () => {
   setTranslatorLanguage(translators, "es")
