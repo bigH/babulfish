@@ -1,21 +1,14 @@
 import type {
-  DataType,
-  Message,
-  DeviceType,
-  ProgressCallback,
+  PretrainedModelOptions,
   ProgressInfo,
-  TextGenerationChatOutput,
   TextGenerationPipeline,
-  TextGenerationStringOutput,
 } from "@huggingface/transformers"
 
 const TEXT_GENERATION_TASK = "text-generation" as const
 
-export type PipelineOptions = {
-  readonly dtype?: DataType
-  readonly device?: DeviceType
-  readonly progress_callback?: ProgressCallback
-}
+export type PipelineOptions = Readonly<
+  Pick<PretrainedModelOptions, "dtype" | "device" | "progress_callback">
+>
 
 export async function loadPipeline(
   model: string,
@@ -29,9 +22,6 @@ export async function loadPipeline(
 }
 
 export type {
-  Message,
   ProgressInfo,
-  TextGenerationChatOutput,
   TextGenerationPipeline,
-  TextGenerationStringOutput,
 }

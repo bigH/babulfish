@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import type { PretrainedModelOptions } from "@huggingface/transformers"
+import { beforeEach, describe, expect, expectTypeOf, it, vi } from "vitest"
 import type { PipelineOptions, TextGenerationPipeline } from "../pipeline-loader.js"
 
 const mockPipelineFactory = vi.fn()
@@ -14,6 +15,12 @@ beforeEach(() => {
 })
 
 describe("loadPipeline", () => {
+  it("matches the transformers loader option subset", () => {
+    expectTypeOf<PipelineOptions>().toEqualTypeOf<
+      Readonly<Pick<PretrainedModelOptions, "dtype" | "device" | "progress_callback">>
+    >()
+  })
+
   it("delegates to transformers pipeline with model and options", async () => {
     const pipelineInstance = {} as TextGenerationPipeline
     const options: PipelineOptions = {
