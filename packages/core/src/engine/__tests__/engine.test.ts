@@ -92,6 +92,7 @@ function createDeferred<T>() {
 beforeEach(() => {
   mockLoadPipeline.mockReset()
   mockGenerate.mockReset()
+  mockDispose.mockClear()
   mockLoadPipeline.mockImplementation(resolveMockPipeline)
 })
 
@@ -198,6 +199,54 @@ describe("load", () => {
     await expect(engine.load()).rejects.toThrow("fail")
     await engine.load()
     expect(engine.status).toBe("ready")
+  })
+
+  it("reuses the in-flight load when a downloading listener calls load()", async () => {
+    const firstLoad = createDeferred<TextGenerationPipeline>()
+    mockLoadPipeline.mockImplementationOnce(() => firstLoad.promise)
+
+    const engine = createEngine()
+    const reentrantLoads: Promise<void>[] = []
+    engine.on("status-change", (event) => {
+      if (event.to === "downloading") {
+        reentrantLoads.push(engine.load())
+      }
+    })
+
+    const loading = engine.load()
+    firstLoad.resolve(mockGenerator)
+
+    await loading
+    await Promise.all(reentrantLoads)
+
+    expect(mockLoadPipeline).toHaveBeenCalledTimes(1)
+    expect(engine.status).toBe("ready")
+  })
+
+  it("stays idle when a downloading listener disposes the engine", async () => {
+    const firstLoad = createDeferred<TextGenerationPipeline>()
+    mockLoadPipeline.mockImplementationOnce(() => firstLoad.promise)
+
+    const engine = createEngine()
+    const changes = statusChanges(engine)
+    engine.on("status-change", (event) => {
+      if (event.to === "downloading") {
+        engine.dispose()
+      }
+    })
+
+    const loading = engine.load()
+    firstLoad.resolve(mockGenerator)
+
+    await loading
+    await Promise.resolve()
+
+    expect(engine.status).toBe("idle")
+    expect(mockDispose).toHaveBeenCalledTimes(1)
+    expect(changes).toEqual([
+      { from: "idle", to: "downloading" },
+      { from: "downloading", to: "idle" },
+    ])
   })
 })
 

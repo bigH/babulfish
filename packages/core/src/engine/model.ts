@@ -135,23 +135,25 @@ export function createEngine(config?: EngineConfig): Translator {
       return
     }
 
-    transition("downloading")
     const version = lifecycleVersion
 
-    loadPromise = (async () => {
+    const nextLoad = (async () => {
       const resolvedDevice = getTranslationCapabilities(device).device
 
-      pipelinePromise = loadPipeline(modelId, {
+      const nextPipeline = loadPipeline(modelId, {
         dtype,
         device: resolvedDevice,
         progress_callback: buildProgressCallback(),
       })
+      pipelinePromise = nextPipeline
 
-      await pipelinePromise
+      await nextPipeline
     })()
+    loadPromise = nextLoad
+    transition("downloading")
 
     try {
-      await loadPromise
+      await nextLoad
       if (lifecycleVersion === version) transition("ready")
     } catch (err) {
       if (lifecycleVersion === version) {
