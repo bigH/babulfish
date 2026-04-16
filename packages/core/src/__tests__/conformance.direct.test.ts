@@ -55,6 +55,19 @@ describe("conformance — direct driver", () => {
     await driver.dispose(core)
   })
 
+  it("preserves non-DOM config while discarding DOM config", async () => {
+    const customLanguages = [{ label: "Esperanto", code: "eo" }] as const
+
+    const core = await driver.create({
+      dom: { roots: ["#app"] },
+      languages: customLanguages,
+    })
+
+    expect(core.languages).toEqual(customLanguages)
+
+    await driver.dispose(core)
+  })
+
   it.each([...applicable])("$id — $description", async (scenario) => {
     await scenario.run(driver)
   })

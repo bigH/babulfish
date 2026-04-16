@@ -10,8 +10,8 @@ export function createDirectDriver(): NonDomConformanceDriver {
     id: "direct",
     supportsDOM: false,
     create(config?: BabulfishConfig) {
-      const configWithoutDom =
-        config?.dom == null ? config : { ...config, dom: undefined }
+      if (config?.dom == null) return Promise.resolve(createBabulfish(config))
+      const { dom: _ignoredDom, ...configWithoutDom } = config
       return Promise.resolve(createBabulfish(configWithoutDom))
     },
     dispose(core: BabulfishCore) {
