@@ -7,9 +7,10 @@ vi.mock("../engine/pipeline-loader.js", () => ({
 
 import { loadPipeline } from "../engine/pipeline-loader.js"
 import { scenarios, scenariosForDriver } from "../testing/index.js"
+import { makeFakePipeline } from "../testing/conformance-helpers.js"
 import { createDirectDriver } from "../testing/drivers/direct.js"
 import { __resetEngineForTests } from "../engine/testing/index.js"
-import { makeFakePipeline, resetConformanceDocument } from "./conformance.helpers.js"
+import { resetConformanceDocument } from "./conformance.dom-fixture.js"
 
 const mockedLoadPipeline = vi.mocked(loadPipeline)
 const driver = createDirectDriver()
@@ -24,6 +25,13 @@ beforeEach(() => {
 describe("conformance — direct driver", () => {
   it("is explicitly non-DOM", () => {
     expect(driver.supportsDOM).toBe(false)
+  })
+
+  it("resets the shared DOM fixture when requested", () => {
+    resetConformanceDocument()
+    resetConformanceDocument("")
+
+    expect(document.body.innerHTML).toBe("")
   })
 
   it("skips DOM-only scenarios", () => {

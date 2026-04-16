@@ -6,16 +6,16 @@ vi.mock("../engine/pipeline-loader.js", () => ({
 }))
 
 import { loadPipeline } from "../engine/pipeline-loader.js"
+import { makeFakePipeline } from "../testing/conformance-helpers.js"
 import { scenariosForDriver } from "../testing/index.js"
 import { createVanillaDomDriver } from "../testing/drivers/vanilla-dom.js"
 import { __resetEngineForTests } from "../engine/testing/index.js"
-import { makeFakePipeline, resetConformanceDocument } from "./conformance.helpers.js"
+import { resetConformanceDocument } from "./conformance.dom-fixture.js"
 
 const mockedLoadPipeline = vi.mocked(loadPipeline)
 const driver = createVanillaDomDriver()
-const rootOverrideScenario = scenariosForDriver(driver).find(
-  (scenario) => scenario.id === "root-override",
-)
+const applicable = scenariosForDriver(driver)
+const rootOverrideScenario = applicable.find((scenario) => scenario.id === "root-override")
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -90,7 +90,7 @@ describe("conformance — vanilla DOM driver", () => {
     expect(fragmentDriver.root).toBe(fragment)
   })
 
-  it.each([...scenariosForDriver(driver)])("$id — $description", async (scenario) => {
+  it.each([...applicable])("$id — $description", async (scenario) => {
     await scenario.run(driver)
   })
 })
