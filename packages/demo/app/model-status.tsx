@@ -23,6 +23,11 @@ type ActionButton = {
   readonly tone: "primary" | "secondary"
 }
 
+type TranslationAction = {
+  readonly label: string
+  readonly language: string
+}
+
 const ACTION_BUTTON_CLASS_NAMES = {
   primary:
     "rounded-full bg-gray-900 px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:bg-gray-300",
@@ -30,36 +35,21 @@ const ACTION_BUTTON_CLASS_NAMES = {
     "rounded-full border border-gray-300 px-4 py-2 text-sm font-medium text-gray-900 disabled:cursor-not-allowed disabled:opacity-50",
 } as const
 
+const TRANSLATION_ACTIONS: ReadonlyArray<TranslationAction> = [
+  { label: "Translate to Spanish", language: "es-ES" },
+  { label: "Translate to Arabic (RTL)", language: "ar" },
+]
+
 function formatPercent(progress: number): string {
   return `${Math.round(progress * 100)}%`
 }
 
-function formatWebGPUStatus(
+function formatCapabilityStatus(
   capabilitiesReady: boolean,
-  hasWebGPU: boolean,
+  value: string,
 ): string {
   if (!capabilitiesReady) return CHECKING_LABEL
-  return hasWebGPU ? "Supported" : "Not available"
-}
-
-function formatTranslationPath(
-  capabilitiesReady: boolean,
-  canTranslate: boolean,
-  device: ReturnType<typeof useTranslator>["device"],
-): string {
-  if (!capabilitiesReady) return CHECKING_LABEL
-  if (!canTranslate) return "Unavailable"
-  return device === "webgpu" ? "WebGPU" : "WASM fallback"
-}
-
-function formatDefaultButtonStatus(
-  capabilitiesReady: boolean,
-  isMobile: boolean,
-  canTranslate: boolean,
-): string {
-  if (!capabilitiesReady) return CHECKING_LABEL
-  if (isMobile) return "Desktop only for now"
-  return canTranslate ? "Available" : "Unavailable"
+  return value
 }
 
 function formatModelStatus(model: ModelState): string {
@@ -110,8 +100,11 @@ export function ModelStatus() {
 
   const modelReady = model.status === "ready"
   const translating = translation.status === "translating"
-  const canDriveTranslation = modelReady && !translating
-  const canRestore = modelReady && currentLanguage !== null && !translating
+  const canTranslatePage = modelReady && !translating
+  const canRestorePage = modelReady && currentLanguage !== null && !translating
+  const translationPath =
+    !canTranslate ? "Unavailable" : device === "webgpu" ? "WebGPU" : "WASM fallback"
+  const defaultButtonStatus = isMobile ? "Desktop only for now" : canTranslate ? "Available" : "Unavailable"
   const actionButtons: ReadonlyArray<ActionButton> = [
     {
       label: "Load model",
@@ -121,28 +114,18 @@ export function ModelStatus() {
       },
       tone: "primary",
     },
-    {
-      label: "Translate to Spanish",
-      disabled: !canDriveTranslation,
+    ...TRANSLATION_ACTIONS.map(({ label, language }) => ({
+      label,
+      disabled: !canTranslatePage,
       onClick: () => {
-        void translatePage("es-ES")
+        void translatePage(language)
       },
-      tone: "secondary",
-    },
-    {
-      label: "Translate to Arabic (RTL)",
-      disabled: !canDriveTranslation,
-      onClick: () => {
-        void translatePage("ar")
-      },
-      tone: "secondary",
-    },
+      tone: "secondary" as const,
+    })),
     {
       label: "Restore original",
-      disabled: !canRestore,
-      onClick: () => {
-        restorePage()
-      },
+      disabled: !canRestorePage,
+      onClick: restorePage,
       tone: "secondary",
     },
   ]
@@ -150,15 +133,18 @@ export function ModelStatus() {
   const rows: ReadonlyArray<StatusRow> = [
     {
       label: "WebGPU",
-      value: formatWebGPUStatus(capabilitiesReady, hasWebGPU),
+      value: formatCapabilityStatus(
+        capabilitiesReady,
+        hasWebGPU ? "Supported" : "Not available",
+      ),
     },
     {
       label: "Translation Path",
-      value: formatTranslationPath(capabilitiesReady, canTranslate, device),
+      value: formatCapabilityStatus(capabilitiesReady, translationPath),
     },
     {
       label: "Default Button",
-      value: formatDefaultButtonStatus(capabilitiesReady, isMobile, canTranslate),
+      value: formatCapabilityStatus(capabilitiesReady, defaultButtonStatus),
     },
     {
       label: "Model",
