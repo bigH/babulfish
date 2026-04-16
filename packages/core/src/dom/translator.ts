@@ -145,6 +145,7 @@ type StructuredTextSlot = {
 
 type StructuredTextUnit = {
   readonly root: Element
+  readonly source: string
   readonly serialized: string
   readonly textSlots: readonly StructuredTextSlot[]
   readonly tokenSequence: readonly StructuredTokenDescriptor[]
@@ -299,6 +300,13 @@ export function createDOMTranslator(config: DOMTranslatorConfig): DOMTranslator 
     ? (text: string) => config.shouldSkip!(text, defaultShouldSkip)
     : defaultShouldSkip
 
+  function transformDOMOutput(
+    translated: string,
+    context: DOMOutputTransformContext,
+  ): string {
+    return config.outputTransform ? config.outputTransform(translated, context) : translated
+  }
+
   // Skip selectors: elements whose children should be excluded from
   // plain-text walking (they are translated separately).
   const skipSelectors: string[] = []
@@ -451,10 +459,15 @@ export function createDOMTranslator(config: DOMTranslatorConfig): DOMTranslator 
 
       const translated = await config.translate(sourceText, targetLang)
       if (signal.aborted) return
+      const transformed = transformDOMOutput(translated, {
+        kind: "linked",
+        targetLang,
+        source: sourceText,
+      })
 
       for (const { el, textNode } of writableTargets) {
         captureLinkedOriginalText(textNode, key)
-        textNode.textContent = translated
+        textNode.textContent = transformed
         notifyEnd(el, config.hooks?.onTranslateEnd)
       }
 
@@ -577,6 +590,7 @@ export function createDOMTranslator(config: DOMTranslatorConfig): DOMTranslator 
     }
 
     const parts: string[] = []
+    const sourceParts: string[] = []
     const tokenSequence: StructuredTokenDescriptor[] = []
     const textSlots: StructuredTextSlot[] = []
     let nextSlotId = 0
@@ -602,6 +616,7 @@ export function createDOMTranslator(config: DOMTranslatorConfig): DOMTranslator 
         const slotId = nextSlotId++
         pushToken("text-open", "text-open", slotId)
         parts.push(source)
+        sourceParts.push(source)
         pushToken("text-close", "text-close", slotId)
         textSlots.push({ node: textNode, slotId })
         return true
@@ -630,6 +645,7 @@ export function createDOMTranslator(config: DOMTranslatorConfig): DOMTranslator 
       if (tag === "br") {
         const slotId = nextSlotId++
         parts.push("\n")
+        sourceParts.push("\n")
         pushToken("br", "br", slotId)
         return true
       }
@@ -667,6 +683,7 @@ export function createDOMTranslator(config: DOMTranslatorConfig): DOMTranslator 
 
     return {
       root,
+      source: sourceParts.join(""),
       serialized: parts.join(""),
       textSlots,
       tokenSequence,
@@ -796,15 +813,20 @@ export function createDOMTranslator(config: DOMTranslatorConfig): DOMTranslator 
     const rawTranslation = await config.translate(masked, targetLang)
     if (signal.aborted) return
     const translated = restorePlaceholders(rawTranslation, slots)
+    const transformed = transformDOMOutput(translated, {
+      kind: "richText",
+      targetLang,
+      source,
+    })
 
     const validate = config.richText.validate ?? isWellFormedMarkdown
-    if (validate(translated)) {
+    if (validate(transformed)) {
       const render = config.richText.render
       // Safe: render function provided by consumer is responsible for escaping.
       // Default (renderInlineMarkdownToHtml) escapes all text segments.
-      el.innerHTML = render(translated) // eslint-disable-line no-unsanitized/property
+      el.innerHTML = render(transformed) // eslint-disable-line no-unsanitized/property
     } else {
-      el.textContent = translated.replaceAll("**", "").replaceAll("*", "")
+      el.textContent = transformed.replaceAll("**", "").replaceAll("*", "")
     }
 
     notifyEnd(el, config.hooks?.onTranslateEnd)
@@ -821,8 +843,13 @@ export function createDOMTranslator(config: DOMTranslatorConfig): DOMTranslator 
     const rawTranslation = await config.translate(masked, targetLang)
     if (signal.aborted) return
     const translated = restorePlaceholders(rawTranslation, slots)
+    const transformed = transformDOMOutput(translated, {
+      kind: "structuredText",
+      targetLang,
+      source: unit.source,
+    })
 
-    const exactCommit = extractStructuredTextValues(unit, translated)
+    const exactCommit = extractStructuredTextValues(unit, transformed)
     if (exactCommit) {
       if (signal.aborted) return
       for (const { node, slotId } of unit.textSlots) {
@@ -840,10 +867,15 @@ export function createDOMTranslator(config: DOMTranslatorConfig): DOMTranslator 
     const rawFallback = await config.translate(maskedFallback, targetLang)
     if (signal.aborted) return
     const fallbackTranslated = restorePlaceholders(rawFallback, fallbackSlots)
+    const transformedFallback = transformDOMOutput(fallbackTranslated, {
+      kind: "structuredText",
+      targetLang,
+      source: unit.source,
+    })
 
     restoreStructuredUnitForFallback(unit)
     const fallbackTargets = collectStructuredFallbackTargets(unit.root)
-    applyTranslation(fallbackTargets, fallbackTranslated)
+    applyTranslation(fallbackTargets, transformedFallback)
 
     notifyEnd(unit.root, config.hooks?.onTranslateEnd)
   }
@@ -990,8 +1022,13 @@ export function createDOMTranslator(config: DOMTranslatorConfig): DOMTranslator 
         const chunk = work.batch.map((t) => t.text).join("\n")
         const result = await config.translate(chunk, targetLang)
         if (signal.aborted) return
+        const transformed = transformDOMOutput(result, {
+          kind: "text",
+          targetLang,
+          source: chunk,
+        })
 
-        applyTranslation(work.batch, result)
+        applyTranslation(work.batch, transformed)
 
         for (const p of parents) {
           notifyEnd(p, config.hooks?.onTranslateEnd)
@@ -1007,7 +1044,13 @@ export function createDOMTranslator(config: DOMTranslatorConfig): DOMTranslator 
       if (signal.aborted) return
       const translated = await config.translate(text, targetLang)
       if (signal.aborted) return
-      el.setAttribute(attr, translated)
+      const transformed = transformDOMOutput(translated, {
+        kind: "attr",
+        targetLang,
+        source: text,
+        attribute: attr,
+      })
+      el.setAttribute(attr, transformed)
       progress()
     }
   }

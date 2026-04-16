@@ -308,6 +308,30 @@ describe("4.4 — root lifetime", () => {
     expect(result).toBe("hola")
   })
 
+  it("translateText ignores dom.outputTransform and returns raw engine output", async () => {
+    const { generate } = setupPipelineMock()
+    generate.mockResolvedValueOnce([{ generated_text: createMockResult("hello", "hola") }])
+
+    const root = document.createElement("div")
+    root.innerHTML = '<div id="app"><p>Hello</p></div>'
+    const outputTransform = vi.fn((translated: string) => translated.toUpperCase())
+
+    const core = createBabulfish({
+      dom: {
+        root,
+        roots: ["#app"],
+        outputTransform,
+      },
+    })
+
+    await core.loadModel()
+    const result = await core.translateText("hello", "es")
+
+    expect(result).toBe("hola")
+    expect(outputTransform).not.toHaveBeenCalled()
+    expect(root.querySelector("p")?.textContent).toBe("Hello")
+  })
+
   it("restore and translateTo work without dom config", async () => {
     setupPipelineMock()
     const core = createBabulfish()

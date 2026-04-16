@@ -1188,6 +1188,82 @@ describe("DOM translator", () => {
     expect(paragraph.innerHTML).toBe(originalInnerHTML)
   })
 
+  it("applies outputTransform before exact structured rehydration with the logical source", async () => {
+    const main = setUpHtmlMain(
+      '<p class="structured">Hello <strong>world</strong></p>',
+    )
+    const paragraph = main.querySelector("p")!
+
+    const outputTransform = vi.fn((translated: string, context) => {
+      expect(context).toEqual({
+        kind: "structuredText",
+        targetLang: "es-ES",
+        source: "Hello world",
+      })
+      return replaceAllVisibleText(translated, {
+        Hola: "Saludos",
+      })
+    })
+
+    translate.mockImplementation(async (text: string) =>
+      replaceAllVisibleText(text, {
+        Hello: "Hola",
+        world: "mundo",
+      }))
+
+    const t = makeTranslator(translate, {
+      structuredText: STRUCTURED_TEXT_CONFIG,
+      outputTransform,
+    })
+    await t.translate("es-ES")
+
+    expect(outputTransform).toHaveBeenCalledTimes(1)
+    expect(paragraph.innerHTML).toBe("Saludos <strong>mundo</strong>")
+  })
+
+  it("applies outputTransform again before structured local fallback commit", async () => {
+    const main = setUpHtmlMain(
+      '<p class="structured">Hello <strong>world</strong> again</p>',
+    )
+    const paragraph = main.querySelector("p")!
+
+    let callCount = 0
+    translate.mockImplementation(async (text: string) => {
+      callCount++
+      if (callCount === 1) {
+        return damageStructuredOutput(text, "missing", {
+          Hello: "Hola",
+          world: "mundo",
+          again: "otra vez",
+        })
+      }
+      return "Hola mundo otra vez"
+    })
+
+    let transformCallCount = 0
+    const outputTransform = vi.fn((translated: string, context) => {
+      transformCallCount++
+      expect(context).toEqual({
+        kind: "structuredText",
+        targetLang: "es-ES",
+        source: "Hello world again",
+      })
+      return transformCallCount === 1
+        ? translated
+        : `Transformado ${translated}`
+    })
+
+    const t = makeTranslator(translate, {
+      structuredText: STRUCTURED_TEXT_CONFIG,
+      outputTransform,
+    })
+    await t.translate("es-ES")
+
+    expect(outputTransform).toHaveBeenCalledTimes(2)
+    expect(paragraph.querySelector("strong")).not.toBeNull()
+    expect(paragraph.textContent).toBe("Transformado Hola mundo otra vez")
+  })
+
   // -----------------------------------------------------------------------
   // NEW: Configurable roots
   // -----------------------------------------------------------------------
@@ -1475,6 +1551,64 @@ describe("DOM translator", () => {
     expect(rich.getAttribute("title")).toBe("Titulo enriquecido")
   })
 
+  it("applies outputTransform to plain text batches before applyTranslation and attrs before setAttribute", async () => {
+    const paragraph = document.createElement("p")
+    const firstText = document.createTextNode("Before")
+    const secondText = document.createTextNode("After")
+    paragraph.append(firstText, secondText)
+
+    const titled = createElement("span", {
+      attrs: { title: "Go home" },
+    })
+    setUpMain([paragraph, titled])
+
+    const outputTransform = vi.fn((translated: string, context) => {
+      if (context.kind === "text") {
+        expect(context).toEqual({
+          kind: "text",
+          targetLang: "es-ES",
+          source: "Before\nAfter",
+        })
+        return "ANTES\nDESPUES"
+      }
+
+      expect(context).toEqual({
+        kind: "attr",
+        targetLang: "es-ES",
+        source: "Go home",
+        attribute: "title",
+      })
+      return `Transformado ${translated}`
+    })
+
+    translate.mockImplementation(async (text: string) => {
+      if (text === "Before\nAfter") return "Antes\nDespues"
+      if (text === "Go home") return "Ir a casa"
+      throw new Error(`Unexpected translate input: ${text}`)
+    })
+
+    const t = makeTranslator(translate, {
+      outputTransform,
+    })
+    await t.translate("es-ES")
+
+    expect(outputTransform).toHaveBeenNthCalledWith(1, "Antes\nDespues", {
+      kind: "text",
+      targetLang: "es-ES",
+      source: "Before\nAfter",
+    })
+    expect(outputTransform).toHaveBeenNthCalledWith(2, "Ir a casa", {
+      kind: "attr",
+      targetLang: "es-ES",
+      source: "Go home",
+      attribute: "title",
+    })
+    expect(outputTransform.mock.calls[0]?.[1]?.attribute).toBeUndefined()
+    expect(firstText.textContent).toBe("ANTES")
+    expect(secondText.textContent).toBe("DESPUES")
+    expect(titled.getAttribute("title")).toBe("Transformado Ir a casa")
+  })
+
   // -----------------------------------------------------------------------
   // NEW: Preserve matchers — RegExp
   // -----------------------------------------------------------------------
@@ -1526,6 +1660,40 @@ describe("DOM translator", () => {
     expect(span.textContent).toContain("support@co.com")
   })
 
+  it("applies outputTransform to richText after placeholder restoration and preserves fallback behavior", async () => {
+    const { span } = setUpRichTextMain(
+      "Working at **Chime** on infrastructure",
+      "Working at <strong>Chime</strong> on infrastructure",
+    )
+
+    const outputTransform = vi.fn((translated: string, context) => {
+      expect(translated).toBe("Trabajando en **Chime** en infraestructura")
+      expect(context).toEqual({
+        kind: "richText",
+        targetLang: "es-ES",
+        source: "Working at **Chime** on infrastructure",
+      })
+      return "Trabajando en **Chime en infraestructura"
+    })
+
+    translate.mockImplementation(async (text: string) => {
+      expect(text).toContain("\u27EA0\u27EB")
+      expect(text).not.toContain("Chime")
+      return "Trabajando en **\u27EA0\u27EB** en infraestructura"
+    })
+
+    const t = makeTranslator(translate, {
+      preserve: { matchers: ["Chime"] },
+      richText: RICH_TEXT_CONFIG,
+      outputTransform,
+    })
+    await t.translate("es-ES")
+
+    expect(outputTransform).toHaveBeenCalledTimes(1)
+    expect(span.textContent).toBe("Trabajando en Chime en infraestructura")
+    expect(span.innerHTML).not.toContain("<strong>")
+  })
+
   // -----------------------------------------------------------------------
   // NEW: LinkedBy config
   // -----------------------------------------------------------------------
@@ -1549,6 +1717,39 @@ describe("DOM translator", () => {
     expectTranslateCalls(translate, "Introduction")
     expect(a.textContent).toBe("Introduccion")
     expect(b.textContent).toBe("Introduccion")
+  })
+
+  it("applies outputTransform once per linked logical unit and fans out the transformed write", async () => {
+    const { first: a, second: b } = setUpLinkedMain("intro", [
+      "Introduction",
+      "Introduction",
+    ])
+
+    const outputTransform = vi.fn((translated: string, context) => {
+      expect(context).toEqual({
+        kind: "linked",
+        targetLang: "es-ES",
+        source: "Introduction",
+      })
+      return `Transformado ${translated}`
+    })
+
+    translate.mockResolvedValueOnce("Introduccion")
+
+    const t = makeTranslator(translate, {
+      linkedBy: {
+        selector: "[data-section-title]",
+        keyAttribute: "data-section-title",
+      },
+      outputTransform,
+    })
+    await t.translate("es-ES")
+
+    expect(outputTransform).toHaveBeenCalledTimes(1)
+    expect(outputTransform.mock.calls[0]?.[0]).toBe("Introduccion")
+    expect(outputTransform.mock.calls[0]?.[1]?.attribute).toBeUndefined()
+    expect(a.textContent).toBe("Transformado Introduccion")
+    expect(b.textContent).toBe("Transformado Introduccion")
   })
 
   it("counts linked groups as one progress unit per key", async () => {
