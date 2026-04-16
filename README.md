@@ -1,33 +1,82 @@
 # babulfish
 
-Fully client-side, in-browser translation powered by a shared WebGPU/WASM runtime.
-The shipped product is the package set below. The demos prove the current contract; they are not extra published bindings.
+Translate live DOM in the browser. No server round-trips, no API keys, restore the original content when you are done. WebGPU-first, with WASM fallback where supported.
 
-## Published packages
+This repo ships a small package set for that job. The demos prove the current contract; they are not extra published bindings.
 
-| Package | What it ships | Use it when |
+## See it in 30 seconds
+
+If you are in React, the shortest shipped path looks like this:
+
+```bash
+npm install @babulfish/react @huggingface/transformers
+```
+
+```tsx
+import {
+  TranslatorProvider,
+  TranslateButton,
+  useTranslateDOM,
+} from "@babulfish/react"
+import "@babulfish/react/css"
+
+function Article() {
+  const { translatePage, restorePage } = useTranslateDOM()
+
+  return (
+    <>
+      <TranslateButton />
+      <button onClick={() => translatePage("es")}>Translate</button>
+      <button onClick={() => restorePage()}>Restore</button>
+
+      <article data-demo-root>
+        <h1>Hello world</h1>
+        <p>This subtree is inside dom.roots.</p>
+      </article>
+    </>
+  )
+}
+
+export function App() {
+  return (
+    <TranslatorProvider config={{ dom: { roots: ["[data-demo-root]"] } }}>
+      <Article />
+    </TranslatorProvider>
+  )
+}
+```
+
+Want proof before reading API docs?
+
+- [`packages/demo`](packages/demo/README.md) shows the shipped React provider, hooks, stock UI, restore flow, and RTL.
+- [`packages/demo-vanilla`](packages/demo-vanilla/README.md) shows direct `@babulfish/core` usage with `structuredText`, preserve/skip behavior, DOM-only `outputTransform`, restore, and RTL.
+- [`packages/demo-webcomponent`](packages/demo-webcomponent/README.md) shows Shadow DOM working through private demo code, not a published web-component package.
+
+## Pick your path
+
+| Package | Use this if... | First-party proof |
 |---|---|---|
-| [`@babulfish/core`](packages/core/README.md) | Engine, DOM translator, and experimental conformance surface | You are not in React, you want direct DOM control, or you are building your own binding |
-| [`@babulfish/react`](packages/react/README.md) | React provider, hooks, and stock UI | You want the shipped React surface today |
-| [`babulfish`](packages/babulfish/README.md) | Permanent unscoped compat alias for `@babulfish/react` | You need old import paths to keep working |
-| [`@babulfish/styles`](packages/styles/README.md) | CSS variables and animations used by the stock UI | You want the stylesheet directly or want to theme the stock UI |
+| [`@babulfish/react`](packages/react/README.md) | You want the shipped React surface today: provider, hooks, and stock UI | [`packages/demo`](packages/demo/README.md) |
+| [`@babulfish/core`](packages/core/README.md) | You want direct DOM control, no framework, or your own binding | [`packages/demo-vanilla`](packages/demo-vanilla/README.md) |
+| [`babulfish`](packages/babulfish/README.md) | You need the permanent unscoped compat alias for `@babulfish/react` | same runtime surface as `@babulfish/react` |
+| [`@babulfish/styles`](packages/styles/README.md) | You want the stylesheet and CSS contract used by the stock UI | imported by `@babulfish/react` and available directly |
 
-Reach for `@babulfish/react` in a React app.
-Reach for `@babulfish/core` everywhere else.
-Use `babulfish` only when the unscoped compat name matters.
+Rule of thumb:
 
-## First-party demos
+- In React, start with `@babulfish/react`.
+- Outside React, start with `@babulfish/core`.
+- Use `babulfish` only when the unscoped import path matters.
 
-| Demo | What it proves today |
-|---|---|
-| [`packages/demo`](packages/demo/README.md) | The actual React/provider boundary: `TranslatorProvider`, `useTranslator()`, `useTranslateDOM()`, the shipped `<TranslateButton />`, a translated root scoped by `dom.roots`, restore, and Arabic RTL |
-| [`packages/demo-vanilla`](packages/demo-vanilla/README.md) | Direct `createBabulfish()` usage with multiple roots, `structuredText`, preserve/skip behavior, DOM-only `outputTransform`, raw `translateText()` bypass, restore, and RTL |
-| [`packages/demo-webcomponent`](packages/demo-webcomponent/README.md) | A demo-local custom element proving Shadow DOM roots work with `@babulfish/core`, multiple elements share one engine, and the host can drive `target-lang`, `restore()`, and `babulfish-status` without piercing the shadow boundary |
+## What is real today
 
-There is no published Vue package, web-component package, or other binding hiding elsewhere in this repo.
+- Shipped React surface: `TranslatorProvider`, `useTranslator()`, `useTranslateDOM()`, `<TranslateButton />`, and `<TranslateDropdown />`.
+- Shipped DOM contract: `dom.roots`, `structuredText`, `preserve.matchers`, `shouldSkip`, DOM-only `outputTransform`, restore, translated attributes, and RTL root direction.
+- Shipped compat surface: `babulfish` mirrors `@babulfish/react`, and the CSS entrypoints for `@babulfish/styles`, `@babulfish/react`, and `babulfish` all resolve.
+- Proven in demo code, but not published as separate packages: the custom-element and Shadow DOM path.
+
 If it is not in the package table above, it is not shipped.
 
-## DOM contract today
+## DOM contract
 
 - `dom.roots` scopes translation to selected descendants inside `document` or an explicit `dom.root`.
 - `structuredText` is opt-in and only claims supported inline-rich DOM. Unsupported shapes preserve structure first and fall back safely.
@@ -37,7 +86,7 @@ If it is not in the package table above, it is not shipped.
 
 See [`packages/core/README.md`](packages/core/README.md) for the exact `structuredText` and `outputTransform` semantics.
 
-## React boundary today
+## React boundary
 
 - `TranslatorProvider` creates one core per mounted provider on first client render.
 - The provider `config` is read when that core is created. Changing `config` after mount does not recreate or reconfigure the core.
@@ -46,7 +95,7 @@ See [`packages/core/README.md`](packages/core/README.md) for the exact `structur
 
 See [`packages/react/README.md`](packages/react/README.md) for the exact hook and component surface.
 
-## Validate and release
+## Maintainer notes
 
 Run these from the repo root before shipping non-trivial changes:
 
