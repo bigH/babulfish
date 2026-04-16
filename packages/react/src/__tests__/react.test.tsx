@@ -1032,7 +1032,7 @@ describe("TranslateDropdown", () => {
     expect(onRestore).not.toHaveBeenCalled()
   })
 
-  it("uses custom renderOption", () => {
+  it("keeps option state attributes when using custom renderOption", () => {
     renderDropdown({
       renderOption: (lang, active) => (
         <span data-testid={`custom-${lang.code}`}>
@@ -1040,10 +1040,20 @@ describe("TranslateDropdown", () => {
         </span>
       ),
       value: "fr",
+      focusedIndex: 1,
     })
+
+    const frenchOption = screen.getByTestId("custom-fr").closest("li")
+    const spanishOption = screen.getByTestId("custom-es-ES").closest("li")
 
     expect(screen.getByTestId("custom-fr")).toHaveTextContent("French (active)")
     expect(screen.getByTestId("custom-es-ES")).toHaveTextContent("Spanish")
+    expect(frenchOption).toHaveAttribute("aria-selected", "true")
+    expect(frenchOption).toHaveAttribute("data-focused", "true")
+    expect(frenchOption).toHaveAttribute("data-active", "true")
+    expect(spanishOption).toHaveAttribute("aria-selected", "false")
+    expect(spanishOption).not.toHaveAttribute("data-focused")
+    expect(spanishOption).not.toHaveAttribute("data-active")
   })
 
   it("shows Original entry above languages when onRestore is provided", () => {

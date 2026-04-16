@@ -1,6 +1,6 @@
 import type { Language } from "@babulfish/core"
-import { useEffect, useRef, type ReactNode } from "react"
-import { useResolvedLanguages } from "./context.js"
+import { useEffect, useRef, type CSSProperties, type ReactNode } from "react"
+import { useOptionalTranslatorContext } from "./context.js"
 
 export type TranslateDropdownProps = {
   readonly onSelect: (code: string) => void
@@ -12,6 +12,55 @@ export type TranslateDropdownProps = {
   readonly renderOption?: (lang: Language, active: boolean) => ReactNode
   readonly languages?: readonly Language[]
   readonly focusedIndex?: number
+}
+
+const MISSING_DROPDOWN_LANGUAGES_ERROR =
+  "TranslateDropdown requires either a languages prop or a <TranslatorProvider>"
+
+function getItemStyle(isActive: boolean): CSSProperties {
+  return {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    padding: "0.5rem 0.75rem",
+    cursor: "pointer",
+    fontSize: "0.875rem",
+    fontWeight: isActive ? 500 : 400,
+  }
+}
+
+function DropdownOptionRow({
+  id,
+  isActive,
+  isFocused,
+  className,
+  onClick,
+  style,
+  children,
+}: {
+  readonly id: string
+  readonly isActive: boolean
+  readonly isFocused: boolean
+  readonly className?: string
+  readonly onClick: () => void
+  readonly style?: CSSProperties
+  readonly children: ReactNode
+}) {
+  return (
+    <li
+      id={id}
+      role="option"
+      aria-selected={isActive}
+      tabIndex={-1}
+      data-focused={isFocused || undefined}
+      data-active={isActive || undefined}
+      className={className}
+      onClick={onClick}
+      style={style}
+    >
+      {children}
+    </li>
+  )
 }
 
 function CheckIcon() {
@@ -43,7 +92,12 @@ export function TranslateDropdown({
   languages: languagesProp,
   focusedIndex = -1,
 }: TranslateDropdownProps) {
-  const languages = useResolvedLanguages(languagesProp)
+  const context = useOptionalTranslatorContext()
+  const languages = languagesProp ?? context?.languages
+
+  if (!languages) {
+    throw new Error(MISSING_DROPDOWN_LANGUAGES_ERROR)
+  }
 
   const listRef = useRef<HTMLUListElement>(null)
 
@@ -60,6 +114,7 @@ export function TranslateDropdown({
 
   const hasOriginal = !!onRestore
   const isOriginalActive = value === null
+
   const handleSelect = (code: string) => {
     if (disabled) return
     onSelect(code)
@@ -68,16 +123,6 @@ export function TranslateDropdown({
     if (disabled) return
     onRestore?.()
   }
-
-  const itemStyle = (isActive: boolean): React.CSSProperties => ({
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    padding: "0.5rem 0.75rem",
-    cursor: "pointer",
-    fontSize: "0.875rem",
-    fontWeight: isActive ? 500 : 400,
-  })
 
   return (
     <ul
@@ -92,59 +137,43 @@ export function TranslateDropdown({
       style={disabled ? { pointerEvents: "none", opacity: 0.5 } : undefined}
     >
       {hasOriginal && (
-        <li
-          key="__original__"
+        <DropdownOptionRow
           id="babulfish-lang-0"
-          role="option"
-          aria-selected={isOriginalActive}
-          tabIndex={-1}
-          data-focused={focusedIndex === 0 || undefined}
-          data-active={isOriginalActive || undefined}
+          isActive={isOriginalActive}
+          isFocused={focusedIndex === 0}
           className={itemClassName}
           onClick={handleRestore}
-          style={itemStyle(isOriginalActive)}
+          style={getItemStyle(isOriginalActive)}
         >
           Original
           {isOriginalActive && <CheckIcon />}
-        </li>
+        </DropdownOptionRow>
       )}
       {languages.map((lang, i) => {
         const listIndex = hasOriginal ? i + 1 : i
         const isActive = lang.code === value
         const isFocused = listIndex === focusedIndex
-
-        if (renderOption) {
-          return (
-            <li
-              key={lang.code}
-              id={`babulfish-lang-${listIndex}`}
-              role="option"
-              aria-selected={isActive}
-              tabIndex={-1}
-              className={itemClassName}
-              onClick={() => handleSelect(lang.code)}
-            >
-              {renderOption(lang, isActive)}
-            </li>
-          )
-        }
-
-        return (
-          <li
-            key={lang.code}
-            id={`babulfish-lang-${listIndex}`}
-            role="option"
-            aria-selected={isActive}
-            tabIndex={-1}
-            data-focused={isFocused || undefined}
-            data-active={isActive || undefined}
-            className={itemClassName}
-            onClick={() => handleSelect(lang.code)}
-            style={itemStyle(isActive)}
-          >
+        const content = renderOption ? (
+          renderOption(lang, isActive)
+        ) : (
+          <>
             {lang.label}
             {isActive && <CheckIcon />}
-          </li>
+          </>
+        )
+
+        return (
+          <DropdownOptionRow
+            key={lang.code}
+            id={`babulfish-lang-${listIndex}`}
+            isActive={isActive}
+            isFocused={isFocused}
+            className={itemClassName}
+            onClick={() => handleSelect(lang.code)}
+            style={renderOption ? undefined : getItemStyle(isActive)}
+          >
+            {content}
+          </DropdownOptionRow>
         )
       })}
     </ul>
