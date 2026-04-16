@@ -13,5 +13,29 @@ export type {
 export type { Capabilities } from "./core/capabilities.js"
 export type { Language } from "./core/languages.js"
 
-export * from "./engine/index.js"
-export * from "./dom/index.js"
+export { createEngine, getTranslationCapabilities } from "./engine/index.js"
+export type {
+  DevicePreference,
+  EngineConfig,
+  ResolvedDevice,
+  TranslationCapabilities,
+  Translator,
+  TranslatorEvents,
+  TranslatorStatus,
+} from "./engine/index.js"
+
+export {
+  createDOMTranslator,
+  isWellFormedMarkdown,
+  parseInlineMarkdown,
+  renderInlineMarkdownToHtml,
+} from "./dom/index.js"
+export type {
+  DOMOutputTransformContext,
+  DOMTranslator,
+  DOMTranslatorConfig,
+  LinkedConfig,
+  PreserveMatcher,
+  RichTextConfig,
+  StructuredTextConfig,
+} from "./dom/index.js"
