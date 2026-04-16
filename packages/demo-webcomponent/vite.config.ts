@@ -5,11 +5,10 @@ import { defineConfig } from "vitest/config"
 const packageDir = path.dirname(fileURLToPath(import.meta.url))
 const coreSrc = path.resolve(packageDir, "../core/src")
 const coreEntry = (...segments: string[]) => path.join(coreSrc, ...segments)
-const crossOriginIsolationHeaders = {
+const crossOriginIsolationHeaders = Object.freeze({
   "Cross-Origin-Opener-Policy": "same-origin",
   "Cross-Origin-Embedder-Policy": "require-corp",
-}
-const buildCrossOriginIsolationHeaders = () => ({ ...crossOriginIsolationHeaders })
+})
 
 export default defineConfig({
   resolve: {
@@ -24,9 +23,9 @@ export default defineConfig({
     include: ["src/**/*.test.ts"],
   },
   server: {
-    headers: buildCrossOriginIsolationHeaders(),
+    headers: { ...crossOriginIsolationHeaders },
   },
   preview: {
-    headers: buildCrossOriginIsolationHeaders(),
+    headers: { ...crossOriginIsolationHeaders },
   },
 })
