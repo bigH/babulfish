@@ -1,7 +1,9 @@
-import { defineConfig } from "vitest/config"
+import type { UserConfig } from "vitest/config"
 
-export default defineConfig({
+export const vitestConfig = {
   test: {
     environment: "jsdom",
   },
-})
+} satisfies UserConfig
+
+export default vitestConfig
