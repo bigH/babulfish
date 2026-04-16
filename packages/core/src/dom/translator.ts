@@ -343,25 +343,6 @@ export function createDOMTranslator(config: DOMTranslatorConfig): DOMTranslator 
     root.innerHTML = original // eslint-disable-line no-unsanitized/property
   }
 
-  function restoreStructuredUnitForFallback(unit: StructuredTextUnit): void {
-    for (const { node } of unit.textSlots) {
-      if (!unit.root.contains(node)) continue
-      const source = originalTexts.get(node)
-      if (source != null) node.textContent = source
-    }
-
-    for (const attrName of attrNames) {
-      for (const el of unit.root.querySelectorAll(`[${attrName}]`)) {
-        const source = getOriginalAttrValue(el, attrName)
-        if (source != null) {
-          el.setAttribute(attrName, source)
-        }
-      }
-    }
-
-    restoreStructuredRoot(unit.root)
-  }
-
   function getOriginalAttrValue(el: Element, attrName: string): string | null {
     const attrs = originalAttrs.get(el)
     if (attrs && attrName in attrs) return attrs[attrName]!
@@ -868,7 +849,7 @@ export function createDOMTranslator(config: DOMTranslatorConfig): DOMTranslator 
       source: unit.source,
     })
 
-    restoreStructuredUnitForFallback(unit)
+    restoreStructuredRoot(unit.root)
     const fallbackTargets = collectStructuredFallbackTargets(unit.root)
     applyTranslation(fallbackTargets, transformedFallback)
 
