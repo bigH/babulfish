@@ -9,13 +9,22 @@ type PackageExportTarget = {
   types: string
 }
 
-function readPackageExports(): Record<string, PackageExportTarget> {
-  const packageJsonUrl = new URL("../../package.json", import.meta.url)
-  const packageJson = JSON.parse(readFileSync(packageJsonUrl, "utf8")) as {
-    exports: Record<string, PackageExportTarget>
-  }
+type PackageJson = {
+  exports: Record<string, PackageExportTarget>
+  peerDependencies?: Record<string, string>
+}
 
-  return packageJson.exports
+function readPackageJson(): PackageJson {
+  const packageJsonUrl = new URL("../../package.json", import.meta.url)
+  return JSON.parse(readFileSync(packageJsonUrl, "utf8")) as PackageJson
+}
+
+function readPackageExports(): Record<string, PackageExportTarget> {
+  return readPackageJson().exports
+}
+
+function readPeerDependencies(): string[] {
+  return Object.keys(readPackageJson().peerDependencies ?? {})
 }
 
 function expectedExportsFromEntries(entries: Record<string, string>): Record<string, PackageExportTarget> {
@@ -33,5 +42,9 @@ function expectedExportsFromEntries(entries: Record<string, string>): Record<str
 describe("core tsup config", () => {
   it("keeps package exports aligned with configured entrypoints and dist filenames", () => {
     expect(readPackageExports()).toEqual(expectedExportsFromEntries(tsupConfig.entry))
+  })
+
+  it("keeps external packages aligned with peer dependencies", () => {
+    expect(tsupConfig.external).toEqual(readPeerDependencies())
   })
 })
