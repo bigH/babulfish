@@ -28,6 +28,22 @@ const MOCK_LANGUAGES = [
 let mockSnapshot: Snapshot
 const listeners = new Set<() => void>()
 
+function createReadyEnablement(
+  verdict: Snapshot["enablement"]["verdict"] = {
+    outcome: "gpu-preferred",
+    resolvedDevice: "webgpu",
+    reason: "mock ready",
+  },
+  status: Snapshot["enablement"]["status"] = "ready",
+): Snapshot["enablement"] {
+  return Object.freeze({
+    status,
+    modelProfile: null,
+    inference: null,
+    verdict: Object.freeze(verdict),
+  })
+}
+
 function createDefaultSnapshot(): Snapshot {
   return Object.freeze({
     model: Object.freeze({ status: "idle" as const }),
@@ -36,10 +52,11 @@ function createDefaultSnapshot(): Snapshot {
     capabilities: Object.freeze({
       ready: true,
       hasWebGPU: true,
-      canTranslate: true,
-      device: "webgpu" as const,
       isMobile: false,
+      approxDeviceMemoryGiB: 16,
+      crossOriginIsolated: false,
     }),
+    enablement: createReadyEnablement(),
   })
 }
 
@@ -182,6 +199,9 @@ type SnapshotOverrides = {
   translation?: Partial<Snapshot["translation"]>
   currentLanguage?: Snapshot["currentLanguage"]
   capabilities?: Partial<Snapshot["capabilities"]>
+  enablement?: Partial<Snapshot["enablement"]> & {
+    verdict?: Snapshot["enablement"]["verdict"]
+  }
 }
 
 function setMockSnapshot(overrides: SnapshotOverrides = {}) {
@@ -207,6 +227,13 @@ function setMockSnapshot(overrides: SnapshotOverrides = {}) {
       capabilities: Object.freeze({
         ...prev.capabilities,
         ...(overrides.capabilities ?? {}),
+      }),
+      enablement: Object.freeze({
+        ...prev.enablement,
+        ...(overrides.enablement ?? {}),
+        verdict: Object.freeze(
+          overrides.enablement?.verdict ?? prev.enablement.verdict,
+        ),
       }),
     })
   })
@@ -414,8 +441,13 @@ describe("useTranslator", () => {
     setMockSnapshot({
       capabilities: {
         hasWebGPU: false,
-        canTranslate: true,
-        device: "wasm" as const,
+      },
+      enablement: {
+        verdict: {
+          outcome: "wasm-only",
+          resolvedDevice: "wasm",
+          reason: "mock wasm fallback",
+        },
       },
     })
 
@@ -447,7 +479,14 @@ describe("useTranslator", () => {
 
   it("reports unsupported when translation is unavailable", () => {
     setMockSnapshot({
-      capabilities: { hasWebGPU: true, canTranslate: false, device: "webgpu" as const },
+      capabilities: { hasWebGPU: true },
+      enablement: {
+        verdict: {
+          outcome: "denied",
+          resolvedDevice: null,
+          reason: "mock denied",
+        },
+      },
     })
 
     render(
@@ -584,9 +623,14 @@ describe("TranslateButton", () => {
     setMockSnapshot({
       capabilities: {
         hasWebGPU: false,
-        canTranslate: true,
-        device: "wasm" as const,
         isMobile: true,
+      },
+      enablement: {
+        verdict: {
+          outcome: "wasm-only",
+          resolvedDevice: "wasm",
+          reason: "mock mobile wasm",
+        },
       },
     })
 
@@ -608,8 +652,13 @@ describe("TranslateButton", () => {
     setMockSnapshot({
       capabilities: {
         hasWebGPU: false,
-        canTranslate: true,
-        device: "wasm" as const,
+      },
+      enablement: {
+        verdict: {
+          outcome: "wasm-only",
+          resolvedDevice: "wasm",
+          reason: "mock desktop wasm",
+        },
       },
     })
 
@@ -638,8 +687,13 @@ describe("TranslateButton", () => {
     setMockSnapshot({
       capabilities: {
         hasWebGPU: false,
-        canTranslate: false,
-        device: "webgpu" as const,
+      },
+      enablement: {
+        verdict: {
+          outcome: "denied",
+          resolvedDevice: null,
+          reason: "mock denied",
+        },
       },
     })
 

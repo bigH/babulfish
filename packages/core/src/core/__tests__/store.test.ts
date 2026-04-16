@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest"
 
 import { SSR_CAPABILITIES } from "../capabilities.js"
 import { createStore } from "../store.js"
+import { createIdleEnablementState } from "../../engine/runtime-plan.js"
 
 describe("createStore", () => {
   it("starts with a frozen idle snapshot", () => {
@@ -12,6 +13,7 @@ describe("createStore", () => {
       translation: { status: "idle" },
       currentLanguage: null,
       capabilities: store.get().capabilities,
+      enablement: createIdleEnablementState(),
     })
     expect(store.get().capabilities).toBe(SSR_CAPABILITIES)
     expect(Object.isFrozen(store.get())).toBe(true)
@@ -21,9 +23,9 @@ describe("createStore", () => {
     const capabilities = {
       ready: true,
       hasWebGPU: false,
-      canTranslate: true,
-      device: "wasm",
       isMobile: false,
+      approxDeviceMemoryGiB: 8,
+      crossOriginIsolated: false,
     } as const
 
     const store = createStore(capabilities)
@@ -69,6 +71,7 @@ describe("createStore", () => {
     expect(Object.isFrozen(snapshot.model)).toBe(true)
     expect(Object.isFrozen(snapshot.translation)).toBe(true)
     expect(Object.isFrozen(snapshot.capabilities)).toBe(true)
+    expect(Object.isFrozen(snapshot.enablement)).toBe(true)
     expect(snapshot.capabilities).toBe(capabilities)
   })
 
@@ -77,9 +80,9 @@ describe("createStore", () => {
     const replacementCapabilities = {
       ready: true,
       hasWebGPU: false,
-      canTranslate: true,
-      device: "wasm",
       isMobile: false,
+      approxDeviceMemoryGiB: 8,
+      crossOriginIsolated: false,
     } as const
 
     expect(() =>

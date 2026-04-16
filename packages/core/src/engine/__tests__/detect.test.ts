@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from "vitest"
-import { getTranslationCapabilities } from "../detect.js"
+import { getBrowserEnvironmentSnapshot, getTranslationCapabilities } from "../detect.js"
 import {
   captureGlobalDescriptors,
   clearGlobal,
@@ -8,9 +8,18 @@ import {
 } from "../../__tests__/globals.test-utils.js"
 
 const originalGlobals = captureGlobalDescriptors()
+const originalCrossOriginIsolated = Object.getOwnPropertyDescriptor(
+  globalThis,
+  "crossOriginIsolated",
+)
 
 afterEach(() => {
   restoreGlobals(originalGlobals)
+  if (originalCrossOriginIsolated) {
+    Object.defineProperty(globalThis, "crossOriginIsolated", originalCrossOriginIsolated)
+  } else {
+    Reflect.deleteProperty(globalThis, "crossOriginIsolated")
+  }
 })
 
 describe("device resolution", () => {
@@ -34,6 +43,22 @@ describe("device resolution", () => {
 })
 
 describe("getTranslationCapabilities", () => {
+  it("captures approximate device memory and cross-origin isolation when available", () => {
+    setGlobal("window", { innerWidth: 1280 })
+    setGlobal("navigator", { maxTouchPoints: 0, deviceMemory: 16 })
+    Object.defineProperty(globalThis, "crossOriginIsolated", {
+      value: true,
+      configurable: true,
+    })
+
+    expect(getBrowserEnvironmentSnapshot()).toEqual({
+      hasWebGPU: false,
+      isMobile: false,
+      approxDeviceMemoryGiB: 16,
+      crossOriginIsolated: true,
+    })
+  })
+
   it("reports desktop WASM fallback when WebGPU is unavailable", () => {
     setGlobal("window", { innerWidth: 1280 })
     setGlobal("navigator", { maxTouchPoints: 0 })

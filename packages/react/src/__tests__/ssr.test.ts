@@ -10,10 +10,13 @@ describe("SSR fallback", () => {
     expect(snapshot.translation.status).toBe("idle")
     expect(snapshot.currentLanguage).toBeNull()
     expect(snapshot.capabilities.ready).toBe(false)
+    expect(snapshot.enablement.status).toBe("idle")
+    expect(snapshot.enablement.verdict.outcome).toBe("unknown")
     expect(Object.isFrozen(snapshot)).toBe(true)
     expect(Object.isFrozen(snapshot.model)).toBe(true)
     expect(Object.isFrozen(snapshot.translation)).toBe(true)
     expect(Object.isFrozen(snapshot.capabilities)).toBe(true)
+    expect(Object.isFrozen(snapshot.enablement)).toBe(true)
   })
 
   it("does not expose mutable language state on the shared singleton", () => {

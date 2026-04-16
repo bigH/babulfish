@@ -1,6 +1,8 @@
 import { describe, expect, expectTypeOf, it } from "vitest"
 import type {
   BabulfishConfig,
+  CapabilityObservation,
+  EnablementState,
   Language,
   ModelState,
   ResolvedDevice,
@@ -62,6 +64,8 @@ describe("public React API contract", () => {
       readonly model: PublicApi.ModelState
       readonly translation: PublicApi.TranslationState
       readonly currentLanguage: string | null
+      readonly capabilities: CapabilityObservation
+      readonly enablement: EnablementState
       readonly capabilitiesReady: boolean
       readonly isSupported: boolean
       readonly hasWebGPU: boolean

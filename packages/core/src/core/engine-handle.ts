@@ -1,9 +1,12 @@
-import type { EngineConfig, Translator } from "../engine/model.js"
+import type { ResolvedRuntimePlan } from "../engine/runtime-plan.js"
+import type { Translator } from "../engine/model.js"
 import { createEngine } from "../engine/model.js"
+import { createRuntimePlanKey } from "../engine/runtime-plan.js"
 
 export type EngineHandle = {
   readonly engine: Translator
   readonly id: symbol
+  readonly key: string
 }
 
 const coreEngineIdentity = Symbol("core-engine-identity")
@@ -12,16 +15,29 @@ type EngineIdentityCarrier = {
   readonly [coreEngineIdentity]?: symbol
 }
 
-let sharedEngine: EngineHandle | null = null
+const runtimePool = new Map<string, EngineHandle>()
 
-export function acquireEngine(config?: EngineConfig): EngineHandle {
-  if (!sharedEngine) {
-    sharedEngine = {
-      engine: createEngine(config),
-      id: Symbol("engine"),
-    }
+export function acquireEngine(plan: ResolvedRuntimePlan): EngineHandle {
+  const key = createRuntimePlanKey(plan)
+  const existing = runtimePool.get(key)
+  if (existing) {
+    return existing
   }
-  return sharedEngine
+
+  const handle = {
+    engine: createEngine({
+      modelId: plan.modelId,
+      dtype: plan.dtype,
+      device: plan.resolvedDevice,
+      sourceLanguage: plan.sourceLanguage,
+      maxNewTokens: plan.maxNewTokens,
+    }),
+    id: Symbol("engine"),
+    key,
+  } satisfies EngineHandle
+
+  runtimePool.set(key, handle)
+  return handle
 }
 
 export function tagCoreWithEngineIdentity(core: object, id: symbol): void {
@@ -38,6 +54,8 @@ export function getEngineIdentityForCore(core: object): symbol | undefined {
 }
 
 export function __resetSharedEngine(): void {
-  sharedEngine?.engine.dispose()
-  sharedEngine = null
+  for (const handle of runtimePool.values()) {
+    handle.engine.dispose()
+  }
+  runtimePool.clear()
 }

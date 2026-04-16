@@ -7,15 +7,27 @@ type SnapshotOverrides = {
   readonly translation?: Snapshot["translation"]
   readonly currentLanguage?: Snapshot["currentLanguage"]
   readonly capabilities?: Snapshot["capabilities"]
+  readonly enablement?: Snapshot["enablement"]
 }
 
 const DEFAULT_CAPABILITIES = {
   ready: false,
   hasWebGPU: false,
-  canTranslate: false,
-  device: null,
   isMobile: false,
+  approxDeviceMemoryGiB: null,
+  crossOriginIsolated: false,
 } satisfies Snapshot["capabilities"]
+
+const DEFAULT_ENABLEMENT = {
+  status: "idle",
+  modelProfile: null,
+  inference: null,
+  verdict: {
+    outcome: "unknown",
+    resolvedDevice: null,
+    reason: "Enablement has not been assessed yet.",
+  },
+} satisfies Snapshot["enablement"]
 
 function createSnapshot(overrides: SnapshotOverrides = {}): Snapshot {
   return {
@@ -23,6 +35,7 @@ function createSnapshot(overrides: SnapshotOverrides = {}): Snapshot {
     translation: overrides.translation ?? { status: "idle" },
     currentLanguage: overrides.currentLanguage ?? null,
     capabilities: overrides.capabilities ?? DEFAULT_CAPABILITIES,
+    enablement: overrides.enablement ?? DEFAULT_ENABLEMENT,
   }
 }
 

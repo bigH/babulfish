@@ -1,8 +1,16 @@
 // Model lifecycle: load pipeline, translate text, emit events
 
+import {
+  DEFAULT_DTYPE,
+  DEFAULT_MAX_NEW_TOKENS,
+  DEFAULT_MODEL_ID,
+  DEFAULT_RESOLVED_DEVICE,
+  DEFAULT_SOURCE_LANGUAGE,
+  type ModelDType,
+} from "./config.js"
 import type { TextGenerationPipeline, ProgressInfo } from "./pipeline-loader.js"
 import { loadPipeline } from "./pipeline-loader.js"
-import { getTranslationCapabilities } from "./detect.js"
+import type { ResolvedDevice } from "./detect.js"
 
 // ---------------------------------------------------------------------------
 // Types
@@ -10,8 +18,8 @@ import { getTranslationCapabilities } from "./detect.js"
 
 export type EngineConfig = {
   readonly modelId?: string
-  readonly dtype?: "q4" | "q8" | "fp16" | "fp32"
-  readonly device?: "auto" | "webgpu" | "wasm"
+  readonly dtype?: ModelDType
+  readonly device?: ResolvedDevice
   readonly maxNewTokens?: number
   readonly sourceLanguage?: string
 }
@@ -35,16 +43,6 @@ export type Translator = {
 }
 
 // ---------------------------------------------------------------------------
-// Defaults
-// ---------------------------------------------------------------------------
-
-const DEFAULT_MODEL_ID = "onnx-community/translategemma-text-4b-it-ONNX"
-const DEFAULT_DTYPE = "q4" as const
-const DEFAULT_DEVICE = "auto" as const
-const DEFAULT_MAX_NEW_TOKENS = 512
-const DEFAULT_SOURCE_LANGUAGE = "en"
-
-// ---------------------------------------------------------------------------
 // Event emitter (minimal, typed)
 // ---------------------------------------------------------------------------
 
@@ -66,7 +64,7 @@ function createListeners(): Listeners {
 export function createEngine(config?: EngineConfig): Translator {
   const modelId = config?.modelId ?? DEFAULT_MODEL_ID
   const dtype = config?.dtype ?? DEFAULT_DTYPE
-  const device = config?.device ?? DEFAULT_DEVICE
+  const device = config?.device ?? DEFAULT_RESOLVED_DEVICE
   const maxNewTokens = config?.maxNewTokens ?? DEFAULT_MAX_NEW_TOKENS
   const sourceLanguage = config?.sourceLanguage ?? DEFAULT_SOURCE_LANGUAGE
 
@@ -138,11 +136,9 @@ export function createEngine(config?: EngineConfig): Translator {
     const version = lifecycleVersion
 
     const nextLoad = (async () => {
-      const resolvedDevice = getTranslationCapabilities(device).device
-
       const nextPipeline = loadPipeline(modelId, {
         dtype,
-        device: resolvedDevice,
+        device,
         progress_callback: buildProgressCallback(),
       })
       pipelinePromise = nextPipeline

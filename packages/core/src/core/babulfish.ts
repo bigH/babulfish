@@ -1,4 +1,4 @@
-import type { EngineConfig } from "../engine/model.js"
+import type { RuntimePreferenceConfig, ResolvedRuntimePlan } from "../engine/runtime-plan.js"
 import type { DOMTranslatorConfig, DOMTranslator } from "../dom/translator.js"
 import { createDOMTranslator } from "../dom/translator.js"
 import { acquireEngine, tagCoreWithEngineIdentity } from "./engine-handle.js"
@@ -11,6 +11,11 @@ import {
   type Language,
 } from "./languages.js"
 import { detectCapabilities } from "./capabilities.js"
+import {
+  createIdleEnablementState,
+  getOrCreateEnablementAssessment,
+  type EnablementAssessment,
+} from "../engine/runtime-plan.js"
 
 export type TranslateOptions = {
   readonly signal?: AbortSignal
@@ -29,8 +34,10 @@ export interface BabulfishCore {
   readonly languages: ReadonlyArray<Language>
 }
 
+export type BabulfishEngineConfig = RuntimePreferenceConfig
+
 export type BabulfishConfig = {
-  readonly engine?: EngineConfig
+  readonly engine?: BabulfishEngineConfig
   readonly dom?: Omit<DOMTranslatorConfig, "translate" | "root"> & {
     readonly root?: ParentNode | Document
   }
@@ -74,19 +81,30 @@ const INITIAL_TRANSLATION_STATE: TranslationState = Object.freeze({
 })
 
 export function createBabulfish(config?: BabulfishConfig): BabulfishCore {
-  const capabilities = detectCapabilities(config?.engine?.device)
+  const capabilities = detectCapabilities()
   const store = createStore(capabilities)
   const progress = createProgressController()
-  const handle = acquireEngine(config?.engine)
-  const engine = handle.engine
   const languages = config?.languages
     ? createReadonlyLanguageList(config.languages)
     : DEFAULT_LANGUAGES
   const defaultRoot = config?.dom?.root
   let disposed = false
+  let engineHandle: ReturnType<typeof acquireEngine> | null = null
+  let unsubStatus: (() => void) | null = null
+  let unsubProgress: (() => void) | null = null
+  let assessmentPromise: Promise<EnablementAssessment> | null = null
+  let assessment: EnablementAssessment | null = null
 
   function assertNotDisposed(): void {
     if (disposed) throw new Error("Core is disposed")
+  }
+
+  function requireLoadedEngine(): NonNullable<typeof engineHandle>["engine"] {
+    if (!engineHandle) {
+      throw new Error("Translation model not loaded. Call loadModel() first.")
+    }
+
+    return engineHandle.engine
   }
 
   function modelStateForStatus(
@@ -136,17 +154,110 @@ export function createBabulfish(config?: BabulfishConfig): BabulfishCore {
     })
   }
 
-  const unsubStatus = engine.on("status-change", ({ to, error }) =>
-    store.set((prev) => ({ ...prev, model: modelStateForStatus(prev, to, error) })),
-  )
+  function attachEngineHandle(plan: ResolvedRuntimePlan): NonNullable<typeof engineHandle> {
+    if (engineHandle) {
+      return engineHandle
+    }
 
-  const unsubProgress = engine.on("progress", ({ loaded, total }) => {
-    store.set((prev) => {
-      const p = total > 0 ? loaded / total : 0
-      if (prev.model.status === "downloading" && prev.model.progress === p) return prev
-      return { ...prev, model: { status: "downloading", progress: p } }
+    const handle = acquireEngine(plan)
+    engineHandle = handle
+    tagCoreWithEngineIdentity(core, handle.id)
+
+    unsubStatus = handle.engine.on("status-change", ({ to, error }) =>
+      store.set((prev) => ({ ...prev, model: modelStateForStatus(prev, to, error) })),
+    )
+
+    unsubProgress = handle.engine.on("progress", ({ loaded, total }) => {
+      store.set((prev) => {
+        const p = total > 0 ? loaded / total : 0
+        if (prev.model.status === "downloading" && prev.model.progress === p) return prev
+        return { ...prev, model: { status: "downloading", progress: p } }
+      })
     })
-  })
+
+    store.set((prev) => {
+      const nextModel = modelStateForStatus(prev, handle.engine.status)
+      if (prev.model === nextModel) {
+        return prev
+      }
+      if (prev.model.status === nextModel.status) {
+        if (prev.model.status !== "downloading") {
+          return prev
+        }
+        if (nextModel.status === "downloading" && prev.model.progress === nextModel.progress) {
+          return prev
+        }
+      }
+      return { ...prev, model: nextModel }
+    })
+
+    return handle
+  }
+
+  async function ensureEnablementAssessment(): Promise<EnablementAssessment> {
+    assertNotDisposed()
+
+    if (assessment) {
+      return assessment
+    }
+
+    if (assessmentPromise) {
+      return assessmentPromise
+    }
+
+    store.set((prev) => {
+      if (prev.enablement.status === "assessing") return prev
+      return {
+        ...prev,
+        enablement: {
+          ...prev.enablement,
+          status: "assessing",
+        },
+      }
+    })
+
+    const nextAssessment = getOrCreateEnablementAssessment(config?.engine, capabilities)
+      .then((result) => {
+        if (disposed) {
+          return result
+        }
+
+        assessment = result
+        store.set((prev) => ({
+          ...prev,
+          enablement: {
+            status: "ready",
+            modelProfile: result.modelProfile,
+            inference: result.inference,
+            verdict: result.verdict,
+          },
+        }))
+        return result
+      })
+      .catch((error) => {
+        if (!disposed) {
+          store.set((prev) => ({
+            ...prev,
+            enablement: {
+              ...createIdleEnablementState(),
+              status: "error",
+              verdict: {
+                outcome: "unknown",
+                resolvedDevice: null,
+                reason: error instanceof Error ? error.message : "Enablement assessment failed.",
+              },
+            },
+          }))
+        }
+        throw error
+      })
+      .finally(() => {
+        assessmentPromise = null
+      })
+
+    assessmentPromise = nextAssessment
+    return nextAssessment
+  }
 
   function buildDomTranslator(rootOverride?: ParentNode | Document): DOMTranslator | null {
     if (!config?.dom) return null
@@ -154,7 +265,7 @@ export function createBabulfish(config?: BabulfishConfig): BabulfishCore {
     return createDOMTranslator({
       ...domConfig,
       root: rootOverride ?? defaultRoot,
-      translate: (text, lang) => engine.translate(text, lang),
+      translate: (text, lang) => requireLoadedEngine().translate(text, lang),
     })
   }
 
@@ -171,7 +282,13 @@ export function createBabulfish(config?: BabulfishConfig): BabulfishCore {
 
   async function loadModel(opts?: { signal?: AbortSignal }): Promise<void> {
     assertNotDisposed()
-    await raceWithAbort(engine.load(), opts?.signal)
+    const nextAssessment = await raceWithAbort(ensureEnablementAssessment(), opts?.signal)
+    if (!nextAssessment.runtimePlan) {
+      throw new Error(nextAssessment.verdict.reason)
+    }
+
+    const handle = attachEngineHandle(nextAssessment.runtimePlan)
+    await raceWithAbort(handle.engine.load(), opts?.signal)
   }
 
   async function translateTo(lang: string, opts?: TranslateOptions): Promise<void> {
@@ -225,7 +342,7 @@ export function createBabulfish(config?: BabulfishConfig): BabulfishCore {
     opts?: { signal?: AbortSignal },
   ): Promise<string> {
     assertNotDisposed()
-    return raceWithAbort(engine.translate(text, lang), opts?.signal)
+    return raceWithAbort(requireLoadedEngine().translate(text, lang), opts?.signal)
   }
 
   function restore(opts?: { root?: ParentNode | Document }): void {
@@ -250,8 +367,8 @@ export function createBabulfish(config?: BabulfishConfig): BabulfishCore {
     if (disposed) return
     disposed = true
     progress.dispose()
-    unsubStatus()
-    unsubProgress()
+    unsubStatus?.()
+    unsubProgress?.()
     store.dispose()
   }
 
@@ -267,6 +384,5 @@ export function createBabulfish(config?: BabulfishConfig): BabulfishCore {
     languages,
   }
 
-  tagCoreWithEngineIdentity(core, handle.id)
   return core
 }

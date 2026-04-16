@@ -113,20 +113,35 @@ describe("4.1 — engine singleton + multi-instance", () => {
     expect(getEngineIdentity({})).toBeUndefined()
   })
 
-  it("two createBabulfish calls share the same engine", () => {
+  it("two createBabulfish calls stay unbound to a runtime before loadModel()", () => {
     const a = createBabulfish()
     const b = createBabulfish()
+
+    expect(getEngineIdentity(a)).toBeUndefined()
+    expect(getEngineIdentity(b)).toBeUndefined()
+  })
+
+  it("two same-key cores share the same runtime after loadModel()", async () => {
+    setupPipelineMock()
+    const a = createBabulfish()
+    const b = createBabulfish()
+
+    await Promise.all([a.loadModel(), b.loadModel()])
+
     expect(getEngineIdentity(a)).toBe(getEngineIdentity(b))
     expect(getEngineIdentity(a)).toBeDefined()
   })
 
-  it("reset helper clears the shared engine identity", () => {
+  it("reset helper clears the shared engine identity", async () => {
+    setupPipelineMock()
     const first = createBabulfish()
+    await first.loadModel()
     const firstIdentity = getEngineIdentity(first)
 
     __resetEngineForTests()
 
     const second = createBabulfish()
+    await second.loadModel()
 
     expect(firstIdentity).toBeDefined()
     expect(getEngineIdentity(second)).toBeDefined()
@@ -147,7 +162,7 @@ describe("4.1 — engine singleton + multi-instance", () => {
     const a = createBabulfish()
     const b = createBabulfish()
 
-    await a.loadModel()
+    await Promise.all([a.loadModel(), b.loadModel()])
 
     const snapsB = snapshots(b)
     await a.dispose()
@@ -158,6 +173,18 @@ describe("4.1 — engine singleton + multi-instance", () => {
 
     expect(b.snapshot.model.status).toBe("ready")
     expect(snapsB.every((s) => s.model.status === "ready")).toBe(true)
+  })
+
+  it("late same-key cores sync to ready when they attach to an already-loaded runtime", async () => {
+    setupPipelineMock()
+    const first = createBabulfish()
+    await first.loadModel()
+
+    const second = createBabulfish()
+    await second.loadModel()
+
+    expect(getEngineIdentity(second)).toBe(getEngineIdentity(first))
+    expect(second.snapshot.model.status).toBe("ready")
   })
 })
 
@@ -171,17 +198,19 @@ describe("4.2 — snapshot monolithic + structural sharing", () => {
 
   it("initial snapshot reflects detected capabilities", () => {
     setGlobal("window", { innerWidth: 400, ontouchstart: null })
-    setGlobal("navigator", { maxTouchPoints: 1 })
+    setGlobal("navigator", { maxTouchPoints: 1, deviceMemory: 8 })
 
     const core = createBabulfish({ engine: { device: "webgpu" } })
 
     expect(core.snapshot.capabilities).toEqual({
       ready: true,
       hasWebGPU: false,
-      canTranslate: false,
-      device: "webgpu",
       isMobile: true,
+      approxDeviceMemoryGiB: 8,
+      crossOriginIsolated: false,
     })
+    expect(core.snapshot.enablement.status).toBe("idle")
+    expect(core.snapshot.enablement.verdict.outcome).toBe("unknown")
   })
 
   it("snapshot after loadModel is frozen", async () => {

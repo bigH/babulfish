@@ -1,42 +1,36 @@
-import type {
-  DevicePreference,
-  ResolvedDevice,
-  TranslationCapabilities,
-} from "../engine/detect.js"
-import { getTranslationCapabilities } from "../engine/detect.js"
+import { getBrowserEnvironmentSnapshot } from "../engine/detect.js"
 
-type SSRCapabilities = {
-  readonly ready: false
-  readonly hasWebGPU: false
-  readonly canTranslate: false
-  readonly device: null
-  readonly isMobile: false
-}
+export type CapabilityObservation = Readonly<{
+  readonly ready: boolean
+  readonly hasWebGPU: boolean
+  readonly isMobile: boolean
+  readonly approxDeviceMemoryGiB: number | null
+  readonly crossOriginIsolated: boolean
+}>
 
-type BrowserCapabilities = Readonly<
-  TranslationCapabilities & {
-    readonly ready: true
-    readonly device: ResolvedDevice
-  }
->
+export type Capabilities = CapabilityObservation
 
-export type Capabilities = BrowserCapabilities | SSRCapabilities
-
-export const SSR_CAPABILITIES: SSRCapabilities = Object.freeze({
+export const SSR_CAPABILITIES: CapabilityObservation = Object.freeze({
   ready: false,
   hasWebGPU: false,
-  canTranslate: false,
-  device: null,
   isMobile: false,
+  approxDeviceMemoryGiB: null,
+  crossOriginIsolated: false,
 })
 
-export function detectCapabilities(
-  devicePreference?: DevicePreference,
-): Capabilities {
+export function detectCapabilities(): Capabilities {
   if (typeof window === "undefined") return SSR_CAPABILITIES
+
+  const environment = getBrowserEnvironmentSnapshot()
+  if (!environment) {
+    return SSR_CAPABILITIES
+  }
 
   return Object.freeze({
     ready: true,
-    ...getTranslationCapabilities(devicePreference),
+    hasWebGPU: environment.hasWebGPU,
+    isMobile: environment.isMobile,
+    approxDeviceMemoryGiB: environment.approxDeviceMemoryGiB,
+    crossOriginIsolated: environment.crossOriginIsolated,
   })
 }

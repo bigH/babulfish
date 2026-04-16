@@ -35,6 +35,7 @@ type TooltipRenderProps = {
   readonly mobile: boolean
   readonly confirming: boolean
   readonly hasWebGPU: boolean
+  readonly assessmentPending: boolean
   readonly canTranslate: boolean
   readonly device: ResolvedDevice | null
   readonly defaultUIEnabled: boolean
@@ -160,6 +161,7 @@ function DefaultTooltip({
   mobile,
   confirming,
   hasWebGPU,
+  assessmentPending,
   canTranslate,
   device,
   defaultUIEnabled,
@@ -170,6 +172,7 @@ function DefaultTooltip({
   mobile: boolean
   confirming: boolean
   hasWebGPU: boolean
+  assessmentPending: boolean
   canTranslate: boolean
   device: ResolvedDevice | null
   defaultUIEnabled: boolean
@@ -198,7 +201,7 @@ function DefaultTooltip({
       onTransitionEnd={fading ? onFadeComplete : undefined}
       role="tooltip"
     >
-      {!canTranslate ? (
+      {!assessmentPending && !canTranslate ? (
         "Translation is unavailable in this browser."
       ) : !defaultUIEnabled && mobile ? (
         "The default TranslateButton stays desktop-only for now. Mobile translation is not validated as a default product path yet."
@@ -209,6 +212,11 @@ function DefaultTooltip({
             ? "This browser will use the slower WASM fallback. "
             : ""}
           Click again to confirm.
+        </p>
+      ) : assessmentPending ? (
+        <p style={{ margin: 0 }}>
+          Client-side AI translation. babulfish will assess your runtime when
+          you load the model, <strong>never phones home.</strong>
         </p>
       ) : device === "wasm" && !hasWebGPU ? (
         <p style={{ margin: 0 }}>
@@ -238,8 +246,9 @@ export function TranslateButton({
   const {
     model,
     translation,
-    capabilitiesReady,
+    capabilities,
     hasWebGPU,
+    enablement,
     canTranslate,
     device,
     isMobile,
@@ -264,6 +273,8 @@ export function TranslateButton({
   const modelProgress = model.status === "downloading" ? model.progress : 0
   const translationProgress =
     translation.status === "translating" ? translation.progress : null
+  const assessmentPending =
+    enablement.status === "idle" || enablement.status === "assessing"
   const phase = getButtonPhase({
     confirming,
     modelStatus: model.status,
@@ -392,7 +403,7 @@ export function TranslateButton({
         setConfirming(true)
         break
       case "confirm":
-        if (isMobile || !canTranslate) return
+        if (isMobile || (!assessmentPending && !canTranslate)) return
         void startDownload()
         break
       case "ready":
@@ -445,9 +456,9 @@ export function TranslateButton({
   }
 
   // Keep SSR and first client render on the same neutral markup.
-  if (!capabilitiesReady) return null
+  if (!capabilities.ready) return null
 
-  if (!canTranslate) return null
+  if (!assessmentPending && !canTranslate) return null
 
   const defaultUIEnabled = !isMobile
   const confirmDisabled = phase === "confirm" && !defaultUIEnabled
@@ -601,6 +612,7 @@ export function TranslateButton({
               mobile: isMobile,
               confirming: phase === "confirm",
               hasWebGPU,
+              assessmentPending,
               canTranslate,
               device,
               defaultUIEnabled,
@@ -610,6 +622,7 @@ export function TranslateButton({
               mobile={isMobile}
               confirming={phase === "confirm"}
               hasWebGPU={hasWebGPU}
+              assessmentPending={assessmentPending}
               canTranslate={canTranslate}
               device={device}
               defaultUIEnabled={defaultUIEnabled}

@@ -10,13 +10,26 @@ export type {
   ModelState,
   TranslationState,
 } from "./core/store.js"
-export type { Capabilities } from "./core/capabilities.js"
+export type { Capabilities, CapabilityObservation } from "./core/capabilities.js"
 export type { Language } from "./core/languages.js"
+export type {
+  BabulfishEngineConfig,
+} from "./core/babulfish.js"
+export type {
+  EnablementConfig,
+  EnablementState,
+  EnablementVerdict,
+  FitInference,
+  ModelProfile,
+  ModelProfileInput,
+  ResolvedRuntimePlan,
+} from "./engine/runtime-plan.js"
 
 export { createEngine, getTranslationCapabilities } from "./engine/index.js"
 export type {
   DevicePreference,
   EngineConfig,
+  ModelDType,
   ResolvedDevice,
   TranslationCapabilities,
   Translator,

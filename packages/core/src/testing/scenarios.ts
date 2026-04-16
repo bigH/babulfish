@@ -194,7 +194,7 @@ export const scenarios: readonly ConformanceScenario[] = [
   {
     id: "snapshot-structural-sharing",
     description:
-      "Translation state change preserves model/capabilities references",
+      "Translation state change preserves model/capabilities/enablement references",
     async run(driver) {
       await withLoadedCore(driver, async (core) => {
         const before = core.snapshot
@@ -204,6 +204,7 @@ export const scenarios: readonly ConformanceScenario[] = [
         for (const s of snaps) {
           assertEqual(s.model, before.model, "model ref")
           assertEqual(s.capabilities, before.capabilities, "capabilities ref")
+          assertEqual(s.enablement, before.enablement, "enablement ref")
         }
       })
     },
@@ -250,7 +251,7 @@ export const scenarios: readonly ConformanceScenario[] = [
 
   {
     id: "lifecycle-ssr-safe",
-    description: "SSR-style first render has capabilities.ready === false without throwing",
+    description: "SSR-style first render stays neutral without throwing",
     async run(driver) {
       const savedWindow = globalThis.window
       delete (globalThis as Record<string, unknown>).window
@@ -258,6 +259,12 @@ export const scenarios: readonly ConformanceScenario[] = [
         await withCore(driver, async (core) => {
           assert(core.snapshot.capabilities !== null, "capabilities defined")
           assertEqual(core.snapshot.capabilities.ready, false, "ready is false before loadModel")
+          assertEqual(core.snapshot.enablement.status, "idle", "enablement idle before loadModel")
+          assertEqual(
+            core.snapshot.enablement.verdict.outcome,
+            "unknown",
+            "enablement verdict unknown before loadModel",
+          )
         })
       } finally {
         globalThis.window = savedWindow
@@ -267,12 +274,15 @@ export const scenarios: readonly ConformanceScenario[] = [
 
   {
     id: "lifecycle-engine-singleton",
-    description: "Two cores share one engine via getEngineIdentity()",
+    description: "Two same-key cores share one runtime after loadModel()",
     async run(driver) {
       const a = await driver.create()
       try {
         const b = await driver.create()
         try {
+          assertEqual(getEngineIdentity(a), undefined, "Core A identity undefined before load")
+          assertEqual(getEngineIdentity(b), undefined, "Core B identity undefined before load")
+          await Promise.all([a.loadModel(), b.loadModel()])
           assert(getEngineIdentity(a) !== undefined, "Core A identity defined")
           assertEqual(
             getEngineIdentity(a),
@@ -294,14 +304,16 @@ export const scenarios: readonly ConformanceScenario[] = [
       "Engine identity preserved after dispose-remount; new core state clean",
     async run(driver) {
       const first = await driver.create()
+      await first.loadModel()
       const id1 = getEngineIdentity(first)
       await driver.dispose(first)
       const second = await driver.create()
       try {
-        assertEqual(getEngineIdentity(second), id1, "Engine identity preserved")
         assertEqual(second.snapshot.model.status, "idle", "model idle")
         assertEqual(second.snapshot.translation.status, "idle", "translation idle")
         assertEqual(second.snapshot.currentLanguage, null, "currentLanguage null")
+        await second.loadModel()
+        assertEqual(getEngineIdentity(second), id1, "Engine identity preserved")
       } finally {
         await driver.dispose(second)
       }
@@ -344,7 +356,7 @@ export const scenarios: readonly ConformanceScenario[] = [
       try {
         const b = await driver.create()
         try {
-          await a.loadModel()
+          await Promise.all([a.loadModel(), b.loadModel()])
           const snapBefore = b.snapshot
           const p = b.translateText("hello", "es")
           await a.dispose()

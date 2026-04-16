@@ -12,9 +12,19 @@ const SSR_SNAPSHOT: Snapshot = Object.freeze({
   capabilities: Object.freeze({
     ready: false,
     hasWebGPU: false,
-    canTranslate: false,
-    device: null,
     isMobile: false,
+    approxDeviceMemoryGiB: null,
+    crossOriginIsolated: false,
+  }),
+  enablement: Object.freeze({
+    status: "idle" as const,
+    modelProfile: null,
+    inference: null,
+    verdict: Object.freeze({
+      outcome: "unknown" as const,
+      resolvedDevice: null,
+      reason: "Enablement has not been assessed yet.",
+    }),
   }),
 })
 

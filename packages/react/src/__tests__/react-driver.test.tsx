@@ -61,9 +61,19 @@ function createSnapshot(status: Snapshot["translation"]["status"]): Snapshot {
     capabilities: Object.freeze({
       ready: true,
       hasWebGPU: true,
-      canTranslate: true,
-      device: "webgpu" as const,
       isMobile: false,
+      approxDeviceMemoryGiB: 16,
+      crossOriginIsolated: false,
+    }),
+    enablement: Object.freeze({
+      status: "ready" as const,
+      modelProfile: null,
+      inference: null,
+      verdict: Object.freeze({
+        outcome: "gpu-preferred" as const,
+        resolvedDevice: "webgpu" as const,
+        reason: "mock ready",
+      }),
     }),
   })
 }

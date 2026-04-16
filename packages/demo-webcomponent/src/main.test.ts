@@ -19,9 +19,19 @@ function createSnapshot(overrides: Partial<Snapshot> = {}): Snapshot {
     capabilities: overrides.capabilities ?? {
       ready: true,
       hasWebGPU: true,
-      canTranslate: true,
-      device: "webgpu",
       isMobile: false,
+      approxDeviceMemoryGiB: 16,
+      crossOriginIsolated: false,
+    },
+    enablement: overrides.enablement ?? {
+      status: "ready",
+      modelProfile: null,
+      inference: null,
+      verdict: {
+        outcome: "gpu-preferred",
+        resolvedDevice: "webgpu",
+        reason: "mock ready",
+      },
     },
   }
 }

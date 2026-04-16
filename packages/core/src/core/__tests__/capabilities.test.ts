@@ -12,9 +12,18 @@ import {
 
 describe("detectCapabilities", () => {
   const originalGlobals = captureGlobalDescriptors()
+  const originalCrossOriginIsolated = Object.getOwnPropertyDescriptor(
+    globalThis,
+    "crossOriginIsolated",
+  )
 
   afterEach(() => {
     restoreGlobals(originalGlobals)
+    if (originalCrossOriginIsolated) {
+      Object.defineProperty(globalThis, "crossOriginIsolated", originalCrossOriginIsolated)
+    } else {
+      Reflect.deleteProperty(globalThis, "crossOriginIsolated")
+    }
   })
 
   it("returns the shared SSR capabilities snapshot when window is unavailable", () => {
@@ -23,18 +32,22 @@ describe("detectCapabilities", () => {
     expect(detectCapabilities()).toBe(SSR_CAPABILITIES)
   })
 
-  it("returns a frozen browser snapshot that mirrors engine detection", () => {
+  it("returns a frozen browser snapshot with raw observations only", () => {
     setGlobal("window", { innerWidth: 400, ontouchstart: null })
-    setGlobal("navigator", { maxTouchPoints: 1 })
+    setGlobal("navigator", { maxTouchPoints: 1, deviceMemory: 8 })
+    Object.defineProperty(globalThis, "crossOriginIsolated", {
+      value: true,
+      configurable: true,
+    })
 
-    const capabilities = detectCapabilities("webgpu")
+    const capabilities = detectCapabilities()
 
     expect(capabilities).toEqual({
       ready: true,
       hasWebGPU: false,
-      canTranslate: false,
-      device: "webgpu",
       isMobile: true,
+      approxDeviceMemoryGiB: 8,
+      crossOriginIsolated: true,
     })
     expect(Object.isFrozen(capabilities)).toBe(true)
   })
@@ -48,9 +61,9 @@ describe("detectCapabilities", () => {
     expect(capabilities).toEqual({
       ready: true,
       hasWebGPU: false,
-      canTranslate: true,
-      device: "wasm",
       isMobile: false,
+      approxDeviceMemoryGiB: null,
+      crossOriginIsolated: false,
     })
     expect(capabilities).not.toBe(SSR_CAPABILITIES)
     expect(Object.isFrozen(capabilities)).toBe(true)

@@ -5,6 +5,7 @@ export {
   type TranslatorStatus,
   createEngine,
 } from "./model.js"
+export { type ModelDType } from "./config.js"
 export {
   type DevicePreference,
   type ResolvedDevice,

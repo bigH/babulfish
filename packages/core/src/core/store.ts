@@ -1,5 +1,6 @@
 import type { Capabilities } from "./capabilities.js"
 import { SSR_CAPABILITIES } from "./capabilities.js"
+import { createIdleEnablementState, type EnablementState } from "../engine/runtime-plan.js"
 
 export type ModelState =
   | { readonly status: "idle" }
@@ -16,6 +17,7 @@ export type Snapshot = {
   readonly translation: TranslationState
   readonly currentLanguage: string | null
   readonly capabilities: Capabilities
+  readonly enablement: EnablementState
 }
 
 function freezeValue<T extends object>(value: T): T {
@@ -32,6 +34,7 @@ function normalizeSnapshot(snapshot: Snapshot, capabilities: Capabilities): Snap
     model: freezeValue(snapshot.model),
     translation: freezeValue(snapshot.translation),
     capabilities,
+    enablement: freezeValue(snapshot.enablement),
   })
 }
 
@@ -44,6 +47,7 @@ function createInitialSnapshot(
       translation: { status: "idle" as const },
       currentLanguage: null,
       capabilities,
+      enablement: createIdleEnablementState(),
     },
     capabilities,
   )

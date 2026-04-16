@@ -9,6 +9,7 @@ const cleanupTargets = new Set()
 const EXPECTED_CORE_SNAPSHOT_KEYS = [
   "capabilities",
   "currentLanguage",
+  "enablement",
   "model",
   "translation",
 ]

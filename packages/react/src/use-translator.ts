@@ -3,16 +3,23 @@ import { useTranslatorContext, useTranslatorSnapshot } from "./context.js"
 export function useTranslator() {
   const core = useTranslatorContext()
   const snapshot = useTranslatorSnapshot(core)
+  const capabilitiesReady =
+    snapshot.enablement.status === "ready" || snapshot.enablement.status === "error"
+  const canTranslate =
+    snapshot.enablement.verdict.outcome === "gpu-preferred" ||
+    snapshot.enablement.verdict.outcome === "wasm-only"
 
   return {
     model: snapshot.model,
     translation: snapshot.translation,
     currentLanguage: snapshot.currentLanguage,
-    capabilitiesReady: snapshot.capabilities.ready,
-    isSupported: snapshot.capabilities.canTranslate,
+    capabilities: snapshot.capabilities,
+    enablement: snapshot.enablement,
+    capabilitiesReady,
+    isSupported: canTranslate,
     hasWebGPU: snapshot.capabilities.hasWebGPU,
-    canTranslate: snapshot.capabilities.canTranslate,
-    device: snapshot.capabilities.device,
+    canTranslate,
+    device: snapshot.enablement.verdict.resolvedDevice,
     isMobile: snapshot.capabilities.isMobile,
     languages: core.languages,
     loadModel: core.loadModel,
