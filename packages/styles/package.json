@@ -1,6 +1,6 @@
 {
   "name": "@babulfish/styles",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "Base styles and animations for babulfish translation UI.",
   "license": "MIT",
   "type": "module",
