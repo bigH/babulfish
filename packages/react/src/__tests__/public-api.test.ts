@@ -25,6 +25,20 @@ describe("public React API contract", () => {
 
     expectTypeOf<PublicApi.TranslatorConfig>().toMatchTypeOf<{
       readonly languages?: readonly PublicApi.TranslatorLanguage[]
+      readonly dom?: {
+        readonly structuredText?: {
+          readonly selector: string
+        }
+        readonly outputTransform?: (
+          translated: string,
+          context: {
+            readonly kind: "linked" | "richText" | "structuredText" | "text" | "attr"
+            readonly targetLang: string
+            readonly source: string
+            readonly attribute?: string
+          },
+        ) => string
+      }
     }>()
 
     expectTypeOf<PublicApi.TranslateButtonClassNames>().toMatchTypeOf<{

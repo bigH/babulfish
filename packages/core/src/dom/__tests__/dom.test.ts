@@ -103,6 +103,15 @@ function setUpRichTextMain(
   return { main, span }
 }
 
+function setUpHtmlMain(html: string): HTMLElement {
+  const main = createElement("main")
+  const template = document.createElement("template")
+  template.innerHTML = html // eslint-disable-line no-unsanitized/property -- test-only static fixture
+  main.appendChild(template.content)
+  document.body.appendChild(main)
+  return main
+}
+
 function setUpLinkedMain(
   key: string,
   [firstText, secondText]: readonly [string, string],
@@ -146,6 +155,21 @@ const RICH_TEXT_CONFIG: DOMTranslatorConfig["richText"] = {
   selector: "[data-md]",
   sourceAttribute: "data-md",
   render: renderInlineMarkdownToHtml,
+}
+
+const STRUCTURED_TEXT_CONFIG: DOMTranslatorConfig["structuredText"] = {
+  selector: ".structured",
+}
+
+function replaceAllVisibleText(
+  input: string,
+  replacements: Record<string, string>,
+): string {
+  let result = input
+  for (const [source, translated] of Object.entries(replacements)) {
+    result = result.replaceAll(source, translated)
+  }
+  return result
 }
 
 // ---------------------------------------------------------------------------
@@ -667,6 +691,224 @@ describe("DOM translator", () => {
     expect(onProgress).toHaveBeenCalledTimes(2)
     expect(onProgress).toHaveBeenNthCalledWith(1, 1, 2)
     expect(onProgress).toHaveBeenNthCalledWith(2, 2, 2)
+  })
+
+  // -----------------------------------------------------------------------
+  // 23. Structured text
+  // -----------------------------------------------------------------------
+  it("resolves structured selectors against descendants only, not the root itself", async () => {
+    const main = setUpHtmlMain('<p class="structured">Hello <strong>world</strong></p>')
+    main.className = "structured"
+    const paragraph = main.querySelector("p")!
+
+    translate.mockImplementation(async (text: string) =>
+      replaceAllVisibleText(text, {
+        Hello: "Hola",
+        world: "mundo",
+      }))
+
+    const t = makeTranslator(translate, {
+      structuredText: STRUCTURED_TEXT_CONFIG,
+    })
+    await t.translate("es-ES")
+
+    expect(translate).toHaveBeenCalledTimes(1)
+    expect(paragraph.innerHTML).toBe("Hola <strong>mundo</strong>")
+  })
+
+  it("rehydrates supported structured inline shapes without flattening them", async () => {
+    const main = setUpHtmlMain(
+      [
+        '<p class="structured">',
+        'Hello <a href="/docs">docs</a> <strong>bold</strong> <b>loud</b> ',
+        '<em>soft</em> <i>tilt</i> <u>under</u> <s>strike</s> ',
+        '<del>gone</del> <mark>highlight</mark> <span>plain</span>',
+        "</p>",
+      ].join(""),
+    )
+    const paragraph = main.querySelector("p")!
+
+    translate.mockImplementation(async (text: string) =>
+      replaceAllVisibleText(text, {
+        Hello: "Hola",
+        docs: "documentos",
+        bold: "negrita",
+        loud: "fuerte",
+        soft: "suave",
+        tilt: "inclina",
+        under: "subraya",
+        strike: "tacha",
+        gone: "ido",
+        highlight: "marca",
+        plain: "simple",
+      }))
+
+    const t = makeTranslator(translate, {
+      structuredText: STRUCTURED_TEXT_CONFIG,
+    })
+    await t.translate("es-ES")
+
+    expect(translate).toHaveBeenCalledTimes(1)
+    expect(paragraph.innerHTML).toBe(
+      [
+        'Hola <a href="/docs">documentos</a> <strong>negrita</strong> <b>fuerte</b> ',
+        '<em>suave</em> <i>inclina</i> <u>subraya</u> <s>tacha</s> ',
+        '<del>ido</del> <mark>marca</mark> <span>simple</span>',
+      ].join(""),
+    )
+  })
+
+  it("rejects nested structured candidates and falls back to the plain collector", async () => {
+    const main = setUpHtmlMain(
+      '<p class="structured">Hello <span class="structured">world</span></p>',
+    )
+    const paragraph = main.querySelector("p")!
+
+    translate.mockImplementation(async (text: string) =>
+      replaceAllVisibleText(text, {
+        Hello: "Hola",
+        world: "mundo",
+      }))
+
+    const t = makeTranslator(translate, {
+      structuredText: STRUCTURED_TEXT_CONFIG,
+    })
+    await t.translate("es-ES")
+
+    expectTranslateCalls(translate, "Hello ", "world")
+    expect(paragraph.innerHTML).toBe('Hola <span class="structured">mundo</span>')
+  })
+
+  it("rejects non-inert span wrappers and falls back to the plain collector", async () => {
+    const main = setUpHtmlMain(
+      '<p class="structured">Hello <span role="note">world</span></p>',
+    )
+    const paragraph = main.querySelector("p")!
+
+    translate.mockImplementation(async (text: string) =>
+      replaceAllVisibleText(text, {
+        Hello: "Hola",
+        world: "mundo",
+      }))
+
+    const t = makeTranslator(translate, {
+      structuredText: STRUCTURED_TEXT_CONFIG,
+    })
+    await t.translate("es-ES")
+
+    expectTranslateCalls(translate, "Hello ", "world")
+    expect(paragraph.innerHTML).toBe('Hola <span role="note">mundo</span>')
+  })
+
+  it("lets authored richText and structuredText coexist without collisions", async () => {
+    const rich = setUpRichSpan("hello **world**", "hello <strong>world</strong>")
+    const structured = document.createElement("p")
+    structured.className = "structured"
+    structured.innerHTML = "Other <em>phrase</em>" // eslint-disable-line no-unsanitized/property -- test-only static fixture
+    setUpMain([rich, structured])
+
+    translate.mockImplementation(async (text: string) => {
+      if (text.includes("**")) {
+        return "hola **mundo**"
+      }
+      return replaceAllVisibleText(text, {
+        Other: "Otro",
+        phrase: "frase",
+      })
+    })
+
+    const t = makeTranslator(translate, {
+      richText: RICH_TEXT_CONFIG,
+      structuredText: STRUCTURED_TEXT_CONFIG,
+    })
+    await t.translate("es-ES")
+
+    expect(translate).toHaveBeenCalledTimes(2)
+    expect(rich.innerHTML).toBe("hola <strong>mundo</strong>")
+    expect(structured.innerHTML).toBe("Otro <em>frase</em>")
+  })
+
+  it("keeps linkedBy precedence over structuredText and avoids double visible work", async () => {
+    const main = document.createElement("main")
+    const first = document.createElement("span")
+    first.setAttribute("data-section-title", "intro")
+    first.textContent = "Introduction"
+
+    const structured = document.createElement("p")
+    structured.className = "structured"
+    const inlineLinked = document.createElement("span")
+    inlineLinked.setAttribute("data-section-title", "intro")
+    inlineLinked.textContent = "Introduction"
+    structured.append(inlineLinked, document.createTextNode(" details"))
+
+    main.append(first, structured)
+    document.body.appendChild(main)
+
+    translate.mockImplementation(async (text: string) =>
+      replaceAllVisibleText(text, {
+        Introduction: "Introduccion",
+        details: "detalles",
+      }))
+
+    const t = makeTranslator(translate, {
+      linkedBy: {
+        selector: "[data-section-title]",
+        keyAttribute: "data-section-title",
+      },
+      structuredText: STRUCTURED_TEXT_CONFIG,
+    })
+    await t.translate("es-ES")
+
+    expectTranslateCalls(translate, "Introduction", " details")
+    expect(first.textContent).toBe("Introduccion")
+    expect(inlineLinked.textContent).toBe("Introduccion")
+    expect(structured.innerHTML).toBe(
+      '<span data-section-title="intro">Introduccion</span> detalles',
+    )
+  })
+
+  it("preserves code islands inside structured text", async () => {
+    const main = setUpHtmlMain(
+      '<p class="structured">Run <code>npm test</code> now</p>',
+    )
+    const paragraph = main.querySelector("p")!
+
+    translate.mockImplementation(async (text: string) =>
+      replaceAllVisibleText(text, {
+        Run: "Ejecuta",
+        now: "ahora",
+      }))
+
+    const t = makeTranslator(translate, {
+      structuredText: STRUCTURED_TEXT_CONFIG,
+    })
+    await t.translate("es-ES")
+
+    expect(translate).toHaveBeenCalledTimes(1)
+    expect(paragraph.innerHTML).toBe("Ejecuta <code>npm test</code> ahora")
+  })
+
+  it("round-trips br elements as logical line breaks in structured text", async () => {
+    const main = setUpHtmlMain(
+      '<p class="structured">Line one<br>Line two</p>',
+    )
+    const paragraph = main.querySelector("p")!
+
+    translate.mockImplementation(async (text: string) =>
+      replaceAllVisibleText(text, {
+        Line: "Linea",
+        one: "uno",
+        two: "dos",
+      }))
+
+    const t = makeTranslator(translate, {
+      structuredText: STRUCTURED_TEXT_CONFIG,
+    })
+    await t.translate("es-ES")
+
+    expect(translate).toHaveBeenCalledTimes(1)
+    expect(translate.mock.calls[0]?.[0]).toContain("\n")
+    expect(paragraph.innerHTML).toBe("Linea uno<br>Linea dos")
   })
 
   // -----------------------------------------------------------------------

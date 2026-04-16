@@ -76,6 +76,9 @@ describe("smoke tests", () => {
     expectTypeOf<domTranslator.DOMTranslator>().toEqualTypeOf<barrel.DOMTranslator>()
     expectTypeOf<domTranslator.RichTextConfig>().toEqualTypeOf<barrel.RichTextConfig>()
     expectTypeOf<domTranslator.LinkedConfig>().toEqualTypeOf<barrel.LinkedConfig>()
+    expectTypeOf<domTranslator.StructuredTextConfig>().toEqualTypeOf<barrel.StructuredTextConfig>()
+    expectTypeOf<domTranslator.DOMOutputTransformContext>()
+      .toEqualTypeOf<barrel.DOMOutputTransformContext>()
     expectTypeOf<domBarrel.PreserveMatcher>().toEqualTypeOf<barrel.PreserveMatcher>()
   })
 
@@ -123,6 +126,10 @@ describe("smoke tests", () => {
     expectTypeOf<domTranslator.DOMTranslator>().toEqualTypeOf<domBarrel.DOMTranslator>()
     expectTypeOf<domTranslator.RichTextConfig>().toEqualTypeOf<domBarrel.RichTextConfig>()
     expectTypeOf<domTranslator.LinkedConfig>().toEqualTypeOf<domBarrel.LinkedConfig>()
+    expectTypeOf<domTranslator.StructuredTextConfig>()
+      .toEqualTypeOf<domBarrel.StructuredTextConfig>()
+    expectTypeOf<domTranslator.DOMOutputTransformContext>()
+      .toEqualTypeOf<domBarrel.DOMOutputTransformContext>()
     expectTypeOf<barrel.PreserveMatcher>().toEqualTypeOf<domBarrel.PreserveMatcher>()
   })
 

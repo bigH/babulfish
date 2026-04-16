@@ -29,6 +29,17 @@ export type LinkedConfig = {
   readonly keyAttribute: string
 }
 
+export type StructuredTextConfig = {
+  readonly selector: string
+}
+
+export type DOMOutputTransformContext = {
+  readonly kind: "linked" | "richText" | "structuredText" | "text" | "attr"
+  readonly targetLang: string
+  readonly source: string
+  readonly attribute?: string
+}
+
 export type DOMTranslatorConfig = {
   readonly translate: (text: string, targetLang: string) => Promise<string>
   readonly roots: string[]
@@ -42,7 +53,12 @@ export type DOMTranslatorConfig = {
     defaultSkip: (text: string) => boolean,
   ) => boolean
   readonly richText?: RichTextConfig
+  readonly structuredText?: StructuredTextConfig
   readonly linkedBy?: LinkedConfig
+  readonly outputTransform?: (
+    translated: string,
+    context: DOMOutputTransformContext,
+  ) => string
   readonly batchCharLimit?: number
   readonly rtlLanguages?: ReadonlySet<string>
   readonly translateAttributes?: string[]
@@ -85,8 +101,42 @@ type LinkedGroup = {
 
 type PhaseWork = {
   md: Element[]
+  structured: StructuredTextUnit[]
   batches: TaggedTextNode[][]
   attrs: TranslatableAttr[]
+}
+
+type StructuredTokenKind =
+  | "text-open"
+  | "text-close"
+  | "element-open"
+  | "element-close"
+  | "br"
+  | "code"
+
+type StructuredTokenDescriptor = {
+  readonly token: string
+  readonly kind: StructuredTokenKind
+  readonly slotId: number
+}
+
+type StructuredTextSlot = {
+  readonly node: Text
+  readonly slotId: number
+}
+
+type StructuredTextUnit = {
+  readonly root: Element
+  readonly serialized: string
+  readonly textSlots: readonly StructuredTextSlot[]
+  readonly tokenSequence: readonly StructuredTokenDescriptor[]
+}
+
+type VisibleClaims = {
+  readonly linkedTextNodes: Set<Text>
+  readonly richRoots: readonly Element[]
+  readonly structuredRoots: Set<Element>
+  readonly structuredTextNodes: Set<Text>
 }
 
 // ---------------------------------------------------------------------------
@@ -94,6 +144,47 @@ type PhaseWork = {
 // ---------------------------------------------------------------------------
 
 const DEFAULT_RTL_LANGS: ReadonlySet<string> = new Set(["ar", "he", "ur", "fa"])
+const HTML_NAMESPACE = "http://www.w3.org/1999/xhtml"
+const STRUCTURED_TOKEN_PREFIX = "\u27EAbf-st:"
+const STRUCTURED_TOKEN_SUFFIX = "\u27EB"
+const STRUCTURED_INLINE_TAGS: ReadonlySet<string> = new Set([
+  "a",
+  "strong",
+  "b",
+  "em",
+  "i",
+  "u",
+  "s",
+  "del",
+  "mark",
+  "span",
+])
+const STRUCTURED_INERT_SPAN_ATTRS: ReadonlySet<string> = new Set([
+  "class",
+  "id",
+  "title",
+  "lang",
+  "dir",
+  "style",
+])
+
+function compareDocumentOrder(a: Node, b: Node): number {
+  if (a === b) return 0
+  const relation = a.compareDocumentPosition(b)
+  if (relation & Node.DOCUMENT_POSITION_PRECEDING) return 1
+  if (relation & Node.DOCUMENT_POSITION_FOLLOWING) return -1
+  return 0
+}
+
+function buildStructuredToken(key: string, slotId: number): string {
+  return `${STRUCTURED_TOKEN_PREFIX}${key}:${slotId}${STRUCTURED_TOKEN_SUFFIX}`
+}
+
+function isInertStructuredSpan(el: Element): boolean {
+  if (el.localName !== "span") return true
+  return Array.from(el.attributes).every((attr) =>
+    attr.name.startsWith("data-") || STRUCTURED_INERT_SPAN_ATTRS.has(attr.name))
+}
 
 function resolveRoots(
   selectors: readonly string[],
@@ -179,6 +270,14 @@ export function createDOMTranslator(config: DOMTranslatorConfig): DOMTranslator 
     const original = originalTexts.get(node)
     if (original != null) return original
     const current = originalLinkedSources.get(key) ?? node.textContent ?? ""
+    originalTexts.set(node, current)
+    return current
+  }
+
+  function captureOriginalTextValue(node: Text): string {
+    const original = originalTexts.get(node)
+    if (original != null) return original
+    const current = node.textContent ?? ""
     originalTexts.set(node, current)
     return current
   }
@@ -290,6 +389,252 @@ export function createDOMTranslator(config: DOMTranslatorConfig): DOMTranslator 
   // Attribute collection
   // -------------------------------------------------------------------------
 
+  function collectStructuredCandidates(roots: readonly Element[]): Element[] {
+    if (!config.structuredText) return []
+
+    const seen = new Set<Element>()
+    const matches: Element[] = []
+    for (const root of roots) {
+      for (const el of root.querySelectorAll(config.structuredText.selector)) {
+        if (seen.has(el)) continue
+        seen.add(el)
+        matches.push(el)
+      }
+    }
+
+    return matches.sort(compareDocumentOrder)
+  }
+
+  function buildVisibleClaims(
+    linkedGroups: readonly LinkedGroup[],
+    richRoots: readonly Element[],
+  ): VisibleClaims {
+    return {
+      linkedTextNodes: new Set(
+        linkedGroups.flatMap((group) =>
+          group.writableTargets.map((target) => target.textNode),
+        ),
+      ),
+      richRoots,
+      structuredRoots: new Set<Element>(),
+      structuredTextNodes: new Set<Text>(),
+    }
+  }
+
+  function overlapsClaimedRoot(
+    candidate: Element,
+    claimedRoots: Iterable<Element>,
+  ): boolean {
+    for (const claimedRoot of claimedRoots) {
+      if (
+        claimedRoot === candidate
+        || claimedRoot.contains(candidate)
+        || candidate.contains(claimedRoot)
+      ) {
+        return true
+      }
+    }
+    return false
+  }
+
+  function containsClaimedLinkedTextNode(
+    candidate: Element,
+    linkedTextNodes: ReadonlySet<Text>,
+  ): boolean {
+    for (const textNode of linkedTextNodes) {
+      if (candidate.contains(textNode)) return true
+    }
+    return false
+  }
+
+  function hasNestedStructuredConflict(
+    candidate: Element,
+    rawCandidates: readonly Element[],
+  ): boolean {
+    return rawCandidates.some((other) =>
+      other !== candidate && (other.contains(candidate) || candidate.contains(other)))
+  }
+
+  function claimStructuredUnit(
+    unit: StructuredTextUnit,
+    claims: VisibleClaims,
+  ): void {
+    claims.structuredRoots.add(unit.root)
+    for (const { node } of unit.textSlots) {
+      claims.structuredTextNodes.add(node)
+    }
+  }
+
+  function resolveStructuredUnits(
+    roots: readonly Element[],
+    claims: VisibleClaims,
+  ): StructuredTextUnit[] {
+    const rawCandidates = collectStructuredCandidates(roots)
+    const units: StructuredTextUnit[] = []
+
+    for (const candidate of rawCandidates) {
+      if (hasNestedStructuredConflict(candidate, rawCandidates)) continue
+      if (overlapsClaimedRoot(candidate, claims.richRoots)) continue
+      if (overlapsClaimedRoot(candidate, claims.structuredRoots)) continue
+      if (containsClaimedLinkedTextNode(candidate, claims.linkedTextNodes)) continue
+
+      const unit = tryExtractStructuredUnit(candidate, claims)
+      if (!unit) continue
+
+      claimStructuredUnit(unit, claims)
+      units.push(unit)
+    }
+
+    return units
+  }
+
+  function tryExtractStructuredUnit(
+    root: Element,
+    claims: VisibleClaims,
+  ): StructuredTextUnit | null {
+    if (root.namespaceURI && root.namespaceURI !== HTML_NAMESPACE) return null
+    if (root.localName.includes("-")) return null
+    if (!isInertStructuredSpan(root)) return null
+    if (root.hasAttribute("contenteditable") && root.getAttribute("contenteditable") !== "false") {
+      return null
+    }
+
+    const parts: string[] = []
+    const tokenSequence: StructuredTokenDescriptor[] = []
+    const textSlots: StructuredTextSlot[] = []
+    let nextSlotId = 0
+
+    function pushToken(kind: StructuredTokenKind, key: string, slotId: number): void {
+      const token = buildStructuredToken(key, slotId)
+      parts.push(token)
+      tokenSequence.push({ token, kind, slotId })
+    }
+
+    function walk(node: Node): boolean {
+      if (node.nodeType === Node.TEXT_NODE) {
+        const textNode = node as Text
+        if (claims.linkedTextNodes.has(textNode) || claims.structuredTextNodes.has(textNode)) {
+          return false
+        }
+
+        const source = captureOriginalTextValue(textNode)
+        const trimmed = source.trim()
+        if (!trimmed) return true
+        if (shouldSkip(trimmed)) return false
+
+        const slotId = nextSlotId++
+        pushToken("text-open", "text-open", slotId)
+        parts.push(source)
+        pushToken("text-close", "text-close", slotId)
+        textSlots.push({ node: textNode, slotId })
+        return true
+      }
+
+      if (node.nodeType === Node.COMMENT_NODE) {
+        return true
+      }
+
+      if (node.nodeType !== Node.ELEMENT_NODE) {
+        return false
+      }
+
+      const el = node as Element
+      if (el.namespaceURI && el.namespaceURI !== HTML_NAMESPACE) {
+        return false
+      }
+      if (el.localName.includes("-")) {
+        return false
+      }
+      if (el.hasAttribute("contenteditable") && el.getAttribute("contenteditable") !== "false") {
+        return false
+      }
+
+      const tag = el.localName
+      if (tag === "br") {
+        const slotId = nextSlotId++
+        parts.push("\n")
+        pushToken("br", "br", slotId)
+        return true
+      }
+
+      if (tag === "code") {
+        for (const child of el.childNodes) {
+          if (child.nodeType !== Node.TEXT_NODE) return false
+        }
+        const slotId = nextSlotId++
+        pushToken("code", "code", slotId)
+        return true
+      }
+
+      if (!STRUCTURED_INLINE_TAGS.has(tag)) {
+        return false
+      }
+      if (!isInertStructuredSpan(el)) {
+        return false
+      }
+
+      const slotId = nextSlotId++
+      pushToken("element-open", `element-open:${tag}`, slotId)
+      for (const child of el.childNodes) {
+        if (!walk(child)) return false
+      }
+      pushToken("element-close", `element-close:${tag}`, slotId)
+      return true
+    }
+
+    for (const child of root.childNodes) {
+      if (!walk(child)) return null
+    }
+
+    if (textSlots.length === 0) return null
+
+    return {
+      root,
+      serialized: parts.join(""),
+      textSlots,
+      tokenSequence,
+    }
+  }
+
+  function extractStructuredTextValues(
+    unit: StructuredTextUnit,
+    translated: string,
+  ): Map<number, string> | null {
+    const values = new Map<number, string>()
+    let cursor = 0
+    let activeTextSlotId: number | null = null
+
+    for (const token of unit.tokenSequence) {
+      const index = translated.indexOf(token.token, cursor)
+      if (index < 0) return null
+
+      const between = translated.slice(cursor, index)
+      if (activeTextSlotId == null) {
+        if (token.kind === "br") {
+          if (between !== "\n") return null
+        } else if (between.length > 0) {
+          return null
+        }
+        if (token.kind === "text-open") {
+          activeTextSlotId = token.slotId
+        }
+      } else {
+        if (between.includes(STRUCTURED_TOKEN_PREFIX)) return null
+        if (token.kind !== "text-close" || token.slotId !== activeTextSlotId) {
+          return null
+        }
+        values.set(activeTextSlotId, between)
+        activeTextSlotId = null
+      }
+
+      cursor = index + token.token.length
+    }
+
+    if (activeTextSlotId != null) return null
+    if (translated.slice(cursor).length > 0) return null
+    return values
+  }
+
   function collectTranslatableAttrs(root: Element): TranslatableAttr[] {
     const items: TranslatableAttr[] = []
     for (const attrName of attrNames) {
@@ -342,6 +687,28 @@ export function createDOMTranslator(config: DOMTranslatorConfig): DOMTranslator 
     notifyEnd(el, config.hooks?.onTranslateEnd)
   }
 
+  async function translateStructuredUnit(
+    unit: StructuredTextUnit,
+    targetLang: string,
+    signal: AbortSignal,
+  ): Promise<void> {
+    notifyStart(unit.root, config.hooks?.onTranslateStart)
+
+    const { masked, slots } = insertPlaceholders(unit.serialized, matchers)
+    const rawTranslation = await config.translate(masked, targetLang)
+    if (signal.aborted) return
+    const translated = restorePlaceholders(rawTranslation, slots)
+
+    const values = extractStructuredTextValues(unit, translated)
+    if (values) {
+      for (const { node, slotId } of unit.textSlots) {
+        node.textContent = values.get(slotId) ?? ""
+      }
+    }
+
+    notifyEnd(unit.root, config.hooks?.onTranslateEnd)
+  }
+
   // -------------------------------------------------------------------------
   // Core translate
   // -------------------------------------------------------------------------
@@ -375,15 +742,23 @@ export function createDOMTranslator(config: DOMTranslatorConfig): DOMTranslator 
         )
         : []
 
+      const claims = buildVisibleClaims(linkedGroups, allRich)
+      const allStructured = resolveStructuredUnits(roots, claims)
+
       const walkerConfig = { skipTags, shouldSkip, skipInside: skipSelectors }
       const allNodes = roots.flatMap((r) =>
         collectTextNodes(r, walkerConfig, originalTexts),
-      )
+      ).filter(({ node }) =>
+        !claims.linkedTextNodes.has(node) && !claims.structuredTextNodes.has(node))
       const allBatches = buildBatches(allNodes, charLimit)
       const allAttrs = roots.flatMap(collectTranslatableAttrs)
 
       const total =
-        linkedGroups.length + allRich.length + allBatches.length + allAttrs.length
+        linkedGroups.length
+        + allRich.length
+        + allStructured.length
+        + allBatches.length
+        + allAttrs.length
       let done = 0
 
       const progress = () => {
@@ -399,11 +774,15 @@ export function createDOMTranslator(config: DOMTranslatorConfig): DOMTranslator 
         const phaseCount = config.phases.length + 1
         const phases: PhaseWork[] = Array.from({ length: phaseCount }, () => ({
           md: [],
+          structured: [],
           batches: [],
           attrs: [],
         }))
 
         for (const el of allRich) phases[assignPhase(el, phaseRoots)]!.md.push(el)
+        for (const unit of allStructured) {
+          phases[assignPhase(unit.root, phaseRoots)]!.structured.push(unit)
+        }
         for (const batch of allBatches) {
           phases[assignPhase(batch[0]!.node, phaseRoots)]!.batches.push(batch)
         }
@@ -423,6 +802,7 @@ export function createDOMTranslator(config: DOMTranslatorConfig): DOMTranslator 
 
         const singlePhase: PhaseWork = {
           md: allRich,
+          structured: allStructured,
           batches: allBatches,
           attrs: allAttrs,
         }
@@ -443,6 +823,14 @@ export function createDOMTranslator(config: DOMTranslatorConfig): DOMTranslator 
     for (const el of phase.md) {
       if (signal.aborted) return
       await translateRichElement(el, targetLang, signal)
+      if (signal.aborted) return
+      progress()
+    }
+
+    // Structured text roots
+    for (const unit of phase.structured) {
+      if (signal.aborted) return
+      await translateStructuredUnit(unit, targetLang, signal)
       if (signal.aborted) return
       progress()
     }
