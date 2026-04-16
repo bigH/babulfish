@@ -139,11 +139,11 @@ export function createBabulfish(config?: BabulfishConfig): BabulfishCore {
       )
     }
 
-    const { runId, signal: runSignal } = progress.startRun()
+    const run = progress.startRun()
     const externalSignal = opts?.signal
     const removeExternalAbortListener = externalSignal
       ? addAbortListener(externalSignal, () => {
-          if (progress.isCurrentRun(runId)) progress.abortCurrent()
+          if (run.isCurrent()) progress.abortCurrent()
         })
       : null
 
@@ -154,7 +154,7 @@ export function createBabulfish(config?: BabulfishConfig): BabulfishCore {
     }))
 
     function resetTranslationIfCurrentRun(): void {
-      if (!progress.isCurrentRun(runId)) return
+      if (!run.isCurrent()) return
       store.set((prev) => {
         if (prev.translation.status === "idle") return prev
         return {
@@ -165,12 +165,12 @@ export function createBabulfish(config?: BabulfishConfig): BabulfishCore {
     }
 
     try {
-      runSignal.throwIfAborted()
+      run.signal.throwIfAborted()
 
       const translator = getDomTranslator(opts?.root)
       if (translator) {
         const translatePromise = translator.translate(lang)
-        const removeRunAbortListener = addAbortListener(runSignal, () => translator.abort())
+        const removeRunAbortListener = addAbortListener(run.signal, () => translator.abort())
         try {
           await translatePromise
         } finally {
@@ -178,7 +178,7 @@ export function createBabulfish(config?: BabulfishConfig): BabulfishCore {
         }
       }
 
-      runSignal.throwIfAborted()
+      run.signal.throwIfAborted()
     } finally {
       removeExternalAbortListener?.()
       resetTranslationIfCurrentRun()

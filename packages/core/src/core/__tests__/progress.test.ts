@@ -17,8 +17,8 @@ describe("createProgressController", () => {
     const secondRun = progress.startRun()
 
     expectAbortError(firstRun.signal, "Superseded by new translation")
-    expect(progress.isCurrentRun(firstRun.runId)).toBe(false)
-    expect(progress.isCurrentRun(secondRun.runId)).toBe(true)
+    expect(firstRun.isCurrent()).toBe(false)
+    expect(secondRun.isCurrent()).toBe(true)
   })
 
   it("aborts the active run without clearing its run identity", () => {
@@ -28,7 +28,7 @@ describe("createProgressController", () => {
     progress.abortCurrent()
 
     expectAbortError(run.signal, "Translation aborted")
-    expect(progress.isCurrentRun(run.runId)).toBe(true)
+    expect(run.isCurrent()).toBe(true)
   })
 
   it("aborts the active run on dispose", () => {
@@ -38,6 +38,6 @@ describe("createProgressController", () => {
     progress.dispose()
 
     expectAbortError(run.signal, "Core disposed")
-    expect(progress.isCurrentRun(run.runId)).toBe(true)
+    expect(run.isCurrent()).toBe(true)
   })
 })

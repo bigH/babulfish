@@ -1,18 +1,17 @@
 type ProgressRun = {
-  readonly runId: number
   readonly signal: AbortSignal
+  isCurrent(): boolean
 }
 
 type ProgressController = {
   startRun(): ProgressRun
-  isCurrentRun(runId: number): boolean
   abortCurrent(): void
   dispose(): void
 }
 
 export function createProgressController(): ProgressController {
-  let currentRunId = 0
   let currentController: AbortController | null = null
+  let currentRun: ProgressRun | null = null
 
   function abortCurrentWith(message: string): void {
     currentController?.abort(new DOMException(message, "AbortError"))
@@ -22,14 +21,14 @@ export function createProgressController(): ProgressController {
   return {
     startRun() {
       abortCurrentWith("Superseded by new translation")
-      currentRunId++
       const controller = new AbortController()
+      const run: ProgressRun = {
+        signal: controller.signal,
+        isCurrent: () => currentRun === run,
+      }
       currentController = controller
-
-      return { runId: currentRunId, signal: controller.signal }
-    },
-    isCurrentRun(runId: number) {
-      return currentRunId === runId
+      currentRun = run
+      return run
     },
     abortCurrent() {
       abortCurrentWith("Translation aborted")
