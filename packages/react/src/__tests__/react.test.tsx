@@ -563,6 +563,31 @@ describe("TranslateButton", () => {
     expect(mockLoadModel).toHaveBeenCalledTimes(1)
   })
 
+  it("returns to the idle button state when model download fails", async () => {
+    mockLoadModel.mockRejectedValueOnce(new Error("boom"))
+
+    render(
+      <Wrapper config={DOM_CONFIG}>
+        <TranslateButton />
+      </Wrapper>,
+    )
+
+    const button = screen.getByRole("button")
+
+    fireEvent.click(button)
+    expect(screen.getByRole("tooltip")).toBeInTheDocument()
+
+    await act(async () => {
+      fireEvent.click(button)
+      await Promise.resolve()
+    })
+
+    expect(mockLoadModel).toHaveBeenCalledTimes(1)
+    expect(screen.queryByRole("tooltip")).not.toBeInTheDocument()
+    expect(button).toBeEnabled()
+    expect(button).toHaveAttribute("aria-label", "Translate page")
+  })
+
   it("shows language dropdown when button clicked in ready state", async () => {
     mockLoadModel.mockImplementation(async () => {
       setMockSnapshot({
@@ -739,6 +764,25 @@ describe("TranslateButton", () => {
     })
 
     expect(button).not.toHaveTextContent("50%")
+  })
+
+  it("shows translating progress from the hook state without opening the dropdown", () => {
+    setMockSnapshot({
+      model: { status: "ready" as const },
+      translation: { status: "translating", progress: 0.4 },
+      currentLanguage: "es-ES",
+    })
+
+    render(
+      <Wrapper config={DOM_CONFIG}>
+        <TranslateButton />
+      </Wrapper>,
+    )
+
+    const button = screen.getByRole("button")
+    expect(button).toHaveTextContent("40%")
+    expect(button).toHaveAttribute("aria-label", "Translating page")
+    expect(screen.queryByRole("listbox")).not.toBeInTheDocument()
   })
 
   it("keeps the dropdown open but disabled while translating", async () => {

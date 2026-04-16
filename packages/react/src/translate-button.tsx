@@ -9,6 +9,7 @@ import {
   useCallback,
   type ReactNode,
 } from "react"
+import type { Snapshot } from "@babulfish/core"
 import { useTranslator } from "./use-translator.js"
 import { TranslateDropdown } from "./translate-dropdown.js"
 import type { ResolvedDevice } from "@babulfish/core/engine"
@@ -39,19 +40,39 @@ type TooltipRenderProps = {
   readonly defaultUIEnabled: boolean
 }
 
-type ButtonState =
-  | { readonly kind: "idle" }
-  | { readonly kind: "confirm" }
-  | { readonly kind: "downloading" }
-  | { readonly kind: "ready"; readonly dropdownOpen: boolean }
-  | { readonly kind: "translating"; readonly dropdownOpen: boolean }
+type ButtonPhase =
+  | "idle"
+  | "confirm"
+  | "downloading"
+  | "ready"
+  | "translating"
 
-function dismissTransientState(state: ButtonState): ButtonState {
-  if (state.kind === "confirm") return { kind: "idle" }
-  if (state.kind === "ready" && state.dropdownOpen) {
-    return { kind: "ready", dropdownOpen: false }
+type PendingAction = "download" | "translate" | null
+
+function getButtonPhase({
+  confirming,
+  modelStatus,
+  translationStatus,
+  pendingAction,
+}: {
+  confirming: boolean
+  modelStatus: Snapshot["model"]["status"]
+  translationStatus: Snapshot["translation"]["status"]
+  pendingAction: PendingAction
+}): ButtonPhase {
+  if (translationStatus === "translating" || pendingAction === "translate") {
+    return "translating"
   }
-  return state
+
+  if (modelStatus === "downloading" || pendingAction === "download") {
+    return "downloading"
+  }
+
+  if (modelStatus === "ready") {
+    return "ready"
+  }
+
+  return confirming ? "confirm" : "idle"
 }
 
 export type TranslateButtonProps = {
@@ -229,64 +250,53 @@ export function TranslateButton({
     currentLanguage,
   } = useTranslator()
 
-  const [state, setState] = useState<ButtonState>({ kind: "idle" })
+  const [confirming, setConfirming] = useState(false)
+  const [dropdownOpen, setDropdownOpen] = useState(false)
+  const [pendingAction, setPendingAction] = useState<PendingAction>(null)
   const [focusedIndex, setFocusedIndex] = useState(0)
   const [hovered, setHovered] = useState(false)
   const [initialPeek, setInitialPeek] = useState(false)
   const [peekFading, setPeekFading] = useState(false)
   const peekDismissed = useRef(false)
   const containerRef = useRef<HTMLDivElement>(null)
+  const previousTranslationStatus = useRef(translation.status)
 
-  // Sync engine status -> button state
   const modelProgress = model.status === "downloading" ? model.progress : 0
+  const translationProgress =
+    translation.status === "translating" ? translation.progress : null
+  const phase = getButtonPhase({
+    confirming,
+    modelStatus: model.status,
+    translationStatus: translation.status,
+    pendingAction,
+  })
+
   useEffect(() => {
-    if (model.status === "downloading") {
-      setState((prev) => (
-        prev.kind === "downloading"
-          ? prev
-          : { kind: "downloading" }
-      ))
-    } else if (model.status === "ready") {
-      setState((prev) => (
-        prev.kind === "downloading"
-          ? { kind: "ready", dropdownOpen: false }
-          : prev
-      ))
-    } else if (model.status === "error") {
-      setState((prev) => (prev.kind === "idle" ? prev : { kind: "idle" }))
+    if (
+      model.status === "downloading" ||
+      model.status === "ready" ||
+      model.status === "error" ||
+      translation.status === "translating"
+    ) {
+      setConfirming(false)
+    }
+  }, [model.status, translation.status])
+
+  useEffect(() => {
+    if (model.status === "downloading" || model.status === "error") {
+      setDropdownOpen(false)
     }
   }, [model.status])
 
-  const translationProgress =
-    translation.status === "translating" ? translation.progress : null
   useEffect(() => {
-    if (translation.status !== "translating") {
-      setState((prev) =>
-        prev.kind === "translating"
-          ? { kind: "ready", dropdownOpen: false }
-          : prev,
-      )
-      return
+    if (
+      previousTranslationStatus.current === "translating" &&
+      translation.status !== "translating"
+    ) {
+      setDropdownOpen(false)
     }
 
-    setState((prev) => {
-      const dropdownOpen =
-        prev.kind === "ready" || prev.kind === "translating"
-          ? prev.dropdownOpen
-          : false
-
-      if (
-        prev.kind === "translating" &&
-        prev.dropdownOpen === dropdownOpen
-      ) {
-        return prev
-      }
-
-      return {
-        kind: "translating",
-        dropdownOpen,
-      }
-    })
+    previousTranslationStatus.current = translation.status
   }, [translation.status])
 
   // Auto-show tooltip peek
@@ -308,39 +318,49 @@ export function TranslateButton({
 
   // Dismiss peek when state leaves idle
   useEffect(() => {
-    if (state.kind !== "idle") {
+    if (phase !== "idle") {
       peekDismissed.current = true
       setInitialPeek(false)
       setPeekFading(false)
     }
-  }, [state.kind])
+  }, [phase])
+
+  const dismissTransientUi = useCallback(() => {
+    if (phase === "confirm") {
+      setConfirming(false)
+    }
+
+    if (phase === "ready" && dropdownOpen) {
+      setDropdownOpen(false)
+    }
+  }, [dropdownOpen, phase])
 
   // Click-away dismiss
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
       if (!containerRef.current?.contains(e.target as Node)) {
-        setState(dismissTransientState)
+        dismissTransientUi()
       }
     }
     document.addEventListener("mousedown", handleClickOutside)
     return () => document.removeEventListener("mousedown", handleClickOutside)
-  }, [])
+  }, [dismissTransientUi])
 
   // Escape key dismiss
   useEffect(() => {
     function handleEscape(e: KeyboardEvent) {
       if (e.key !== "Escape") return
-      setState(dismissTransientState)
+      dismissTransientUi()
     }
     document.addEventListener("keydown", handleEscape)
     return () => document.removeEventListener("keydown", handleEscape)
-  }, [])
+  }, [dismissTransientUi])
 
   // Keyboard nav for dropdown — no useCallback; deps include
   // handleLanguageSelect which is a plain function, and this handler
   // only fires on key events so re-creation cost is negligible.
   function handleKeyDown(e: React.KeyboardEvent) {
-    if (state.kind !== "ready" || !state.dropdownOpen) return
+    if (phase !== "ready" || !dropdownOpen) return
 
     const totalItems = languages.length + 1
     if (e.key === "ArrowDown") {
@@ -367,21 +387,17 @@ export function TranslateButton({
 
   // Button click handler
   function handleButtonClick() {
-    switch (state.kind) {
+    switch (phase) {
       case "idle":
-        setState({ kind: "confirm" })
+        setConfirming(true)
         break
       case "confirm":
         if (isMobile || !canTranslate) return
-        startDownload()
+        void startDownload()
         break
       case "ready":
         setFocusedIndex(0)
-        setState((prev) =>
-          prev.kind === "ready"
-            ? { kind: "ready", dropdownOpen: !prev.dropdownOpen }
-            : prev,
-        )
+        setDropdownOpen((open) => !open)
         break
       default:
         break
@@ -389,29 +405,43 @@ export function TranslateButton({
   }
 
   async function startDownload() {
-    setState({ kind: "downloading" })
+    setConfirming(false)
+    setDropdownOpen(false)
+    setPendingAction("download")
     try {
       await loadModel()
     } catch {
-      setState({ kind: "idle" })
+      setConfirming(false)
+      setDropdownOpen(false)
+    } finally {
+      setPendingAction((current) =>
+        current === "download" ? null : current,
+      )
     }
   }
 
   function handleRestore() {
     restore()
-    setState({ kind: "ready", dropdownOpen: false })
+    setConfirming(false)
+    setDropdownOpen(false)
   }
 
   async function handleLanguageSelect(code: string) {
-    if (state.kind !== "ready") return
+    if (phase !== "ready") return
 
-    setState({ kind: "translating", dropdownOpen: true })
+    setConfirming(false)
+    setDropdownOpen(true)
+    setPendingAction("translate")
     try {
       await translateTo(code)
     } catch {
       restore()
+    } finally {
+      setPendingAction((current) =>
+        current === "translate" ? null : current,
+      )
+      setDropdownOpen(false)
     }
-    setState({ kind: "ready", dropdownOpen: false })
   }
 
   // Keep SSR and first client render on the same neutral markup.
@@ -420,30 +450,23 @@ export function TranslateButton({
   if (!canTranslate) return null
 
   const defaultUIEnabled = !isMobile
-  const confirmDisabled = state.kind === "confirm" && !defaultUIEnabled
+  const confirmDisabled = phase === "confirm" && !defaultUIEnabled
 
-  const isInteractive =
-    state.kind !== "downloading" &&
-    state.kind !== "translating" &&
-    !confirmDisabled
+  const isDownloading = phase === "downloading"
+  const isTranslating = phase === "translating"
+  const isReady = phase === "ready"
+  const isInteractive = !isDownloading && !isTranslating && !confirmDisabled
 
   const showTooltip =
-    state.kind === "confirm" ||
-    (state.kind === "idle" && (hovered || initialPeek))
+    phase === "confirm" || (phase === "idle" && (hovered || initialPeek))
 
-  const tooltipFading = peekFading && !hovered && state.kind !== "confirm"
+  const tooltipFading = peekFading && !hovered && phase !== "confirm"
 
   const downloadColor =
     progressRing?.downloadColor ?? "var(--babulfish-accent, #3b82f6)"
   const translateColor =
     progressRing?.translateColor ?? "rgb(248 113 113)"
 
-  const isDownloading = state.kind === "downloading"
-  const isTranslating = state.kind === "translating"
-  const dropdownState =
-    state.kind === "ready" || state.kind === "translating"
-      ? state
-      : null
   const isProgressState = isDownloading || isTranslating
   const progressValue = isDownloading
     ? modelProgress
@@ -458,9 +481,9 @@ export function TranslateButton({
       ? `Downloading translation model: ${progressText}`
       : isTranslating
         ? "Translating page"
-        : state.kind === "confirm" && !defaultUIEnabled
+        : phase === "confirm" && !defaultUIEnabled
           ? "Translation is currently desktop-only"
-        : state.kind === "ready"
+        : isReady
           ? "Translation model ready"
           : "Translate page"
 
@@ -469,25 +492,25 @@ export function TranslateButton({
       ? `Downloading translation model: ${progressText}`
       : isProgressState
         ? "Translating page"
-        : state.kind === "ready"
+        : isReady
           ? "Translation model ready"
           : ""
 
   const buttonAnimClass =
-    state.kind === "idle" && initialPeek && !tooltipFading
+    phase === "idle" && initialPeek && !tooltipFading
       ? "babulfish-globe-peek"
-      : state.kind === "idle" && tooltipFading
+      : phase === "idle" && tooltipFading
         ? "babulfish-globe-peek-out"
-        : state.kind === "translating"
+        : isTranslating
           ? "babulfish-active"
-          : state.kind === "ready"
+          : isReady
             ? "babulfish-globe-ready"
             : ""
 
   const iconElement = icon ?? (
     <GlobeIcon
       className={
-        state.kind === "ready"
+        isReady
           ? "babulfish-icon-ready"
           : initialPeek && !tooltipFading
             ? "babulfish-icon-peek"
@@ -496,6 +519,7 @@ export function TranslateButton({
     />
   )
   const dropdownFocusedIndex = isTranslating ? -1 : focusedIndex
+  const showDropdown = dropdownOpen && (isReady || isTranslating)
 
   return (
     <div
@@ -503,110 +527,110 @@ export function TranslateButton({
       onKeyDown={handleKeyDown}
       style={{ position: "relative" }}
     >
-        {/* Live region for screen readers */}
-        <span
-          style={{
-            position: "absolute",
-            width: "1px",
-            height: "1px",
-            padding: 0,
-            margin: "-1px",
-            overflow: "hidden",
-            clip: "rect(0, 0, 0, 0)",
-            whiteSpace: "nowrap",
-            borderWidth: 0,
-          }}
-          aria-live="polite"
-        >
-          {liveText}
-        </span>
+      {/* Live region for screen readers */}
+      <span
+        style={{
+          position: "absolute",
+          width: "1px",
+          height: "1px",
+          padding: 0,
+          margin: "-1px",
+          overflow: "hidden",
+          clip: "rect(0, 0, 0, 0)",
+          whiteSpace: "nowrap",
+          borderWidth: 0,
+        }}
+        aria-live="polite"
+      >
+        {liveText}
+      </span>
 
-        <button
-          type="button"
-          aria-label={ariaLabel}
-          aria-describedby={showTooltip ? "babulfish-tooltip" : undefined}
-          tabIndex={0}
-          onClick={handleButtonClick}
-          onMouseEnter={() => setHovered(true)}
-          onMouseLeave={() => setHovered(false)}
-          disabled={!isInteractive}
-          className={
-            buttonAnimClass +
-            (classNames?.button ? ` ${classNames.button}` : "")
-          }
-          style={{
-            position: "relative",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            width: "2.5rem",
-            height: "2.5rem",
-            borderRadius: "9999px",
-            border: "1px solid var(--babulfish-border, #e5e7eb)",
-            background: "var(--babulfish-surface, #fff)",
-            cursor: isInteractive ? "pointer" : "default",
-          }}
-        >
-          {isProgressState ? (
-            <span
-              style={{
-                fontSize: "10px",
-                fontWeight: 500,
-                fontVariantNumeric: "tabular-nums",
-              }}
-            >
-              {progressText}
-            </span>
-          ) : (
-            iconElement
-          )}
-
-          {isProgressState && (
-            <ProgressRing
-              progress={progressValue}
-              color={activeProgressRingColor}
-              className={classNames?.progressRing}
-            />
-          )}
-        </button>
-
-        {/* Tooltip */}
-        {showTooltip && (
-          renderTooltip
-            ? renderTooltip({
-                mobile: isMobile,
-                confirming: state.kind === "confirm",
-                hasWebGPU,
-                canTranslate,
-                device,
-                defaultUIEnabled,
-              })
-            : (
-              <DefaultTooltip
-                mobile={isMobile}
-                confirming={state.kind === "confirm"}
-                hasWebGPU={hasWebGPU}
-                canTranslate={canTranslate}
-                device={device}
-                defaultUIEnabled={defaultUIEnabled}
-                fading={tooltipFading}
-                onFadeComplete={handlePeekFadeComplete}
-                className={classNames?.tooltip}
-              />
-            )
+      <button
+        type="button"
+        aria-label={ariaLabel}
+        aria-describedby={showTooltip ? "babulfish-tooltip" : undefined}
+        tabIndex={0}
+        onClick={handleButtonClick}
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+        disabled={!isInteractive}
+        className={
+          buttonAnimClass +
+          (classNames?.button ? ` ${classNames.button}` : "")
+        }
+        style={{
+          position: "relative",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          width: "2.5rem",
+          height: "2.5rem",
+          borderRadius: "9999px",
+          border: "1px solid var(--babulfish-border, #e5e7eb)",
+          background: "var(--babulfish-surface, #fff)",
+          cursor: isInteractive ? "pointer" : "default",
+        }}
+      >
+        {isProgressState ? (
+          <span
+            style={{
+              fontSize: "10px",
+              fontWeight: 500,
+              fontVariantNumeric: "tabular-nums",
+            }}
+          >
+            {progressText}
+          </span>
+        ) : (
+          iconElement
         )}
 
-        {dropdownState?.dropdownOpen && (
-          <TranslateDropdown
-            value={currentLanguage}
-            disabled={isTranslating}
-            onSelect={handleLanguageSelect}
-            onRestore={handleRestore}
-            focusedIndex={dropdownFocusedIndex}
-            className={classNames?.dropdown}
-            itemClassName={classNames?.dropdownItem}
+        {isProgressState && (
+          <ProgressRing
+            progress={progressValue}
+            color={activeProgressRingColor}
+            className={classNames?.progressRing}
           />
         )}
+      </button>
+
+      {/* Tooltip */}
+      {showTooltip && (
+        renderTooltip
+          ? renderTooltip({
+              mobile: isMobile,
+              confirming: phase === "confirm",
+              hasWebGPU,
+              canTranslate,
+              device,
+              defaultUIEnabled,
+            })
+          : (
+            <DefaultTooltip
+              mobile={isMobile}
+              confirming={phase === "confirm"}
+              hasWebGPU={hasWebGPU}
+              canTranslate={canTranslate}
+              device={device}
+              defaultUIEnabled={defaultUIEnabled}
+              fading={tooltipFading}
+              onFadeComplete={handlePeekFadeComplete}
+              className={classNames?.tooltip}
+            />
+          )
+      )}
+
+      {showDropdown && (
+        <TranslateDropdown
+          value={currentLanguage}
+          disabled={isTranslating}
+          onSelect={handleLanguageSelect}
+          onRestore={handleRestore}
+          focusedIndex={dropdownFocusedIndex}
+          className={classNames?.dropdown}
+          itemClassName={classNames?.dropdownItem}
+        />
+      )}
     </div>
   )
 }
