@@ -1,32 +1,26 @@
 // @vitest-environment node
 
 import path from "node:path"
+import { fileURLToPath } from "node:url"
 import { describe, expect, it } from "vitest"
 
 import viteConfig from "../vite.config"
 
-const coreSrc = path.resolve(__dirname, "..", "..", "core", "src")
+const packageDir = path.dirname(fileURLToPath(import.meta.url))
+const coreSrc = path.resolve(packageDir, "..", "..", "core", "src")
 
 const expectedHeaders = {
   "Cross-Origin-Opener-Policy": "same-origin",
   "Cross-Origin-Embedder-Policy": "require-corp",
 }
 
-function readAliasEntries(aliases: unknown): Record<string, string> {
-  if (!aliases || typeof aliases !== "object" || Array.isArray(aliases)) {
-    throw new Error("Expected demo-webcomponent vite config to define aliases")
-  }
-
-  return aliases as Record<string, string>
-}
-
 describe("demo-webcomponent vite config", () => {
   it("keeps source aliases pointed at core source entrypoints", () => {
-    const aliases = readAliasEntries(viteConfig.resolve?.alias)
-
-    expect(aliases["@babulfish/core"]).toBe(path.resolve(coreSrc, "index.ts"))
-    expect(aliases["@babulfish/core/engine"]).toBe(path.resolve(coreSrc, "engine", "index.ts"))
-    expect(aliases["@babulfish/core/dom"]).toBe(path.resolve(coreSrc, "dom", "index.ts"))
+    expect(viteConfig.resolve?.alias).toMatchObject({
+      "@babulfish/core": path.resolve(coreSrc, "index.ts"),
+      "@babulfish/core/engine": path.resolve(coreSrc, "engine", "index.ts"),
+      "@babulfish/core/dom": path.resolve(coreSrc, "dom", "index.ts"),
+    })
   })
 
   it("applies the same cross-origin isolation headers to dev and preview", () => {
