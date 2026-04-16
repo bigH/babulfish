@@ -54,13 +54,6 @@ function resolveDeviceWithWebGPU(
   }
 }
 
-export function resolveDevice(preference: DevicePreference): ResolvedDevice {
-  return resolveDeviceWithWebGPU(
-    preference,
-    getEnvironmentSnapshot().hasWebGPU,
-  )
-}
-
 export function getTranslationCapabilities(
   preference: DevicePreference = "auto",
 ): TranslationCapabilities {

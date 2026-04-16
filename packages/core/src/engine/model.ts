@@ -2,7 +2,7 @@
 
 import type { TextGenerationPipeline, ProgressInfo } from "./pipeline-loader.js"
 import { loadPipeline } from "./pipeline-loader.js"
-import { resolveDevice } from "./detect.js"
+import { getTranslationCapabilities } from "./detect.js"
 
 // ---------------------------------------------------------------------------
 // Types
@@ -139,7 +139,7 @@ export function createEngine(config?: EngineConfig): Translator {
     const version = lifecycleVersion
 
     loadPromise = (async () => {
-      const resolvedDevice = resolveDevice(device)
+      const resolvedDevice = getTranslationCapabilities(device).device
 
       pipelinePromise = loadPipeline(modelId, {
         dtype,

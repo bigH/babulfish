@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest"
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import type {
   Message,
   PipelineOptions,
@@ -52,8 +52,14 @@ vi.mock("../pipeline-loader.js", () => ({
 import { createEngine } from "../model.js"
 import type { TranslatorStatus } from "../model.js"
 import { loadPipeline } from "../pipeline-loader.js"
+import {
+  captureGlobalDescriptors,
+  restoreGlobals,
+  setGlobal,
+} from "../../__tests__/globals.test-utils.js"
 
 const mockLoadPipeline = vi.mocked(loadPipeline)
+const originalGlobals = captureGlobalDescriptors()
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -87,6 +93,10 @@ beforeEach(() => {
   mockLoadPipeline.mockReset()
   mockGenerate.mockReset()
   mockLoadPipeline.mockImplementation(resolveMockPipeline)
+})
+
+afterEach(() => {
+  restoreGlobals(originalGlobals)
 })
 
 // ---------------------------------------------------------------------------
@@ -123,6 +133,9 @@ describe("load", () => {
   })
 
   it("calls pipeline with correct defaults", async () => {
+    setGlobal("window", { innerWidth: 1280 })
+    setGlobal("navigator", { maxTouchPoints: 0 })
+
     const engine = createEngine()
     await engine.load()
 
@@ -130,6 +143,7 @@ describe("load", () => {
       "onnx-community/translategemma-text-4b-it-ONNX",
       expect.objectContaining({
         dtype: "q4",
+        device: "wasm",
         progress_callback: expect.any(Function),
       }),
     )

@@ -1,8 +1,5 @@
 import { describe, it, expect, afterEach } from "vitest"
-import {
-  getTranslationCapabilities,
-  resolveDevice,
-} from "../detect.js"
+import { getTranslationCapabilities } from "../detect.js"
 import {
   captureGlobalDescriptors,
   clearGlobal,
@@ -16,23 +13,23 @@ afterEach(() => {
   restoreGlobals(originalGlobals)
 })
 
-describe("resolveDevice", () => {
-  it("returns 'webgpu' when preference is 'webgpu'", () => {
-    expect(resolveDevice("webgpu")).toBe("webgpu")
+describe("device resolution", () => {
+  it("keeps explicit webgpu preference in the capability snapshot", () => {
+    expect(getTranslationCapabilities("webgpu").device).toBe("webgpu")
   })
 
-  it("returns 'wasm' when preference is 'wasm'", () => {
-    expect(resolveDevice("wasm")).toBe("wasm")
+  it("keeps explicit wasm preference in the capability snapshot", () => {
+    expect(getTranslationCapabilities("wasm").device).toBe("wasm")
   })
 
-  it("returns 'wasm' in auto mode when WebGPU unavailable", () => {
+  it("uses wasm in auto mode when WebGPU is unavailable", () => {
     setGlobal("navigator", {})
-    expect(resolveDevice("auto")).toBe("wasm")
+    expect(getTranslationCapabilities("auto").device).toBe("wasm")
   })
 
-  it("returns 'webgpu' in auto mode when WebGPU available", () => {
+  it("uses webgpu in auto mode when WebGPU is available", () => {
     setGlobal("navigator", { gpu: {} })
-    expect(resolveDevice("auto")).toBe("webgpu")
+    expect(getTranslationCapabilities("auto").device).toBe("webgpu")
   })
 })
 
