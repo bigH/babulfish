@@ -80,6 +80,8 @@ describe("demo main helpers", () => {
     expect(entries[0]?.textContent).toContain("model=downloading")
     expect(entries[0]?.textContent).toContain("translation=translating")
     expect(entries[0]?.textContent).toContain("lang=es")
+    expect(entries[0]?.textContent).toContain("runtime=webgpu")
+    expect(entries[0]?.textContent).toContain("verdict=gpu-preferred")
     expect(entries[1]?.textContent).toBe("older")
     expect(logger.log).toHaveBeenCalledWith("[babulfish-translator #2]", snapshot)
   })
@@ -96,14 +98,23 @@ describe("demo main helpers", () => {
     expect(entry?.ownerDocument).toBe(hostDocument)
   })
 
-  it("ignores mutations inside #event-log but warns on host document mutations", async () => {
-    document.body.innerHTML = `<div id="event-log"></div><div id="outside"></div>`
+  it("ignores mutations inside known host UI but warns on unrelated document mutations", async () => {
+    document.body.innerHTML = `
+      <div class="host-controls"><div id="runtime-status"></div></div>
+      <div id="event-log"></div>
+      <div id="outside"></div>
+    `
     const eventLog = requireEventLog(document)
+    const hostControls = document.querySelector(".host-controls")
+    if (!(hostControls instanceof HTMLElement)) {
+      throw new Error("Expected .host-controls wrapper")
+    }
     const logger = { warn: vi.fn() }
-    const observer = observeHostDocument(document.body, eventLog, logger)
+    const observer = observeHostDocument(document.body, [eventLog, hostControls], logger)
     observers.push(observer)
 
     eventLog.append(document.createElement("div"))
+    document.getElementById("runtime-status")?.append("updated")
     document.getElementById("outside")?.append("changed")
     await Promise.resolve()
 

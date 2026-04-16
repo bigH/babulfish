@@ -18,12 +18,57 @@
       </p>
     </header>
 
-    <div class="toolbar">
-      <select id="language" disabled>
-        <option value="">Choose language…</option>
-      </select>
-      <button id="restore" type="button" disabled>Restore original</button>
-      <button id="load-model" type="button">Load model</button>
+    <div class="controls-stack">
+      <section class="runtime-controls" aria-labelledby="runtime-controls-title">
+        <div class="runtime-header">
+          <p id="runtime-controls-title" class="panel-label">Runtime Selection</p>
+          <h2 class="runtime-title">Choose the exact runtime preference config.</h2>
+        </div>
+
+        <div class="runtime-field-grid">
+          <label class="runtime-field runtime-field-device">
+            <span>Device</span>
+            <select id="runtime-device"></select>
+          </label>
+          <label class="runtime-field runtime-field-model">
+            <span>Model</span>
+            <select id="runtime-model"></select>
+          </label>
+          <label class="runtime-field runtime-field-dtype">
+            <span>Quantization</span>
+            <select id="runtime-dtype"></select>
+          </label>
+        </div>
+
+        <div class="runtime-footer">
+          <label class="runtime-toggle" for="runtime-autoload">
+            <input id="runtime-autoload" type="checkbox" />
+            <span>Autoload model after page open and runtime remounts</span>
+          </label>
+
+          <div class="runtime-summary" aria-live="polite">
+            <p id="runtime-preset" class="runtime-preset">TranslateGemma 4B</p>
+            <p id="runtime-message" class="runtime-message">
+              Runtime changes remount the demo core, clear the current translation, and
+              may reuse an already-loaded matching runtime.
+            </p>
+            <p id="runtime-constraints" class="runtime-constraints">
+              Allowed quantization: Q4 / Q8 / FP16 / FP32. Allowed devices: Auto / WASM /
+              WebGPU. Load mode: Manual load.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <div class="toolbar">
+        <div class="toolbar-group">
+          <select id="language" disabled>
+            <option value="">Choose language…</option>
+          </select>
+          <button id="restore" type="button" disabled>Restore original</button>
+        </div>
+        <button id="load-model" type="button">Load model</button>
+      </div>
     </div>
 
     <div class="layout">
@@ -72,31 +117,69 @@
       </main>
 
       <section id="status" class="status" aria-live="polite">
-        <h2>Status</h2>
-        <dl>
-          <dt>Requested device</dt>
-          <dd id="status-requested-device">auto</dd>
-          <dt>Requested model</dt>
-          <dd id="status-requested-model">default</dd>
-          <dt>Requested dtype</dt>
-          <dd id="status-requested-dtype">default</dd>
-          <dt>Raw capabilities</dt>
-          <dd id="status-capabilities">Checking browser observations…</dd>
-          <dt>Enablement</dt>
-          <dd id="status-enablement">idle</dd>
-          <dt>Verdict</dt>
-          <dd id="status-verdict">unknown</dd>
-          <dt>Resolved runtime</dt>
-          <dd id="status-runtime">none</dd>
-          <dt>Model</dt>
-          <dd id="status-model">Not loaded</dd>
-          <dt>Translation</dt>
-          <dd id="status-translation">Idle</dd>
-          <dt>Language</dt>
-          <dd id="status-language">Original</dd>
-          <dt>Root direction</dt>
-          <dd id="status-direction">copy: none / aside: none</dd>
-        </dl>
+        <p class="panel-label">Status</p>
+        <h2>Runtime and translation state</h2>
+        <div class="status-group">
+          <p class="status-group-label">Selection</p>
+          <dl class="status-grid">
+            <div class="status-row status-row-card">
+              <dt>Device</dt>
+              <dd id="status-requested-device">Auto</dd>
+            </div>
+            <div class="status-row status-row-card">
+              <dt>Quantization</dt>
+              <dd id="status-requested-dtype">Q4</dd>
+            </div>
+            <div class="status-row status-row-card status-row-wide">
+              <dt>Model</dt>
+              <dd id="status-requested-model">onnx-community/translategemma-text-4b-it-ONNX</dd>
+            </div>
+          </dl>
+        </div>
+
+        <div class="status-group">
+          <p class="status-group-label">Runtime</p>
+          <dl class="status-list">
+            <div class="status-row">
+              <dt>Capabilities</dt>
+              <dd id="status-capabilities">Checking browser observations…</dd>
+            </div>
+            <div class="status-row">
+              <dt>Enablement</dt>
+              <dd id="status-enablement">idle</dd>
+            </div>
+            <div class="status-row">
+              <dt>Verdict</dt>
+              <dd id="status-verdict">unknown</dd>
+            </div>
+            <div class="status-row">
+              <dt>Resolved runtime</dt>
+              <dd id="status-runtime">Pending / default / Q4</dd>
+            </div>
+            <div class="status-row">
+              <dt>Model status</dt>
+              <dd id="status-model">Not loaded</dd>
+            </div>
+          </dl>
+        </div>
+
+        <div class="status-group">
+          <p class="status-group-label">Translation</p>
+          <dl class="status-list">
+            <div class="status-row">
+              <dt>Translation status</dt>
+              <dd id="status-translation">Idle</dd>
+            </div>
+            <div class="status-row">
+              <dt>Language</dt>
+              <dd id="status-language">Original</dd>
+            </div>
+            <div class="status-row">
+              <dt>Root direction</dt>
+              <dd id="status-direction">copy: none / aside: none</dd>
+            </div>
+          </dl>
+        </div>
 
         <div class="raw-proof">
           <h3>Raw string API proof</h3>

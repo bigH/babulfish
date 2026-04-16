@@ -1,5 +1,11 @@
 import { createBabulfish, type BabulfishCore, type Snapshot } from "@babulfish/core"
 
+import {
+  resolveDemoRuntimeSelection,
+  toEngineSelection,
+  type ResolvedDemoRuntimeSelection,
+} from "../../demo-shared/src/runtime-selection.js"
+
 const STYLES = /* css */ `
 :host {
   display: block;
@@ -95,31 +101,78 @@ export class BabulfishTranslator extends HTMLElement {
   #core: BabulfishCore | null = null
   #unsubscribe: (() => void) | null = null
   #els: ShadowElements | null = null
+  #runtimeState: ResolvedDemoRuntimeSelection | null = null
 
   static get observedAttributes(): readonly string[] {
-    return ["target-lang"]
+    return ["target-lang", "device", "model-id", "dtype"]
   }
 
   connectedCallback(): void {
     const shadow = this.shadowRoot ?? this.attachShadow({ mode: "open" })
-    shadow.replaceChildren(buildTemplate().content.cloneNode(true))
+    const needsInitialRender = this.#els === null
 
-    this.#els = {
-      select: shadow.querySelector(".language") as HTMLSelectElement,
-      restore: shadow.querySelector(".restore") as HTMLButtonElement,
-      loadModel: shadow.querySelector(".load-model") as HTMLButtonElement,
-      status: shadow.querySelector(".status-text") as HTMLElement,
+    if (needsInitialRender) {
+      shadow.replaceChildren(buildTemplate().content.cloneNode(true))
+      this.#els = {
+        select: shadow.querySelector(".language") as HTMLSelectElement,
+        restore: shadow.querySelector(".restore") as HTMLButtonElement,
+        loadModel: shadow.querySelector(".load-model") as HTMLButtonElement,
+        status: shadow.querySelector(".status-text") as HTMLElement,
+      }
+      this.#wireControls()
     }
 
+    this.#mountCore(shadow)
+  }
+
+  disconnectedCallback(): void {
+    this.#teardownCore({ restore: true })
+    this.#els = null
+  }
+
+  attributeChangedCallback(name: string, oldValue: string | null, value: string | null): void {
+    if (oldValue === value || !this.isConnected) return
+
+    if (name === "target-lang") {
+      if (!value || !this.#core) return
+      if (this.#core.snapshot.model.status !== "ready") return
+      void this.#core.translateTo(value)
+      return
+    }
+
+    this.removeAttribute("target-lang")
+    this.#mountCore(this.shadowRoot ?? this.attachShadow({ mode: "open" }))
+  }
+
+  restore(): void {
+    this.removeAttribute("target-lang")
+    this.#core?.restore()
+    if (this.#els) this.#els.select.value = ""
+  }
+
+  #readRuntimeState(): ResolvedDemoRuntimeSelection {
+    return resolveDemoRuntimeSelection({
+      device: this.getAttribute("device"),
+      modelId: this.getAttribute("model-id"),
+      dtype: this.getAttribute("dtype"),
+    })
+  }
+
+  #mountCore(shadow: ShadowRoot): void {
+    this.#teardownCore({ restore: true })
+    this.#runtimeState = this.#readRuntimeState()
     this.#core = createBabulfish({
+      engine: toEngineSelection(this.#runtimeState.selection),
       dom: { root: shadow, roots: [".content"] },
     })
 
-    for (const lang of this.#core.languages) {
-      const opt = document.createElement("option")
-      opt.value = lang.code
-      opt.textContent = lang.label
-      this.#els.select.appendChild(opt)
+    if (this.#els && this.#els.select.options.length === 1) {
+      for (const lang of this.#core.languages) {
+        const opt = document.createElement("option")
+        opt.value = lang.code
+        opt.textContent = lang.label
+        this.#els.select.appendChild(opt)
+      }
     }
 
     this.#unsubscribe = this.#core.subscribe((snapshot) => {
@@ -134,39 +187,31 @@ export class BabulfishTranslator extends HTMLElement {
     })
 
     this.#render(this.#core.snapshot)
-    this.#wireControls()
   }
 
-  disconnectedCallback(): void {
+  #teardownCore({ restore }: { readonly restore: boolean }): void {
     this.#unsubscribe?.()
     this.#unsubscribe = null
-    this.#core?.dispose()
+
+    if (!this.#core) return
+    this.#core.abort()
+    if (restore) {
+      this.#core.restore()
+    }
+    void this.#core.dispose().catch(() => {})
     this.#core = null
-    this.#els = null
   }
 
-  attributeChangedCallback(_name: string, _old: string | null, value: string | null): void {
-    if (!value || !this.#core) return
-    if (this.#core.snapshot.model.status !== "ready") return
-    void this.#core.translateTo(value)
-  }
-
-  restore(): void {
-    this.removeAttribute("target-lang")
-    this.#core?.restore()
-    if (this.#els) this.#els.select.value = ""
-  }
-
-  #render(s: Snapshot): void {
-    if (!this.#els) return
+  #render(snapshot: Snapshot): void {
+    if (!this.#els || !this.#runtimeState) return
 
     let modelText: string
-    switch (s.model.status) {
+    switch (snapshot.model.status) {
       case "idle":
         modelText = "Not loaded"
         break
       case "downloading":
-        modelText = `Downloading (${Math.round(s.model.progress * 100)}%)`
+        modelText = `Downloading (${Math.round(snapshot.model.progress * 100)}%)`
         break
       case "ready":
         modelText = "Ready"
@@ -176,20 +221,23 @@ export class BabulfishTranslator extends HTMLElement {
         break
     }
 
-    const transText =
-      s.translation.status === "translating"
-        ? ` | Translating (${Math.round(s.translation.progress * 100)}%)`
+    const translationText =
+      snapshot.translation.status === "translating"
+        ? ` | Translating (${Math.round(snapshot.translation.progress * 100)}%)`
         : ""
+    const languageText = snapshot.currentLanguage ? ` | ${snapshot.currentLanguage}` : ""
+    const requestedText = ` | requested ${this.#runtimeState.selection.device}/${this.#runtimeState.selection.dtype}`
+    const resolvedText = ` | resolved ${snapshot.enablement.verdict.resolvedDevice ?? "none"}`
 
-    const langText = s.currentLanguage ? ` | ${s.currentLanguage}` : ""
-    this.#els.status.textContent = `Model: ${modelText}${transText}${langText}`
-    this.#els.select.value = s.currentLanguage ?? ""
+    this.#els.status.textContent =
+      `Model: ${modelText}${translationText}${languageText}${requestedText}${resolvedText}`
+    this.#els.select.value = snapshot.currentLanguage ?? ""
 
-    const modelReady = s.model.status === "ready"
-    const translating = s.translation.status === "translating"
+    const modelReady = snapshot.model.status === "ready"
+    const translating = snapshot.translation.status === "translating"
     this.#els.select.disabled = !modelReady || translating
-    this.#els.restore.disabled = !modelReady || s.currentLanguage === null
-    this.#els.loadModel.disabled = s.model.status !== "idle"
+    this.#els.restore.disabled = !modelReady || snapshot.currentLanguage === null
+    this.#els.loadModel.disabled = snapshot.model.status !== "idle"
   }
 
   #wireControls(): void {

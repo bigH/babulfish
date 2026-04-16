@@ -6,10 +6,12 @@ This package is not published to npm. It exists to prove the current DOM contrac
 ## What it proves
 
 - `createBabulfish()` works directly against plain DOM APIs.
+- Device, model, and quantization controls drive the same URL-backed runtime config that the demo passes into `createBabulfish()`.
 - Multiple configured `dom.roots` translate together while the status panel stays outside the translated scope.
 - `structuredText` claims supported inline-rich DOM as one logical unit.
 - `preserve.matchers` and `shouldSkip` keep demo-specific strings exact.
 - `outputTransform` is DOM-only, while `translateText()` still returns raw engine output.
+- The status card keeps requested runtime preferences distinct from the resolved runtime verdict.
 - Restore resets the DOM, and Arabic flips the translated roots to RTL.
 
 The Vite server sends the COOP/COEP headers needed for WebGPU `SharedArrayBuffer` support during local development.

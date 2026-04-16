@@ -132,6 +132,24 @@ describe("4.1 — engine singleton + multi-instance", () => {
     expect(getEngineIdentity(a)).toBeDefined()
   })
 
+  it("two same-key non-default cores still share one runtime", async () => {
+    setupPipelineMock()
+    const config = {
+      engine: {
+        device: "wasm" as const,
+        modelId: "onnx-community/gemma-3-270m-it-ONNX",
+        dtype: "fp32" as const,
+      },
+    }
+    const a = createBabulfish(config)
+    const b = createBabulfish(config)
+
+    await Promise.all([a.loadModel(), b.loadModel()])
+
+    expect(getEngineIdentity(a)).toBe(getEngineIdentity(b))
+    expect(mockLoadPipeline).toHaveBeenCalledTimes(1)
+  })
+
   it("reset helper clears the shared engine identity", async () => {
     setupPipelineMock()
     const first = createBabulfish()

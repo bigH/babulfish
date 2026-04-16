@@ -22,9 +22,13 @@ const homepageMarkers = [
   "React Boundary Proof",
   "useTranslator()",
   "useTranslateDOM()",
-  "WebGPU",
-  "Translation Path",
-  "Default Button",
+  "Selected Device",
+  "Selected Model",
+  "Selected Quantization",
+  "Capabilities",
+  "Enablement",
+  "Resolved Runtime",
+  "Verdict",
   "Model",
   "Translation",
   "Hook Progress",
@@ -40,6 +44,8 @@ const homepageMarkers = [
   "Client-side translation, no server detour",
   "The stock React surface stays small",
 ]
+
+const serverMode = process.argv.includes("--dev") ? "dev" : "start"
 
 let logs = ""
 
@@ -152,13 +158,14 @@ async function main() {
   const url = `http://${host}:${port}/`
   const child = spawn(
     process.execPath,
-    [nextBin, "start", "--hostname", host, "--port", String(port)],
+    [nextBin, serverMode, "--hostname", host, "--port", String(port)],
     {
       cwd: demoDir,
       env: {
         ...process.env,
         HOSTNAME: host,
         PORT: String(port),
+        NEXT_TELEMETRY_DISABLED: "1",
       },
       stdio: ["ignore", "pipe", "pipe"],
     },
@@ -202,7 +209,24 @@ async function main() {
       )
     }
 
-    console.log(`Demo smoke passed for ${url}`)
+    const canaryUrl = `${url}?device=wasm&modelId=onnx-community%2Fgemma-3-270m-it-ONNX&dtype=fp32`
+    const canaryResponse = await fetch(canaryUrl, {
+      signal: AbortSignal.timeout(2_000),
+    })
+    const canaryHtml = await canaryResponse.text()
+    const missingCanaryMarkers = [
+      "Gemma 3 270M canary (onnx-community/gemma-3-270m-it-ONNX)",
+      "WASM (wasm)",
+      "FP32 (fp32)",
+    ].filter((marker) => !canaryHtml.includes(marker))
+
+    if (missingCanaryMarkers.length > 0) {
+      throw new Error(
+        `Demo runtime deep link is missing expected markers: ${missingCanaryMarkers.join(", ")}.${formatLogs()}`,
+      )
+    }
+
+    console.log(`Demo smoke passed for ${url} (${serverMode})`)
   } finally {
     process.removeListener("SIGINT", handleSigint)
     process.removeListener("SIGTERM", handleSigterm)

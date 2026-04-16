@@ -6,7 +6,7 @@ This package is not published to npm, and there is no published web-component pa
 ## What it proves
 
 - Two custom elements render into separate shadow roots while sharing one translation engine.
-- The host page drives both instances through the `target-lang` attribute and the public `restore()` method.
+- The host page drives both instances through shared runtime controls plus the `target-lang` attribute and public `restore()` method.
 - Each element emits `babulfish-status` with the current core `Snapshot`.
 - The host controls interact without reaching through the shadow boundary to mutate translated content directly.
 
@@ -14,12 +14,15 @@ This package is not published to npm, and there is no published web-component pa
 
 ### `<babulfish-translator>`
 
-Renders a small translation UI into its own shadow root: language select, restore button, load-model button, translated content, and status line.
+Renders a small translation UI into its own shadow root: language select, restore button, load-model button, translated content, and a status line that includes requested vs resolved runtime.
 
 ### Attribute
 
 | Attribute | Type | Description |
 |---|---|---|
+| `device` | `"auto" \| "wasm" \| "webgpu"` | Requested runtime preference for the demo-local catalog selection |
+| `model-id` | `string` | Requested demo-local model id |
+| `dtype` | `"q4" \| "q8" \| "fp16" \| "fp32"` | Requested quantization / core `dtype` |
 | `target-lang` | `string` | When the model is ready, setting this triggers `core.translateTo(value)` |
 
 ### Event
@@ -34,7 +37,7 @@ Renders a small translation UI into its own shadow root: language select, restor
 |---|---|---|
 | `restore()` | `() => void` | Clears `target-lang`, calls `core.restore()`, and resets the local select |
 
-This element contract is demo code, not package contract.
+Changing `device`, `model-id`, or `dtype` recreates the element's core instance after a restore. Matching normalized selections keep shared-runtime behavior possible; divergent normalized selections can split runtime keys. This element contract is demo code, not package contract.
 
 ## Run
 

@@ -40,7 +40,7 @@ export function appendStatusEntry(
   entry.appendChild(label)
 
   const text = doc.createTextNode(
-    ` model=${snapshot.model.status} translation=${snapshot.translation.status} lang=${snapshot.currentLanguage ?? "\u2014"}`,
+    ` model=${snapshot.model.status} translation=${snapshot.translation.status} lang=${snapshot.currentLanguage ?? "\u2014"} runtime=${snapshot.enablement.verdict.resolvedDevice ?? "none"} verdict=${snapshot.enablement.verdict.outcome}`,
   )
   entry.appendChild(text)
 
@@ -67,13 +67,13 @@ export function restoreTranslators(
 
 export function observeHostDocument(
   body: HTMLElement,
-  eventLog: HTMLElement,
+  ignoredRoots: readonly HTMLElement[],
   logger: Pick<Console, "warn"> = console,
 ): MutationObserver {
   const observer = new MutationObserver((mutations) => {
     for (const mutation of mutations) {
       const target = mutation.target as Node
-      if (eventLog.contains(target)) continue
+      if (ignoredRoots.some((root) => root === target || root.contains(target))) continue
       logger.warn("[host-doc] unexpected mutation outside shadow roots:", mutation.type, target)
     }
   })

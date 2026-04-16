@@ -6,9 +6,11 @@ This package is not published to npm. It exists to prove the current React bound
 ## What it proves
 
 - `TranslatorProvider` scopes the app once.
+- A small runtime control surface outside `[data-demo-root]` remounts the provider with the exact selected `engine` config.
 - `useTranslator()` and `useTranslateDOM()` expose the live provider state shown in the status panel.
 - The fixed globe button is the shipped stock `<TranslateButton />`.
 - Only `[data-demo-root]` is inside `dom.roots`; the control panel stays outside the translated scope.
+- The status panel keeps requested model/device/quantization separate from the resolved runtime verdict.
 - Restore returns the root to original content, and Arabic flips that root to RTL.
 
 ## Run

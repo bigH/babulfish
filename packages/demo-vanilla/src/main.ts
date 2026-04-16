@@ -1,64 +1,25 @@
-import { createBabulfish, type ModelDType, type Snapshot } from "@babulfish/core"
+import type { BabulfishCore, Snapshot } from "@babulfish/core"
 import "@babulfish/styles/css"
 
-const STRUCTURED_SOURCE = [
-  "Structured text keeps inline emphasis, links, and line breaks",
-  "while code stays opaque.",
-].join("\n")
-const STRUCTURED_DOM_SUFFIX = " [dom-structured]"
-const DEMO_ROOTS = [
-  { label: "copy", selector: "[data-demo-copy]" },
-  { label: "aside", selector: "[data-demo-aside]" },
-] as const
+import {
+  getDTypeLabel,
+  getDeviceLabel,
+  mergeDemoRuntimeSelection,
+  mergeDemoRuntimeSearchParams,
+  DEMO_MODEL_PRESETS,
+  DEVICE_OPTIONS,
+  DTYPE_OPTIONS,
+  type DemoRuntimeSelection,
+  type ResolvedDemoRuntimeSelection,
+} from "../../demo-shared/src/runtime-selection.js"
+import {
+  bootstrapVanillaDemoRuntime,
+  createVanillaDemoCore,
+  DEMO_ROOTS,
+  STRUCTURED_SOURCE,
+} from "./runtime-demo.js"
 
 const searchParams = new URLSearchParams(window.location.search)
-
-function resolveRequestedDevice(): "auto" | "wasm" | "webgpu" {
-  const requestedDevice = searchParams.get("device")
-  return requestedDevice === "wasm" || requestedDevice === "webgpu" ? requestedDevice : "auto"
-}
-
-function resolveRequestedModelId(): string | undefined {
-  const modelId = searchParams.get("modelId")?.trim()
-  return modelId ? modelId : undefined
-}
-
-function resolveRequestedDType(): ModelDType | undefined {
-  const dtype = searchParams.get("dtype")
-  return dtype === "q4" || dtype === "q8" || dtype === "fp16" || dtype === "fp32"
-    ? dtype
-    : undefined
-}
-
-function shouldAutoloadModel(): boolean {
-  return searchParams.get("autoload") === "1"
-}
-
-const requestedDevice = resolveRequestedDevice()
-const requestedModelId = resolveRequestedModelId()
-const requestedDType = resolveRequestedDType()
-const autoloadModel = shouldAutoloadModel()
-
-const core = createBabulfish({
-  engine: {
-    device: requestedDevice,
-    ...(requestedModelId ? { modelId: requestedModelId } : {}),
-    ...(requestedDType ? { dtype: requestedDType } : {}),
-  },
-  dom: {
-    roots: DEMO_ROOTS.map(({ selector }) => selector),
-    structuredText: { selector: "[data-structured]" },
-    preserve: {
-      matchers: ["babulfish", "TranslateGemma", "WebGPU"],
-    },
-    shouldSkip: (text, defaultSkip) => defaultSkip(text) || text.startsWith("SKU-"),
-    outputTransform: (translated, context) => (
-      context.kind === "structuredText"
-        ? `${translated}${STRUCTURED_DOM_SUFFIX}`
-        : translated
-    ),
-  },
-})
 
 function requireElement<T extends new (...args: any[]) => HTMLElement>(
   id: string,
@@ -84,17 +45,6 @@ function requireRoot(selector: string): HTMLElement {
 
 function toPercent(progress: number): string {
   return `${Math.round(progress * 100)}%`
-}
-
-const translatedRoots = DEMO_ROOTS.map(({ label, selector }) => ({
-  label,
-  root: requireRoot(selector),
-}))
-
-function formatDirections(): string {
-  return translatedRoots
-    .map(({ label, root }) => `${label}: ${root.getAttribute("dir") ?? "none"}`)
-    .join(" / ")
 }
 
 function modelStatusText(model: Snapshot["model"]): string {
@@ -127,14 +77,14 @@ function capabilitiesText(snapshot: Snapshot): string {
 
   const memoryText =
     capabilities.approxDeviceMemoryGiB === null
-      ? "memory: unknown"
-      : `memory: ~${capabilities.approxDeviceMemoryGiB} GiB`
+      ? "Memory unknown"
+      : `~${capabilities.approxDeviceMemoryGiB} GiB`
 
   return [
-    capabilities.hasWebGPU ? "webgpu: yes" : "webgpu: no",
-    capabilities.isMobile ? "mobile: yes" : "mobile: no",
+    capabilities.hasWebGPU ? "WebGPU yes" : "WebGPU no",
+    capabilities.isMobile ? "Mobile yes" : "Mobile no",
     memoryText,
-    capabilities.crossOriginIsolated ? "coi: yes" : "coi: no",
+    capabilities.crossOriginIsolated ? "COI yes" : "COI no",
   ].join(" / ")
 }
 
@@ -143,6 +93,52 @@ function enablementText(snapshot: Snapshot): string {
   return [enablement.status, enablement.verdict.outcome].join(" / ")
 }
 
+const translatedRoots = DEMO_ROOTS.map(({ label, selector }) => ({
+  label,
+  root: requireRoot(selector),
+}))
+
+function formatDirections(): string {
+  return translatedRoots
+    .map(({ label, root }) => `${label}: ${root.getAttribute("dir") ?? "none"}`)
+    .join(" / ")
+}
+
+function formatRequestedDevice(requested: string | null, fallback: DemoRuntimeSelection["device"]): string {
+  if (!requested) {
+    return getDeviceLabel(fallback)
+  }
+
+  return requested === "auto" || requested === "wasm" || requested === "webgpu"
+    ? getDeviceLabel(requested)
+    : requested
+}
+
+function formatRequestedDType(requested: string | null, fallback: DemoRuntimeSelection["dtype"]): string {
+  if (!requested) {
+    return getDTypeLabel(fallback)
+  }
+
+  return requested === "q4" || requested === "q8" || requested === "fp16" || requested === "fp32"
+    ? getDTypeLabel(requested)
+    : requested
+}
+
+function formatRequestedModel(modelId: string | null, fallbackModelId: string): string {
+  if (!modelId) {
+    return fallbackModelId
+  }
+
+  return modelId
+}
+
+const runtimeDevice = requireElement("runtime-device", HTMLSelectElement)
+const runtimeModel = requireElement("runtime-model", HTMLSelectElement)
+const runtimeDType = requireElement("runtime-dtype", HTMLSelectElement)
+const runtimeAutoload = requireElement("runtime-autoload", HTMLInputElement)
+const runtimePreset = requireElement("runtime-preset", HTMLElement)
+const runtimeMessage = requireElement("runtime-message", HTMLElement)
+const runtimeConstraints = requireElement("runtime-constraints", HTMLElement)
 const select = requireElement("language", HTMLSelectElement)
 const restoreBtn = requireElement("restore", HTMLButtonElement)
 const loadBtn = requireElement("load-model", HTMLButtonElement)
@@ -160,6 +156,33 @@ const statusDirection = requireElement("status-direction", HTMLElement)
 const translateTextBtn = requireElement("translate-text", HTMLButtonElement)
 const statusRawText = requireElement("status-raw-text", HTMLOutputElement)
 
+const initialDemoRuntime = bootstrapVanillaDemoRuntime(searchParams)
+
+let runtimeState = initialDemoRuntime.runtimeState
+let core = initialDemoRuntime.core
+let unsubscribe = core.subscribe(render)
+
+for (const option of DEVICE_OPTIONS) {
+  const el = document.createElement("option")
+  el.value = option.value
+  el.textContent = option.label
+  runtimeDevice.appendChild(el)
+}
+
+for (const preset of DEMO_MODEL_PRESETS) {
+  const el = document.createElement("option")
+  el.value = preset.modelId
+  el.textContent = preset.modelId
+  runtimeModel.appendChild(el)
+}
+
+for (const option of DTYPE_OPTIONS) {
+  const el = document.createElement("option")
+  el.value = option.value
+  el.textContent = option.label
+  runtimeDType.appendChild(el)
+}
+
 for (const lang of core.languages) {
   const opt = document.createElement("option")
   opt.value = lang.code
@@ -167,43 +190,186 @@ for (const lang of core.languages) {
   select.appendChild(opt)
 }
 
+function updateRuntimeMessage(): void {
+  runtimePreset.textContent = runtimeState.preset.label
+
+  const repairText = runtimeState.repairs.map((repair) => repair.message).join(" ")
+  runtimeMessage.textContent =
+    repairText || runtimeState.preset.note || runtimeState.preset.description
+  runtimeConstraints.textContent = [
+    `Allowed quantization: ${runtimeState.preset.allowedDTypes.map(getDTypeLabel).join(" / ")}.`,
+    `Allowed devices: ${runtimeState.preset.allowedDevices.map(getDeviceLabel).join(" / ")}.`,
+  ].join(" ")
+}
+
+function setRuntimeControlsDisabled(disabled: boolean): void {
+  runtimeDevice.disabled = disabled
+  runtimeModel.disabled = disabled
+  runtimeDType.disabled = disabled
+  runtimeAutoload.disabled = disabled
+}
+
+function formatResolvedRuntime(snapshot: Snapshot): string {
+  const { verdict } = snapshot.enablement
+  const resolvedDevice =
+    verdict.outcome === "denied"
+      ? "Denied"
+      : verdict.resolvedDevice === null
+        ? "Pending"
+        : getDeviceLabel(verdict.resolvedDevice)
+
+  return [
+    resolvedDevice,
+    runtimeState.selection.modelId,
+    getDTypeLabel(runtimeState.selection.dtype),
+  ].join(" / ")
+}
+
+function updateRuntimeControls(): void {
+  const { preset, selection } = runtimeState
+
+  runtimeDevice.value = selection.device
+  runtimeModel.value = selection.modelId
+  runtimeDType.value = selection.dtype
+  runtimeAutoload.checked = runtimeState.autoload
+
+  for (const option of Array.from(runtimeDevice.options)) {
+    const value = option.value as DemoRuntimeSelection["device"]
+    const allowed = preset.allowedDevices.includes(value)
+    option.disabled = !allowed
+    option.textContent = allowed
+      ? getDeviceLabel(value)
+      : `${getDeviceLabel(value)} (not verified for this preset)`
+  }
+
+  for (const option of Array.from(runtimeDType.options)) {
+    const value = option.value as DemoRuntimeSelection["dtype"]
+    const allowed = preset.allowedDTypes.includes(value)
+    option.disabled = !allowed
+    option.textContent = allowed
+      ? getDTypeLabel(value)
+      : `${getDTypeLabel(value)} (not verified for this preset)`
+  }
+
+  updateRuntimeMessage()
+}
+
+function syncUrl(): void {
+  const params = mergeDemoRuntimeSearchParams(
+    new URLSearchParams(window.location.search),
+    runtimeState,
+  )
+  const nextSearch = params.toString()
+  const nextUrl =
+    `${window.location.pathname}${nextSearch ? `?${nextSearch}` : ""}${window.location.hash}`
+  window.history.replaceState(null, "", nextUrl)
+}
+
 function resetRawTextProof(): void {
   statusRawText.textContent = "Not run"
 }
 
-function render(s: Snapshot): void {
-  statusRequestedDevice.textContent = requestedDevice
-  statusRequestedModel.textContent = requestedModelId ?? "default"
-  statusRequestedDType.textContent = requestedDType ?? "default"
-  statusCapabilities.textContent = capabilitiesText(s)
-  statusEnablement.textContent = enablementText(s)
-  statusVerdict.textContent = s.enablement.verdict.reason
-  statusRuntime.textContent = s.enablement.verdict.resolvedDevice ?? "none"
-  statusModel.textContent = modelStatusText(s.model)
-  statusTranslation.textContent = translationStatusText(s.translation)
-  statusLanguage.textContent = s.currentLanguage ?? "Original"
+function render(snapshot: Snapshot): void {
+  statusRequestedDevice.textContent = formatRequestedDevice(
+    runtimeState.requested.device,
+    runtimeState.preset.defaultDevice,
+  )
+  statusRequestedModel.textContent = formatRequestedModel(
+    runtimeState.requested.modelId,
+    runtimeState.preset.modelId,
+  )
+  statusRequestedDType.textContent = formatRequestedDType(
+    runtimeState.requested.dtype,
+    runtimeState.preset.defaultDType,
+  )
+  statusCapabilities.textContent = capabilitiesText(snapshot)
+  statusEnablement.textContent = enablementText(snapshot)
+  statusVerdict.textContent = snapshot.enablement.verdict.reason
+  statusRuntime.textContent = formatResolvedRuntime(snapshot)
+  statusModel.textContent = modelStatusText(snapshot.model)
+  statusTranslation.textContent = translationStatusText(snapshot.translation)
+  statusLanguage.textContent = snapshot.currentLanguage ?? "Original"
   statusDirection.textContent = formatDirections()
-  select.value = s.currentLanguage ?? ""
+  select.value = snapshot.currentLanguage ?? ""
 
-  const modelReady = s.model.status === "ready"
-  const translating = s.translation.status === "translating"
+  const modelReady = snapshot.model.status === "ready"
+  const translating = snapshot.translation.status === "translating"
+  const runtimeBusy = snapshot.model.status === "downloading" || translating
 
+  setRuntimeControlsDisabled(runtimeBusy)
   select.disabled = !modelReady || translating
-  restoreBtn.disabled = !modelReady || s.currentLanguage === null
-  loadBtn.disabled = s.model.status !== "idle"
-  translateTextBtn.disabled = !modelReady || translating || (s.currentLanguage ?? "") === ""
+  restoreBtn.disabled = !modelReady || snapshot.currentLanguage === null
+  loadBtn.disabled = snapshot.model.status !== "idle"
+  translateTextBtn.disabled =
+    !modelReady || translating || (snapshot.currentLanguage ?? "") === ""
 }
 
+function attachCore(nextRuntimeState: ResolvedDemoRuntimeSelection): void {
+  unsubscribe()
+  core.abort()
+  core.restore()
+  void core.dispose().catch(() => {})
+
+  runtimeState = nextRuntimeState
+  syncUrl()
+  updateRuntimeControls()
+  resetRawTextProof()
+
+  core = createVanillaDemoCore(runtimeState.selection)
+  unsubscribe = core.subscribe(render)
+  render(core.snapshot)
+
+  if (runtimeState.autoload) {
+    void core.loadModel().catch(() => {})
+  }
+}
+
+function updateRuntimeSelection(
+  patch: Partial<DemoRuntimeSelection>,
+): void {
+  attachCore(mergeDemoRuntimeSelection(runtimeState, patch))
+}
+
+function updateAutoloadMode(autoload: boolean): void {
+  runtimeState = mergeDemoRuntimeSelection(runtimeState, { autoload })
+  syncUrl()
+  updateRuntimeControls()
+  render(core.snapshot)
+
+  if (autoload && core.snapshot.model.status === "idle") {
+    void core.loadModel().catch(() => {})
+  }
+}
+
+updateRuntimeControls()
 render(core.snapshot)
-core.subscribe(render)
+syncUrl()
 
 loadBtn.addEventListener("click", () => {
   void core.loadModel().catch(() => {})
 })
 
-if (autoloadModel) {
-  void core.loadModel().catch(() => {})
-}
+runtimeDevice.addEventListener("change", () => {
+  updateRuntimeSelection({
+    device: runtimeDevice.value as DemoRuntimeSelection["device"],
+  })
+})
+
+runtimeModel.addEventListener("change", () => {
+  updateRuntimeSelection({
+    modelId: runtimeModel.value,
+  })
+})
+
+runtimeDType.addEventListener("change", () => {
+  updateRuntimeSelection({
+    dtype: runtimeDType.value as DemoRuntimeSelection["dtype"],
+  })
+})
+
+runtimeAutoload.addEventListener("change", () => {
+  updateAutoloadMode(runtimeAutoload.checked)
+})
 
 select.addEventListener("change", () => {
   const code = select.value
@@ -229,3 +395,7 @@ translateTextBtn.addEventListener("click", async () => {
   const translated = await core.translateText(STRUCTURED_SOURCE, targetLang)
   statusRawText.textContent = translated
 })
+
+if (runtimeState.autoload) {
+  void core.loadModel().catch(() => {})
+}

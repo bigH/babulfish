@@ -1,0 +1,206 @@
+// @vitest-environment jsdom
+
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+
+type MockCore = {
+  readonly snapshot: {
+    readonly model: { readonly status: "idle" }
+    readonly translation: { readonly status: "idle" }
+    readonly currentLanguage: null
+    readonly capabilities: {
+      readonly ready: true
+      readonly hasWebGPU: boolean
+      readonly isMobile: boolean
+      readonly approxDeviceMemoryGiB: number
+      readonly crossOriginIsolated: boolean
+    }
+    readonly enablement: {
+      readonly status: "ready"
+      readonly modelProfile: null
+      readonly inference: null
+      readonly verdict: {
+        readonly outcome: "gpu-preferred" | "wasm-only"
+        readonly resolvedDevice: "webgpu" | "wasm"
+        readonly reason: string
+      }
+    }
+  }
+  readonly subscribe: ReturnType<typeof vi.fn>
+  readonly loadModel: ReturnType<typeof vi.fn>
+  readonly translateTo: ReturnType<typeof vi.fn>
+  readonly translateText: ReturnType<typeof vi.fn>
+  readonly restore: ReturnType<typeof vi.fn>
+  readonly abort: ReturnType<typeof vi.fn>
+  readonly dispose: ReturnType<typeof vi.fn>
+  readonly languages: readonly { readonly code: string; readonly label: string }[]
+}
+
+const createdCores: MockCore[] = []
+const mockCreateBabulfish = vi.fn<(config?: unknown) => MockCore>()
+
+vi.mock("@babulfish/core", () => ({
+  createBabulfish: (config?: unknown) => mockCreateBabulfish(config),
+}))
+
+vi.mock("@babulfish/styles/css", () => ({}))
+
+function setDom(): void {
+  document.body.innerHTML = `
+    <select id="runtime-device"></select>
+    <select id="runtime-model"></select>
+    <select id="runtime-dtype"></select>
+    <input id="runtime-autoload" type="checkbox" />
+    <p id="runtime-preset"></p>
+    <p id="runtime-message"></p>
+    <p id="runtime-constraints"></p>
+    <select id="language"><option value="">Choose language…</option></select>
+    <button id="restore" type="button"></button>
+    <button id="load-model" type="button"></button>
+    <div id="status-requested-device"></div>
+    <div id="status-requested-model"></div>
+    <div id="status-requested-dtype"></div>
+    <div id="status-capabilities"></div>
+    <div id="status-enablement"></div>
+    <div id="status-verdict"></div>
+    <div id="status-runtime"></div>
+    <div id="status-model"></div>
+    <div id="status-translation"></div>
+    <div id="status-language"></div>
+    <div id="status-direction"></div>
+    <button id="translate-text" type="button"></button>
+    <output id="status-raw-text"></output>
+    <article data-demo-copy></article>
+    <aside data-demo-aside></aside>
+    <div data-structured></div>
+  `
+}
+
+function createMockCore(config?: {
+  readonly engine?: { readonly device?: "auto" | "wasm" | "webgpu" }
+}): MockCore {
+  const resolvedDevice = config?.engine?.device === "webgpu" ? "webgpu" : "wasm"
+  const core: MockCore = {
+    snapshot: {
+      model: { status: "idle" as const },
+      translation: { status: "idle" as const },
+      currentLanguage: null,
+      capabilities: {
+        ready: true as const,
+        hasWebGPU: true,
+        isMobile: false,
+        approxDeviceMemoryGiB: 16,
+        crossOriginIsolated: true,
+      },
+      enablement: {
+        status: "ready" as const,
+        modelProfile: null,
+        inference: null,
+        verdict: {
+          outcome: resolvedDevice === "webgpu" ? "gpu-preferred" as const : "wasm-only" as const,
+          resolvedDevice: resolvedDevice as "webgpu" | "wasm",
+          reason: "mock ready",
+        },
+      },
+    },
+    subscribe: vi.fn(() => vi.fn()),
+    loadModel: vi.fn(() => Promise.resolve()),
+    translateTo: vi.fn(() => Promise.resolve()),
+    translateText: vi.fn(() => Promise.resolve("translated")),
+    restore: vi.fn(),
+    abort: vi.fn(),
+    dispose: vi.fn(() => Promise.resolve()),
+    languages: [{ code: "es", label: "Spanish" }],
+  }
+
+  createdCores.push(core)
+  return core
+}
+
+describe("demo-vanilla main", () => {
+  beforeEach(() => {
+    vi.resetModules()
+    createdCores.length = 0
+    mockCreateBabulfish.mockReset()
+    mockCreateBabulfish.mockImplementation((config) =>
+      createMockCore(config as { readonly engine?: { readonly device?: "auto" | "wasm" | "webgpu" } }),
+    )
+    setDom()
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    document.body.innerHTML = ""
+  })
+
+  it("shows default status values without preset suffixes", async () => {
+    window.history.replaceState(null, "", "/")
+
+    await import("./main.js")
+
+    expect(document.getElementById("status-requested-device")?.textContent).toBe("Auto")
+    expect(document.getElementById("status-requested-model")?.textContent).toBe(
+      "onnx-community/translategemma-text-4b-it-ONNX",
+    )
+    expect(document.getElementById("status-requested-dtype")?.textContent).toBe("Q4")
+  })
+
+  it("canonicalizes unsupported runtime params before booting the demo core", async () => {
+    window.history.replaceState(
+      null,
+      "",
+      "/?foo=bar&device=webgpu&modelId=onnx-community/gemma-3-270m-it-ONNX&dtype=q4",
+    )
+
+    await import("./main.js")
+
+    expect(mockCreateBabulfish).toHaveBeenCalledWith({
+      engine: {
+        device: "wasm",
+        modelId: "onnx-community/gemma-3-270m-it-ONNX",
+        dtype: "fp32",
+      },
+      dom: expect.any(Object),
+    })
+    expect(window.location.search).toBe(
+      "?foo=bar&device=wasm&modelId=onnx-community%2Fgemma-3-270m-it-ONNX&dtype=fp32",
+    )
+    expect(document.getElementById("runtime-message")?.textContent).toContain(
+      "only verified for WASM",
+    )
+    expect(document.getElementById("status-requested-device")?.textContent).toBe("WebGPU")
+    expect(document.getElementById("status-requested-model")?.textContent).toBe(
+      "onnx-community/gemma-3-270m-it-ONNX",
+    )
+    expect(document.getElementById("status-requested-dtype")?.textContent).toBe("Q4")
+  })
+
+  it("recreates the demo core with the normalized runtime selection when the UI changes", async () => {
+    window.history.replaceState(null, "", "/")
+
+    await import("./main.js")
+
+    const runtimeModel = document.getElementById("runtime-model")
+    if (!(runtimeModel instanceof HTMLSelectElement)) {
+      throw new Error("Expected #runtime-model select")
+    }
+
+    runtimeModel.value = "onnx-community/gemma-3-270m-it-ONNX"
+    runtimeModel.dispatchEvent(new Event("change", { bubbles: true }))
+
+    expect(mockCreateBabulfish).toHaveBeenCalledTimes(2)
+    expect(createdCores[0]?.abort).toHaveBeenCalledTimes(1)
+    expect(createdCores[0]?.restore).toHaveBeenCalledTimes(1)
+    expect(createdCores[0]?.dispose).toHaveBeenCalledTimes(1)
+    expect(mockCreateBabulfish.mock.calls[1]?.[0]).toEqual({
+      engine: {
+        device: "wasm",
+        modelId: "onnx-community/gemma-3-270m-it-ONNX",
+        dtype: "fp32",
+      },
+      dom: expect.any(Object),
+    })
+    expect(window.location.search).toBe(
+      "?device=wasm&modelId=onnx-community%2Fgemma-3-270m-it-ONNX&dtype=fp32",
+    )
+  })
+})

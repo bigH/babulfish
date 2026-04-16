@@ -39,8 +39,11 @@ function createSnapshot(overrides: SnapshotOverrides = {}): Snapshot {
   }
 }
 
-const { state, createMockCore } = vi.hoisted(() => {
-  const state = { listener: null as SnapshotListener | null }
+const { state, createMockCore, mockCreateBabulfish } = vi.hoisted(() => {
+  const state = {
+    listener: null as SnapshotListener | null,
+    latestMock: null as any,
+  }
 
   const createMockCore = () => ({
     snapshot: createSnapshot(),
@@ -59,16 +62,17 @@ const { state, createMockCore } = vi.hoisted(() => {
     ],
   })
 
-  return { state, createMockCore }
+  const mockCreateBabulfish = vi.fn(() => {
+    const mock = createMockCore()
+    state.latestMock = mock
+    return mock
+  })
+
+  return { state, createMockCore, mockCreateBabulfish }
 })
 
-let latestMock: ReturnType<typeof createMockCore>
-
 vi.mock("@babulfish/core", () => ({
-  createBabulfish: vi.fn(() => {
-    latestMock = createMockCore()
-    return latestMock
-  }),
+  createBabulfish: mockCreateBabulfish,
 }))
 
 import "../babulfish-translator.js"
@@ -78,6 +82,7 @@ describe("babulfish-translator", () => {
 
   beforeEach(() => {
     state.listener = null
+    mockCreateBabulfish.mockClear()
     el = document.createElement("babulfish-translator")
   })
 
@@ -136,14 +141,14 @@ describe("babulfish-translator", () => {
 
   it("calls dispose on disconnect", () => {
     connect()
-    const mock = latestMock
+    const mock = state.latestMock!
     el.remove()
     expect(mock.dispose).toHaveBeenCalledTimes(1)
   })
 
   it("exposes a public restore() method that delegates to core", () => {
     const shadow = connect()
-    const mock = latestMock
+    const mock = state.latestMock!
     el.setAttribute("target-lang", "es")
     ;(shadow.querySelector(".language") as HTMLSelectElement).value = "es"
     ;(el as unknown as { restore(): void }).restore()
@@ -155,13 +160,17 @@ describe("babulfish-translator", () => {
   it("updates status text from snapshot", () => {
     const shadow = connect()
     const statusEl = shadow.querySelector(".status-text") as HTMLElement
-    expect(statusEl.textContent).toBe("Model: Not loaded")
+    expect(statusEl.textContent).toBe(
+      "Model: Not loaded | requested auto/q4 | resolved none",
+    )
 
     state.listener?.(createSnapshot({
       model: { status: "downloading", progress: 0.42 },
       translation: { status: "idle" },
     }))
-    expect(statusEl.textContent).toBe("Model: Downloading (42%)")
+    expect(statusEl.textContent).toBe(
+      "Model: Downloading (42%) | requested auto/q4 | resolved none",
+    )
   })
 
   it("disables controls appropriately based on model state", () => {
@@ -194,7 +203,7 @@ describe("babulfish-translator", () => {
 
   it("does not translate from target-lang before the model is ready", () => {
     connect()
-    const mock = latestMock
+    const mock = state.latestMock!
 
     el.setAttribute("target-lang", "es")
 
@@ -203,11 +212,47 @@ describe("babulfish-translator", () => {
 
   it("translates from target-lang once the model is ready", () => {
     connect()
-    const mock = latestMock
+    const mock = state.latestMock!
     mock.snapshot = createSnapshot({ model: { status: "ready" } })
 
     el.setAttribute("target-lang", "fr")
 
     expect(mock.translateTo).toHaveBeenCalledWith("fr")
+  })
+
+  it("passes runtime attrs into createBabulfish()", () => {
+    el.setAttribute("device", "wasm")
+    el.setAttribute("model-id", "onnx-community/gemma-3-270m-it-ONNX")
+    el.setAttribute("dtype", "fp32")
+
+    connect()
+
+    expect(mockCreateBabulfish).toHaveBeenCalledWith({
+      engine: {
+        device: "wasm",
+        modelId: "onnx-community/gemma-3-270m-it-ONNX",
+        dtype: "fp32",
+      },
+      dom: expect.any(Object),
+    })
+  })
+
+  it("recreates the core when runtime attrs change", () => {
+    connect()
+    const firstMock = state.latestMock!
+
+    el.setAttribute("model-id", "onnx-community/gemma-3-270m-it-ONNX")
+    const secondCall = mockCreateBabulfish.mock.calls[1] as [unknown] | undefined
+
+    expect(mockCreateBabulfish).toHaveBeenCalledTimes(2)
+    expect(firstMock.restore).toHaveBeenCalledTimes(1)
+    expect(firstMock.dispose).toHaveBeenCalledTimes(1)
+    expect(secondCall?.[0]).toMatchObject({
+      engine: {
+        device: "wasm",
+        modelId: "onnx-community/gemma-3-270m-it-ONNX",
+        dtype: "fp32",
+      },
+    })
   })
 })

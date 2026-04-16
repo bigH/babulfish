@@ -8,6 +8,16 @@ import {
   type TranslationState,
 } from "@babulfish/react"
 
+import {
+  DEMO_MODEL_PRESETS,
+  DEVICE_OPTIONS,
+  DTYPE_OPTIONS,
+  getDTypeLabel,
+  getDeviceLabel,
+  type DemoRuntimeSelection,
+} from "../../demo-shared/src/runtime-selection.js"
+import { useRuntimeSelectionContext } from "./runtime-selection-context"
+
 const CHECKING_LABEL = "Checking"
 const DEMO_ROOT_SELECTOR = "[data-demo-root]"
 
@@ -35,6 +45,10 @@ const ACTION_BUTTON_CLASS_NAMES = {
     "rounded-full border border-gray-300 px-4 py-2 text-sm font-medium text-gray-900 disabled:cursor-not-allowed disabled:opacity-50",
 } as const
 
+const CONTROL_LABEL_CLASS_NAME = "grid gap-2 text-sm font-medium text-gray-700"
+const CONTROL_SELECT_CLASS_NAME =
+  "rounded-2xl border border-gray-300 bg-white px-4 py-3 text-sm text-gray-900 disabled:cursor-not-allowed disabled:bg-gray-100"
+
 const TRANSLATION_ACTIONS: ReadonlyArray<TranslationAction> = [
   { label: "Translate to Spanish", language: "es-ES" },
   { label: "Translate to Arabic (RTL)", language: "ar" },
@@ -50,6 +64,33 @@ function formatCapabilityStatus(
 ): string {
   if (!capabilitiesReady) return CHECKING_LABEL
   return value
+}
+
+function formatSelectedDevice(device: DemoRuntimeSelection["device"]): string {
+  return `${getDeviceLabel(device)} (${device})`
+}
+
+function formatSelectedDType(dtype: DemoRuntimeSelection["dtype"]): string {
+  return `${getDTypeLabel(dtype)} (${dtype})`
+}
+
+function formatSelectedModel(label: string, modelId: string): string {
+  return `${label} (${modelId})`
+}
+
+function formatResolvedRuntime(
+  enablementStatus: ReturnType<typeof useTranslator>["enablement"]["status"],
+  resolvedDevice: DemoRuntimeSelection["device"] | null,
+): string {
+  switch (enablementStatus) {
+    case "idle":
+      return "Not assessed yet"
+    case "assessing":
+      return "Assessing current browser"
+    case "ready":
+    case "error":
+      return resolvedDevice === null ? "Unavailable" : getDeviceLabel(resolvedDevice)
+  }
 }
 
 function formatModelStatus(model: ModelState): string {
@@ -84,14 +125,14 @@ export function ModelStatus() {
     model,
     translation,
     currentLanguage,
+    capabilities,
+    enablement,
     capabilitiesReady,
-    hasWebGPU,
-    canTranslate,
     device,
-    isMobile,
     loadModel,
   } = useTranslator()
   const { progress, translatePage, restorePage } = useTranslateDOM()
+  const { runtimeState, updateRuntimeSelection } = useRuntimeSelectionContext()
   const [rootDirection, setRootDirection] = useState("none")
 
   useEffect(() => {
@@ -100,11 +141,20 @@ export function ModelStatus() {
 
   const modelReady = model.status === "ready"
   const translating = translation.status === "translating"
+  const runtimeBusy = model.status === "downloading" || translating
   const canTranslatePage = modelReady && !translating
   const canRestorePage = modelReady && currentLanguage !== null && !translating
-  const translationPath =
-    !canTranslate ? "Unavailable" : device === "webgpu" ? "WebGPU" : "WASM fallback"
-  const defaultButtonStatus = isMobile ? "Desktop only for now" : canTranslate ? "Available" : "Unavailable"
+  const capabilitiesText = !capabilitiesReady
+    ? CHECKING_LABEL
+    : [
+        capabilities.hasWebGPU ? "webgpu: yes" : "webgpu: no",
+        capabilities.isMobile ? "mobile: yes" : "mobile: no",
+        capabilities.approxDeviceMemoryGiB === null
+          ? "memory: unknown"
+          : `memory: ~${capabilities.approxDeviceMemoryGiB} GiB`,
+        capabilities.crossOriginIsolated ? "coi: yes" : "coi: no",
+      ].join(" / ")
+
   const actionButtons: ReadonlyArray<ActionButton> = [
     {
       label: "Load model",
@@ -130,21 +180,42 @@ export function ModelStatus() {
     },
   ]
 
+  function applyRuntimeSelection(patch: Partial<DemoRuntimeSelection>): void {
+    restorePage()
+    updateRuntimeSelection(patch)
+  }
+
   const rows: ReadonlyArray<StatusRow> = [
     {
-      label: "WebGPU",
-      value: formatCapabilityStatus(
-        capabilitiesReady,
-        hasWebGPU ? "Supported" : "Not available",
+      label: "Selected Device",
+      value: formatSelectedDevice(runtimeState.selection.device),
+    },
+    {
+      label: "Selected Model",
+      value: formatSelectedModel(
+        runtimeState.preset.label,
+        runtimeState.selection.modelId,
       ),
     },
     {
-      label: "Translation Path",
-      value: formatCapabilityStatus(capabilitiesReady, translationPath),
+      label: "Selected Quantization",
+      value: formatSelectedDType(runtimeState.selection.dtype),
     },
     {
-      label: "Default Button",
-      value: formatCapabilityStatus(capabilitiesReady, defaultButtonStatus),
+      label: "Capabilities",
+      value: capabilitiesText,
+    },
+    {
+      label: "Enablement",
+      value: `${enablement.status} / ${enablement.verdict.outcome}`,
+    },
+    {
+      label: "Resolved Runtime",
+      value: formatResolvedRuntime(enablement.status, device),
+    },
+    {
+      label: "Verdict",
+      value: enablement.verdict.reason,
     },
     {
       label: "Model",
@@ -169,36 +240,118 @@ export function ModelStatus() {
   ]
 
   return (
-    <section className="space-y-4 rounded-3xl border border-gray-200 bg-gray-50 p-6">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+    <section className="space-y-5 rounded-3xl border border-gray-200 bg-gray-50 p-6">
+      <div className="space-y-4">
         <div className="max-w-2xl space-y-2">
           <h2 className="text-sm font-semibold uppercase tracking-[0.2em] text-gray-500">
             React Boundary Proof
           </h2>
           <p className="text-lg font-semibold text-gray-900">
-            This panel sits outside the translated roots and reads the live provider
-            snapshot through <code>useTranslator()</code> and <code>useTranslateDOM()</code>.
+            This panel stays outside <code>[data-demo-root]</code> and reports the
+            selected provider config, the enablement verdict, and the live hook
+            state from the current React boundary.
           </p>
           <p className="text-sm text-gray-600">
-            Load the model, translate to a left-to-right language, switch to Arabic
-            for RTL, then restore. The fixed globe button remains the shipped stock
-            <code> &lt;TranslateButton /&gt;</code>.
+            The runtime selector above remounts{" "}
+            <code>&lt;TranslatorProvider /&gt;</code>. The rows below keep the
+            requested config separate from the runtime babulfish could actually
+            resolve in this browser.
           </p>
         </div>
 
-        <div className="grid gap-2 sm:grid-cols-2 lg:w-[24rem]">
-          {actionButtons.map(({ label, disabled, onClick, tone }) => (
-            <button
-              key={label}
-              type="button"
-              className={ACTION_BUTTON_CLASS_NAMES[tone]}
-              disabled={disabled}
-              onClick={onClick}
+        <div className="grid gap-3 lg:grid-cols-[repeat(3,minmax(0,1fr))]">
+          <label className={CONTROL_LABEL_CLASS_NAME}>
+            <span>Device</span>
+            <select
+              className={CONTROL_SELECT_CLASS_NAME}
+              disabled={runtimeBusy}
+              value={runtimeState.selection.device}
+              onChange={(event) => {
+                applyRuntimeSelection({
+                  device: event.target.value as DemoRuntimeSelection["device"],
+                })
+              }}
             >
-              {label}
-            </button>
-          ))}
+              {DEVICE_OPTIONS.map((option) => {
+                const allowed = runtimeState.preset.allowedDevices.includes(option.value)
+                return (
+                  <option key={option.value} value={option.value} disabled={!allowed}>
+                    {allowed ? option.label : `${option.label} (not verified)`}
+                  </option>
+                )
+              })}
+            </select>
+          </label>
+
+          <label className={CONTROL_LABEL_CLASS_NAME}>
+            <span>Model</span>
+            <select
+              className={CONTROL_SELECT_CLASS_NAME}
+              disabled={runtimeBusy}
+              value={runtimeState.selection.modelId}
+              onChange={(event) => {
+                applyRuntimeSelection({ modelId: event.target.value })
+              }}
+            >
+              {DEMO_MODEL_PRESETS.map((preset) => (
+                <option key={preset.id} value={preset.modelId}>
+                  {preset.label}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className={CONTROL_LABEL_CLASS_NAME}>
+            <span>Quantization</span>
+            <select
+              className={CONTROL_SELECT_CLASS_NAME}
+              disabled={runtimeBusy}
+              value={runtimeState.selection.dtype}
+              onChange={(event) => {
+                applyRuntimeSelection({
+                  dtype: event.target.value as DemoRuntimeSelection["dtype"],
+                })
+              }}
+            >
+              {DTYPE_OPTIONS.map((option) => {
+                const allowed = runtimeState.preset.allowedDTypes.includes(option.value)
+                return (
+                  <option key={option.value} value={option.value} disabled={!allowed}>
+                    {allowed ? option.label : `${option.label} (not verified)`}
+                  </option>
+                )
+              })}
+            </select>
+          </label>
         </div>
+
+        <div className="rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-600">
+          <p className="font-medium text-gray-900">{runtimeState.preset.label}</p>
+          <p className="mt-1">{runtimeState.preset.description}</p>
+          <p className="mt-2">
+            {runtimeState.repairs.map((repair) => repair.message).join(" ") ||
+              runtimeState.preset.note}
+          </p>
+          <p className="mt-2 text-xs uppercase tracking-[0.16em] text-gray-500">
+            Allowed quantization:{" "}
+            {runtimeState.preset.allowedDTypes.map(getDTypeLabel).join(" / ")}. Allowed
+            devices: {runtimeState.preset.allowedDevices.map(getDeviceLabel).join(" / ")}.
+          </p>
+        </div>
+      </div>
+
+      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+        {actionButtons.map(({ label, disabled, onClick, tone }) => (
+          <button
+            key={label}
+            type="button"
+            className={ACTION_BUTTON_CLASS_NAMES[tone]}
+            disabled={disabled}
+            onClick={onClick}
+          >
+            {label}
+          </button>
+        ))}
       </div>
 
       <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
