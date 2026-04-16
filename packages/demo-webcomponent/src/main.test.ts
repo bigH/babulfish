@@ -81,8 +81,14 @@ describe("demo main helpers", () => {
   })
 
   it("sets target-lang on every translator host element", () => {
-    const first = document.createElement("div")
-    const second = document.createElement("div")
+    const first = Object.assign(
+      document.createElement("div"),
+      { restore: vi.fn() },
+    ) as TranslatorHostElement
+    const second = Object.assign(
+      document.createElement("div"),
+      { restore: vi.fn() },
+    ) as TranslatorHostElement
 
     setTranslatorLanguage([first, second], "ar")
 
@@ -90,7 +96,7 @@ describe("demo main helpers", () => {
     expect(second.getAttribute("target-lang")).toBe("ar")
   })
 
-  it("removes target-lang and delegates restore() for every translator host element", () => {
+  it("delegates restore() for every translator host element", () => {
     const restoreFirst = vi.fn()
     const restoreSecond = vi.fn()
     const first = Object.assign(
@@ -107,8 +113,6 @@ describe("demo main helpers", () => {
 
     restoreTranslators([first, second])
 
-    expect(first.hasAttribute("target-lang")).toBe(false)
-    expect(second.hasAttribute("target-lang")).toBe(false)
     expect(restoreFirst).toHaveBeenCalledTimes(1)
     expect(restoreSecond).toHaveBeenCalledTimes(1)
   })

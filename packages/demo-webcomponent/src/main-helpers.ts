@@ -38,7 +38,7 @@ export function appendStatusEntry(
 }
 
 export function setTranslatorLanguage(
-  translators: readonly HTMLElement[],
+  translators: readonly TranslatorHostElement[],
   targetLang: string,
 ): void {
   for (const translator of translators) {
@@ -50,7 +50,6 @@ export function restoreTranslators(
   translators: readonly TranslatorHostElement[],
 ): void {
   for (const translator of translators) {
-    translator.removeAttribute("target-lang")
     translator.restore()
   }
 }
