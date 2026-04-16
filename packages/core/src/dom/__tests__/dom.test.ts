@@ -1091,6 +1091,72 @@ describe("DOM translator", () => {
     expect(paragraph.querySelector("strong")).not.toBeNull()
   })
 
+  it("restores the captured structured subtree before local fallback writes", async () => {
+    const main = setUpHtmlMain(
+      '<p class="structured">Hello <span class="note" data-note="keep">world</span> again</p>',
+    )
+    const paragraph = main.querySelector("p")!
+
+    let callCount = 0
+    translate.mockImplementation(async (text: string) => {
+      callCount++
+      if (callCount === 1) {
+        paragraph.innerHTML = 'mutated <em>markup</em>' // eslint-disable-line no-unsanitized/property -- test-only mutation to prove fallback restores the snapshot first
+        return damageStructuredOutput(text, "missing", {
+          Hello: "Hola",
+          world: "mundo",
+          again: "otra vez",
+        })
+      }
+      return "Hola mundo otra vez"
+    })
+
+    const t = makeTranslator(translate, {
+      structuredText: STRUCTURED_TEXT_CONFIG,
+    })
+    await t.translate("es-ES")
+
+    const preservedSpan = paragraph.querySelector("span.note")
+    expect(paragraph.querySelector("em")).toBeNull()
+    expect(preservedSpan).not.toBeNull()
+    expect(preservedSpan?.getAttribute("data-note")).toBe("keep")
+    expect(paragraph.textContent).toBe("Hola mundo otra vez")
+  })
+
+  it("keeps planned attribute writes attached to the live structured subtree after local fallback", async () => {
+    const main = setUpHtmlMain(
+      '<p class="structured"><a href="/docs" title="Read docs">Hello <strong>world</strong></a></p>',
+    )
+    const link = main.querySelector("a")!
+
+    let callCount = 0
+    translate.mockImplementation(async (text: string) => {
+      callCount++
+      if (callCount === 1) {
+        link.setAttribute("title", "Mutated title")
+        return damageStructuredOutput(text, "missing", {
+          Hello: "Hola",
+          world: "mundo",
+        })
+      }
+      if (callCount === 2) {
+        return "Hola mundo"
+      }
+      if (callCount === 3) {
+        expect(text).toBe("Read docs")
+        return "Leer docs"
+      }
+      throw new Error(`Unexpected translate input: ${text}`)
+    })
+
+    const t = makeTranslator(translate, {
+      structuredText: STRUCTURED_TEXT_CONFIG,
+    })
+    await t.translate("es-ES")
+
+    expect(link.getAttribute("title")).toBe("Leer docs")
+  })
+
   it("aborts before exact structured commit and leaves the subtree unchanged", async () => {
     const main = setUpHtmlMain(
       '<p class="structured">Hello <strong>world</strong></p>',

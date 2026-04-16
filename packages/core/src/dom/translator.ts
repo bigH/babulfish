@@ -343,9 +343,6 @@ export function createDOMTranslator(config: DOMTranslatorConfig): DOMTranslator 
   }
 
   function restoreStructuredUnitForFallback(unit: StructuredTextUnit): void {
-    const original = originalStructuredRoots.get(unit.root)
-    if (original == null || unit.root.innerHTML === original) return
-
     for (const { node } of unit.textSlots) {
       if (!unit.root.contains(node)) continue
       const source = originalTexts.get(node)
@@ -361,9 +358,7 @@ export function createDOMTranslator(config: DOMTranslatorConfig): DOMTranslator 
       }
     }
 
-    if (unit.root.innerHTML !== original) {
-      unit.root.innerHTML = original // eslint-disable-line no-unsanitized/property
-    }
+    restoreStructuredRoot(unit.root)
   }
 
   function getOriginalAttrValue(el: Element, attrName: string): string | null {
