@@ -122,6 +122,7 @@ type VisibleWork =
       readonly kind: "text"
       readonly rootIndex: number
       readonly anchor: Text
+      readonly parent: Element
       readonly batch: TaggedTextNode[]
     }
 
@@ -218,6 +219,14 @@ function findOwningRootIndex(
 function compareVisibleWork(a: VisibleWork, b: VisibleWork): number {
   if (a.rootIndex !== b.rootIndex) return a.rootIndex - b.rootIndex
   return compareDocumentOrder(a.anchor, b.anchor)
+}
+
+function getBatchParent(batch: readonly TaggedTextNode[]): Element {
+  const parent = batch[0]?.node.parentElement
+  if (!parent) {
+    throw new Error("DOMTranslator text batches must have an element parent")
+  }
+  return parent
 }
 
 function buildStructuredToken(key: string, slotId: number): string {
@@ -918,6 +927,7 @@ export function createDOMTranslator(config: DOMTranslatorConfig): DOMTranslator 
           kind: "text",
           rootIndex: findOwningRootIndex(batch[0]!.node, roots),
           anchor: batch[0]!.node,
+          parent: getBatchParent(batch),
           batch,
         })),
       ].sort(compareVisibleWork)
@@ -988,12 +998,7 @@ export function createDOMTranslator(config: DOMTranslatorConfig): DOMTranslator 
       } else if (work.kind === "structuredText") {
         await translateStructuredUnit(work.unit, targetLang, signal)
       } else {
-        const parents = new Set(
-          work.batch.map((t) => t.node.parentElement).filter(Boolean) as Element[],
-        )
-        for (const p of parents) {
-          notifyStart(p, config.hooks?.onTranslateStart)
-        }
+        notifyStart(work.parent, config.hooks?.onTranslateStart)
 
         const chunk = work.batch.map((t) => t.text).join("\n")
         const result = await config.translate(chunk, targetLang)
@@ -1006,9 +1011,7 @@ export function createDOMTranslator(config: DOMTranslatorConfig): DOMTranslator 
 
         applyTranslation(work.batch, transformed)
 
-        for (const p of parents) {
-          notifyEnd(p, config.hooks?.onTranslateEnd)
-        }
+        notifyEnd(work.parent, config.hooks?.onTranslateEnd)
       }
 
       if (signal.aborted) return

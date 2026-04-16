@@ -18,8 +18,18 @@ describe("buildBatches", () => {
 
     const batches = buildBatches([tagged(first), tagged(second)], DEFAULT_BATCH_CHAR_LIMIT)
 
-    expect(batches).toHaveLength(1)
-    expect(batches[0]).toHaveLength(2)
+    expect(batches).toEqual([[tagged(first), tagged(second)]])
+  })
+
+  it("splits sibling text nodes when the batch would exceed the char limit", () => {
+    const inline = document.createElement("span")
+    const first = document.createTextNode("Hello")
+    const second = document.createTextNode(" world")
+    inline.append(first, second)
+
+    const batches = buildBatches([tagged(first), tagged(second)], 10)
+
+    expect(batches).toEqual([[tagged(first)], [tagged(second)]])
   })
 
   it("splits batches when text nodes cross a parent boundary", () => {
@@ -35,9 +45,7 @@ describe("buildBatches", () => {
 
     const batches = buildBatches([tagged(first), tagged(second)], DEFAULT_BATCH_CHAR_LIMIT)
 
-    expect(batches).toHaveLength(2)
-    expect(batches[0]).toEqual([tagged(first)])
-    expect(batches[1]).toEqual([tagged(second)])
+    expect(batches).toEqual([[tagged(first)], [tagged(second)]])
   })
 
   it.each([["zero", 0], ["negative", -1], ["infinite", Number.POSITIVE_INFINITY], ["NaN", Number.NaN]])(
@@ -50,10 +58,13 @@ describe("buildBatches", () => {
 })
 
 describe("applyTranslation", () => {
-  it("no-ops on empty batch", () => {
-    expect(() => {
-      applyTranslation([], "translated")
-    }).not.toThrow()
+  it("writes each translated line back to its matching text node", () => {
+    const nodeA = document.createTextNode("Hello")
+    const nodeB = document.createTextNode("World")
+    applyTranslation([tagged(nodeA), tagged(nodeB)], "Hola\nMundo")
+
+    expect(nodeA.textContent).toBe("Hola")
+    expect(nodeB.textContent).toBe("Mundo")
   })
 
   it("writes fallback translation for uneven newline splits", () => {
