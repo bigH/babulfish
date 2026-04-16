@@ -158,7 +158,6 @@ type StructuredCommitPlan = {
 type VisibleClaims = {
   readonly linkedTextNodes: Set<Text>
   readonly richRoots: readonly Element[]
-  readonly structuredRoots: Set<Element>
   readonly structuredTextNodes: Set<Text>
 }
 
@@ -506,7 +505,6 @@ export function createDOMTranslator(config: DOMTranslatorConfig): DOMTranslator 
         ),
       ),
       richRoots,
-      structuredRoots: new Set<Element>(),
       structuredTextNodes: new Set<Text>(),
     }
   }
@@ -545,11 +543,10 @@ export function createDOMTranslator(config: DOMTranslatorConfig): DOMTranslator 
       other !== candidate && (other.contains(candidate) || candidate.contains(other)))
   }
 
-  function claimStructuredUnit(
+  function claimStructuredTextNodes(
     unit: StructuredTextUnit,
     claims: VisibleClaims,
   ): void {
-    claims.structuredRoots.add(unit.root)
     for (const { node } of unit.textSlots) {
       claims.structuredTextNodes.add(node)
     }
@@ -565,13 +562,12 @@ export function createDOMTranslator(config: DOMTranslatorConfig): DOMTranslator 
     for (const candidate of rawCandidates) {
       if (hasNestedStructuredConflict(candidate, rawCandidates)) continue
       if (overlapsClaimedRoot(candidate, claims.richRoots)) continue
-      if (overlapsClaimedRoot(candidate, claims.structuredRoots)) continue
       if (containsClaimedLinkedTextNode(candidate, claims.linkedTextNodes)) continue
 
       const unit = tryExtractStructuredUnit(candidate, claims)
       if (!unit) continue
 
-      claimStructuredUnit(unit, claims)
+      claimStructuredTextNodes(unit, claims)
       units.push(unit)
     }
 

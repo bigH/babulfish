@@ -895,6 +895,32 @@ describe("DOM translator", () => {
     expect(structured.innerHTML).toBe("Otro <em>frase</em>")
   })
 
+  it("dedupes structured candidates found through overlapping translation roots", async () => {
+    const main = setUpHtmlMain(
+      [
+        "<article>",
+        '<p class="structured">Hello <strong>world</strong></p>',
+        "</article>",
+      ].join(""),
+    )
+    const paragraph = main.querySelector("p")!
+
+    translate.mockImplementation(async (text: string) =>
+      replaceAllVisibleText(text, {
+        Hello: "Hola",
+        world: "mundo",
+      }))
+
+    const t = makeTranslator(translate, {
+      roots: ["main", "main article"],
+      structuredText: STRUCTURED_TEXT_CONFIG,
+    })
+    await t.translate("es-ES")
+
+    expect(translate).toHaveBeenCalledTimes(1)
+    expect(paragraph.innerHTML).toBe("Hola <strong>mundo</strong>")
+  })
+
   it("keeps linkedBy precedence over structuredText and avoids double visible work", async () => {
     const main = document.createElement("main")
     const first = document.createElement("span")
