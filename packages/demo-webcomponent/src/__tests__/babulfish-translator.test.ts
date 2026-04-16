@@ -129,10 +129,14 @@ describe("babulfish-translator", () => {
   })
 
   it("exposes a public restore() method that delegates to core", () => {
-    connect()
+    const shadow = connect()
     const mock = latestMock
+    el.setAttribute("target-lang", "es")
+    ;(shadow.querySelector(".language") as HTMLSelectElement).value = "es"
     ;(el as unknown as { restore(): void }).restore()
     expect(mock.restore).toHaveBeenCalledTimes(1)
+    expect(el.hasAttribute("target-lang")).toBe(false)
+    expect((shadow.querySelector(".language") as HTMLSelectElement).value).toBe("")
   })
 
   it("updates status text from snapshot", () => {
@@ -161,5 +165,36 @@ describe("babulfish-translator", () => {
     }))
     expect(select.disabled).toBe(false)
     expect(loadBtn.disabled).toBe(true)
+  })
+
+  it("syncs the language select with currentLanguage from snapshots", () => {
+    const shadow = connect()
+    const select = shadow.querySelector(".language") as HTMLSelectElement
+
+    state.listener?.(createSnapshot({
+      model: { status: "ready" },
+      currentLanguage: "fr",
+    }))
+
+    expect(select.value).toBe("fr")
+  })
+
+  it("does not translate from target-lang before the model is ready", () => {
+    connect()
+    const mock = latestMock
+
+    el.setAttribute("target-lang", "es")
+
+    expect(mock.translateTo).not.toHaveBeenCalled()
+  })
+
+  it("translates from target-lang once the model is ready", () => {
+    connect()
+    const mock = latestMock
+    mock.snapshot = createSnapshot({ model: { status: "ready" } })
+
+    el.setAttribute("target-lang", "fr")
+
+    expect(mock.translateTo).toHaveBeenCalledWith("fr")
   })
 })

@@ -6,7 +6,7 @@ import type { TranslatorConfig } from "@babulfish/react"
 
 const DEMO_TRANSLATOR_CONFIG: TranslatorConfig = {
   dom: {
-    roots: ["main"],
+    roots: ["[data-demo-root]"],
     preserve: {
       matchers: ["babulfish", "Next.js", "TranslateGemma", "WebGPU"],
     },

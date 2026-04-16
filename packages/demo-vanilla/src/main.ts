@@ -1,8 +1,30 @@
 import { createBabulfish, type Snapshot } from "@babulfish/core"
 import "@babulfish/styles/css"
 
+const STRUCTURED_SOURCE = [
+  "Structured text keeps inline emphasis, links, and line breaks",
+  "while code stays opaque.",
+].join("\n")
+const STRUCTURED_DOM_SUFFIX = " [dom-structured]"
+const ROOT_SELECTORS = {
+  copy: "[data-demo-copy]",
+  aside: "[data-demo-aside]",
+} as const
+
 const core = createBabulfish({
-  dom: { roots: ["article"] },
+  dom: {
+    roots: [ROOT_SELECTORS.copy, ROOT_SELECTORS.aside],
+    structuredText: { selector: "[data-structured]" },
+    preserve: {
+      matchers: ["babulfish", "TranslateGemma", "WebGPU"],
+    },
+    shouldSkip: (text, defaultSkip) => defaultSkip(text) || text.startsWith("SKU-"),
+    outputTransform: (translated, context) => (
+      context.kind === "structuredText"
+        ? `${translated}${STRUCTURED_DOM_SUFFIX}`
+        : translated
+    ),
+  },
 })
 
 function requireElement<T extends new (...args: any[]) => HTMLElement>(
@@ -21,6 +43,18 @@ function requireElement<T extends new (...args: any[]) => HTMLElement>(
 
 function toPercent(progress: number): string {
   return `${Math.round(progress * 100)}%`
+}
+
+function directionFor(selector: string): string {
+  const root = document.querySelector<HTMLElement>(selector)
+  return root?.getAttribute("dir") ?? "none"
+}
+
+function formatDirections(): string {
+  return [
+    `copy: ${directionFor(ROOT_SELECTORS.copy)}`,
+    `aside: ${directionFor(ROOT_SELECTORS.aside)}`,
+  ].join(" / ")
 }
 
 function modelStatusText(model: Snapshot["model"]): string {
@@ -51,6 +85,9 @@ const loadBtn = requireElement("load-model", HTMLButtonElement)
 const statusModel = requireElement("status-model", HTMLElement)
 const statusTranslation = requireElement("status-translation", HTMLElement)
 const statusLanguage = requireElement("status-language", HTMLElement)
+const statusDirection = requireElement("status-direction", HTMLElement)
+const translateTextBtn = requireElement("translate-text", HTMLButtonElement)
+const statusRawText = requireElement("status-raw-text", HTMLOutputElement)
 
 for (const lang of core.languages) {
   const opt = document.createElement("option")
@@ -59,11 +96,15 @@ for (const lang of core.languages) {
   select.appendChild(opt)
 }
 
+function resetRawTextProof(): void {
+  statusRawText.textContent = "Not run"
+}
+
 function render(s: Snapshot): void {
   statusModel.textContent = modelStatusText(s.model)
   statusTranslation.textContent = translationStatusText(s.translation)
-
   statusLanguage.textContent = s.currentLanguage ?? "Original"
+  statusDirection.textContent = formatDirections()
   select.value = s.currentLanguage ?? ""
 
   const modelReady = s.model.status === "ready"
@@ -72,20 +113,37 @@ function render(s: Snapshot): void {
   select.disabled = !modelReady || translating
   restoreBtn.disabled = !modelReady || s.currentLanguage === null
   loadBtn.disabled = s.model.status !== "idle"
+  translateTextBtn.disabled = !modelReady || translating || (s.currentLanguage ?? "") === ""
 }
 
 render(core.snapshot)
 core.subscribe(render)
 
 loadBtn.addEventListener("click", () => {
-  core.loadModel()
+  void core.loadModel()
 })
 
 select.addEventListener("change", () => {
   const code = select.value
-  if (code) core.translateTo(code)
+  resetRawTextProof()
+  if (!code) {
+    core.restore()
+    return
+  }
+
+  void core.translateTo(code)
 })
 
 restoreBtn.addEventListener("click", () => {
   core.restore()
+  resetRawTextProof()
+})
+
+translateTextBtn.addEventListener("click", async () => {
+  const targetLang = core.snapshot.currentLanguage
+  if (!targetLang) return
+
+  statusRawText.textContent = "Running raw translateText()..."
+  const translated = await core.translateText(STRUCTURED_SOURCE, targetLang)
+  statusRawText.textContent = translated
 })

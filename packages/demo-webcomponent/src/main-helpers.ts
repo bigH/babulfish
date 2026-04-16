@@ -1,5 +1,9 @@
 import type { Snapshot } from "@babulfish/core"
 
+export type TranslatorHostElement = HTMLElement & {
+  restore(): void
+}
+
 export function requireEventLog(doc: Document): HTMLElement {
   const eventLog = doc.getElementById("event-log")
 
@@ -31,6 +35,24 @@ export function appendStatusEntry(
 
   eventLog.prepend(entry)
   logger.log(`[babulfish-translator #${index + 1}]`, snapshot)
+}
+
+export function setTranslatorLanguage(
+  translators: readonly HTMLElement[],
+  targetLang: string,
+): void {
+  for (const translator of translators) {
+    translator.setAttribute("target-lang", targetLang)
+  }
+}
+
+export function restoreTranslators(
+  translators: readonly TranslatorHostElement[],
+): void {
+  for (const translator of translators) {
+    translator.removeAttribute("target-lang")
+    translator.restore()
+  }
 }
 
 export function observeHostDocument(

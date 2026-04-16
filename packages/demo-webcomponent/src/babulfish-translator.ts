@@ -48,6 +48,7 @@ button:not(:disabled):hover { background: #f9fafb; }
 .load-model:disabled { background: #93c5fd; border-color: #93c5fd; }
 
 .content p { margin-bottom: 0.75rem; color: #374151; }
+.content strong { color: #111827; }
 
 .status {
   margin-top: 0.75rem;
@@ -69,10 +70,12 @@ function buildTemplate(): HTMLTemplateElement {
     `  <button class="load-model" type="button">Load Model</button>`,
     `</div>`,
     `<div class="content">`,
+    `  <p><strong>Shadow-root content.</strong> These paragraphs live entirely inside the custom element.</p>`,
     `  <p>`,
-    `    This paragraph lives inside a Shadow DOM boundary. The translation engine`,
-    `    modifies only this shadow tree \u2014 the host document remains untouched.`,
+    `    The translation engine modifies only this shadow tree while the host page`,
+    `    stays untouched and just listens for lifecycle events.`,
     `  </p>`,
+    `  <p>Use the host buttons after loading once to drive target-lang and restore().</p>`,
     `</div>`,
     `<div class="status">`,
     `  <span class="status-text">Model: Not loaded</span>`,
@@ -143,10 +146,13 @@ export class BabulfishTranslator extends HTMLElement {
   }
 
   attributeChangedCallback(_name: string, _old: string | null, value: string | null): void {
-    if (value && this.#core) this.#core.translateTo(value)
+    if (!value || !this.#core) return
+    if (this.#core.snapshot.model.status !== "ready") return
+    void this.#core.translateTo(value)
   }
 
   restore(): void {
+    this.removeAttribute("target-lang")
     this.#core?.restore()
     if (this.#els) this.#els.select.value = ""
   }
@@ -177,6 +183,7 @@ export class BabulfishTranslator extends HTMLElement {
 
     const langText = s.currentLanguage ? ` | ${s.currentLanguage}` : ""
     this.#els.status.textContent = `Model: ${modelText}${transText}${langText}`
+    this.#els.select.value = s.currentLanguage ?? ""
 
     const modelReady = s.model.status === "ready"
     const translating = s.translation.status === "translating"
@@ -188,11 +195,18 @@ export class BabulfishTranslator extends HTMLElement {
   #wireControls(): void {
     if (!this.#els) return
 
-    this.#els.loadModel.addEventListener("click", () => this.#core?.loadModel())
+    this.#els.loadModel.addEventListener("click", () => {
+      void this.#core?.loadModel()
+    })
 
     this.#els.select.addEventListener("change", () => {
       const code = this.#els?.select.value
-      if (code) this.#core?.translateTo(code)
+      if (code) {
+        this.setAttribute("target-lang", code)
+        return
+      }
+
+      this.restore()
     })
 
     this.#els.restore.addEventListener("click", () => this.restore())

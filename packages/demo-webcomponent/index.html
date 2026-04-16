@@ -23,6 +23,32 @@
 
       .instances { display: grid; gap: 1.5rem; margin-bottom: 2rem; }
 
+      .host-controls {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+        margin-bottom: 1rem;
+        padding: 1rem;
+        border: 1px solid #e5e7eb;
+        border-radius: 0.9rem;
+        background: #f8fafc;
+      }
+      .host-controls button {
+        font: inherit;
+        font-size: 0.875rem;
+        padding: 0.55rem 0.9rem;
+        border: 1px solid #d1d5db;
+        border-radius: 999px;
+        background: #fff;
+        cursor: pointer;
+      }
+      .host-controls button:hover { background: #f3f4f6; }
+      .host-note {
+        color: #475569;
+        font-size: 0.9rem;
+        margin-bottom: 1rem;
+      }
+
       #event-log {
         padding: 1rem;
         background: #f9fafb;
@@ -43,7 +69,19 @@
     <p class="intro">
       Two <code>&lt;babulfish-translator&gt;</code> custom elements, each
       rendering into its own Shadow DOM, sharing a single translation engine.
-      Events logged below prove the <code>babulfish-status</code> contract.
+      Events logged below prove the <code>babulfish-status</code> contract, and
+      the host buttons use the shipped <code>target-lang</code> attribute plus
+      the public <code>restore()</code> method.
+    </p>
+
+    <div class="host-controls">
+      <button id="host-translate-es" type="button">Host: Spanish</button>
+      <button id="host-translate-ar" type="button">Host: Arabic (RTL)</button>
+      <button id="host-restore" type="button">Host: Restore both</button>
+    </div>
+    <p class="host-note">
+      Load the model once inside either shadow root, then drive both elements from
+      the host page without reaching through the shadow boundary.
     </p>
 
     <div class="instances">

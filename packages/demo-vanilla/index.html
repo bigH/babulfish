@@ -7,51 +7,96 @@
     <link rel="stylesheet" href="./style.css" />
   </head>
   <body>
+    <header class="hero">
+      <p class="eyebrow">babulfish Vanilla Demo</p>
+      <h1>Direct <code>@babulfish/core</code> integration, no wrapper.</h1>
+      <p class="intro">
+        This page calls <code>createBabulfish()</code> directly and wires the DOM
+        contract by hand: multiple roots, <code>structuredText</code>,
+        DOM-only <code>outputTransform</code>, preserve/skip rules, restore,
+        and RTL.
+      </p>
+    </header>
+
     <div class="toolbar">
       <select id="language" disabled>
         <option value="">Choose language…</option>
       </select>
-      <button id="restore" type="button" disabled>Original</button>
-      <button id="load-model" type="button">Load Model</button>
+      <button id="restore" type="button" disabled>Restore original</button>
+      <button id="load-model" type="button">Load model</button>
     </div>
 
-    <main>
-      <h1>babulfish — Zero-Framework Demo</h1>
+    <div class="layout">
+      <main class="content">
+        <article class="panel" data-demo-copy>
+          <p class="panel-label">Root One</p>
+          <h2>DOM roots, preserve, and skip</h2>
 
-      <article>
-        <p>
-          babulfish translates your entire page client-side using a small
-          language model that runs directly in the browser. No server
-          round-trips, no API keys, no data leaves the device. Pick a language
-          from the dropdown above to try it.
-        </p>
+          <p>
+            This article is one configured DOM root. babulfish, TranslateGemma,
+            and WebGPU stay exact because the demo uses <code>preserve.matchers</code>
+            before the DOM write.
+          </p>
 
-        <p>
-          Under the hood it loads TranslateGemma via WebGPU, walks the DOM to
-          collect text nodes, batches them for efficient inference, and swaps in
-          translations with smooth animations. The model is roughly 2.9 GB and
-          cached in IndexedDB after the first download.
-        </p>
+          <p>
+            The toolbar and status card stay outside the roots, so they remain
+            stable while only the configured content translates.
+          </p>
 
-        <p>
-          This demo uses zero frameworks — just the DOM API and an ESM import of
-          <code>@babulfish/core</code>. If you can write
-          <code>document.querySelector</code>, you can integrate babulfish.
-        </p>
-      </article>
-    </main>
+          <p class="skip-proof">
+            SKU-2048 stays exact because this demo&apos;s <code>shouldSkip</code>
+            rule leaves SKU-prefixed text alone.
+          </p>
 
-    <section id="status" class="status" aria-live="polite">
-      <h2>Status</h2>
-      <dl>
-        <dt>Model</dt>
-        <dd id="status-model">Not loaded</dd>
-        <dt>Translation</dt>
-        <dd id="status-translation">Idle</dd>
-        <dt>Language</dt>
-        <dd id="status-language">Original</dd>
-      </dl>
-    </section>
+          <p class="structured-proof" data-structured>
+            Structured text keeps <strong>inline emphasis</strong>,
+            <a href="https://example.com/docs">links</a>, and line breaks<br />
+            while <code>npm run demo</code> stays opaque.
+          </p>
+        </article>
+
+        <aside class="panel panel-accent" data-demo-aside>
+          <p class="panel-label">Root Two</p>
+          <h2>Separate root, same core instance</h2>
+
+          <p>
+            This aside is a second DOM root. It translates alongside the article
+            above, but the status panel still sits outside the translated scope.
+          </p>
+
+          <p>
+            Translate to Arabic to verify both roots flip to RTL, then restore
+            to clear the direction again.
+          </p>
+        </aside>
+      </main>
+
+      <section id="status" class="status" aria-live="polite">
+        <h2>Status</h2>
+        <dl>
+          <dt>Model</dt>
+          <dd id="status-model">Not loaded</dd>
+          <dt>Translation</dt>
+          <dd id="status-translation">Idle</dd>
+          <dt>Language</dt>
+          <dd id="status-language">Original</dd>
+          <dt>Root direction</dt>
+          <dd id="status-direction">copy: none / aside: none</dd>
+        </dl>
+
+        <div class="raw-proof">
+          <h3>Raw string API proof</h3>
+          <p>
+            The structured block gets a demo-only DOM transform suffix.
+            <code>translateText()</code> bypasses that DOM transform.
+          </p>
+          <button id="translate-text" type="button" disabled>
+            Translate sample string
+          </button>
+          <output id="status-raw-text">Not run</output>
+        </div>
+      </section>
+    </div>
 
     <script type="module" src="./src/main.ts"></script>
   </body>

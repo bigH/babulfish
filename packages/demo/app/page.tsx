@@ -1,69 +1,100 @@
 import { ModelStatus } from "./model-status"
 
-const richTextExample = {
-  boldText: "Bold text",
-  italicText: "italic text",
-  bodyText: "survive translation intact, along with",
-  linkLabel: "inline links",
-  linkHref: "https://example.com",
-} as const
-
-const richTextExampleMarkdown = `**${richTextExample.boldText}** and *${richTextExample.italicText}* ${richTextExample.bodyText} [${richTextExample.linkLabel}](${richTextExample.linkHref}).`
-
 export default function Home() {
   return (
-    <main className="mx-auto max-w-2xl px-6 py-16">
-      <h1 className="mb-6 text-3xl font-bold tracking-tight">
-        babulfish Demo
-      </h1>
-
-      <p className="mb-4 text-lg leading-relaxed text-gray-700">
-        babulfish translates your entire page client-side using a small language
-        model that runs directly in the browser. No server round-trips, no API
-        keys, no data leaves the device. Click the globe icon in the top-right
-        corner to try it.
-      </p>
-
-      <p className="mb-8 text-gray-600">
-        Under the hood it loads TranslateGemma via WebGPU, walks the DOM to
-        collect text nodes, batches them for efficient inference, and swaps in
-        translations with smooth animations. The model is roughly 2.9 GB and
-        cached in IndexedDB after the first download.
-      </p>
-
-      <h2 className="mb-4 text-xl font-semibold">Features</h2>
-      <ul className="mb-8 list-inside list-disc space-y-2 text-gray-700">
-        <li>Fully client-side translation — your text never leaves the browser</li>
-        <li>14 languages out of the box, easily extensible</li>
-        <li>Automatic RTL support for Arabic, Hebrew, Urdu, and Farsi</li>
-        <li>Preserves brand names and technical terms during translation</li>
-        <li>Rich text support — translates markdown content without breaking formatting</li>
-        <li>Progress indicators and accessible ARIA live regions</li>
-        <li>One-line React integration via TranslatorProvider</li>
-      </ul>
-
-      <h2 className="mb-4 text-xl font-semibold">How It Works</h2>
-      <p className="mb-4 text-gray-700">
-        Wrap your app in a TranslatorProvider, drop in a TranslateButton, and
-        mark which DOM roots to translate. babulfish handles model loading,
-        text extraction, batching, placeholder preservation, and DOM updates
-        automatically. For custom UI, the useTranslator hook exposes the full
-        model and translation state.
-      </p>
-
-      <p
-        className="mb-8 rounded bg-gray-100 p-4 text-sm text-gray-600"
-        data-md={richTextExampleMarkdown}
-      >
-        <strong>{richTextExample.boldText}</strong> and{" "}
-        <em>{richTextExample.italicText}</em> {richTextExample.bodyText}{" "}
-        <a href={richTextExample.linkHref} className="underline">
-          {richTextExample.linkLabel}
-        </a>
-        .
-      </p>
+    <main className="mx-auto max-w-5xl px-6 py-16">
+      <section className="mb-8 rounded-[2rem] border border-gray-200 bg-white p-8 shadow-[0_24px_80px_-48px_rgba(15,23,42,0.4)]">
+        <p className="mb-3 text-sm font-semibold uppercase tracking-[0.22em] text-gray-500">
+          babulfish React Demo
+        </p>
+        <h1 className="max-w-3xl text-4xl font-semibold tracking-tight text-gray-950">
+          React provider integration, visible lifecycle, restore, and RTL.
+        </h1>
+        <p className="mt-4 max-w-3xl text-lg leading-8 text-gray-700">
+          This demo keeps the React boundary honest. The fixed globe button is the
+          shipped stock UI, the control panel shows what the hooks expose today,
+          and only the content block below is inside <code>dom.roots</code>.
+        </p>
+        <ul className="mt-6 grid gap-3 text-sm text-gray-600 md:grid-cols-3">
+          <li className="rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3">
+            <strong className="block text-gray-900">Provider</strong>
+            <span>One <code>TranslatorProvider</code> scopes the page.</span>
+          </li>
+          <li className="rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3">
+            <strong className="block text-gray-900">Hooks</strong>
+            <span><code>useTranslator()</code> and <code>useTranslateDOM()</code> drive the status panel.</span>
+          </li>
+          <li className="rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3">
+            <strong className="block text-gray-900">Root behavior</strong>
+            <span>Arabic flips the translated root to RTL, and restore clears it.</span>
+          </li>
+        </ul>
+      </section>
 
       <ModelStatus />
+
+      <section
+        data-demo-root
+        className="mt-8 rounded-[2rem] border border-gray-200 bg-gray-50 p-8"
+      >
+        <div className="grid gap-8 lg:grid-cols-[1.3fr_0.7fr]">
+          <div>
+            <p className="mb-3 text-sm font-semibold uppercase tracking-[0.2em] text-gray-500">
+              Translated Root
+            </p>
+            <h2 className="text-2xl font-semibold tracking-tight text-gray-950">
+              Only this container is inside <code>dom.roots</code>.
+            </h2>
+            <p className="mt-4 text-base leading-7 text-gray-700">
+              That keeps the lifecycle controls readable while the actual content
+              below moves through original, translated, RTL, and restored states.
+              babulfish, TranslateGemma, and WebGPU stay protected by the demo’s
+              preserve matchers.
+            </p>
+            <p className="mt-4 text-base leading-7 text-gray-700">
+              The current React boundary exposes model state, translation state,
+              active language, raw capabilities, and page-level translate/restore
+              actions. This demo shows that surface directly instead of inventing
+              a wrapper layer.
+            </p>
+          </div>
+
+          <aside className="rounded-3xl border border-gray-200 bg-white p-5 text-sm leading-7 text-gray-600">
+            <p className="font-semibold uppercase tracking-[0.2em] text-gray-500">
+              Try This
+            </p>
+            <ol className="mt-3 space-y-2">
+              <li>1. Load the model from the panel or the globe button.</li>
+              <li>2. Translate to Spanish to show the normal LTR flow.</li>
+              <li>3. Translate to Arabic to watch the root switch to <code>dir=&quot;rtl&quot;</code>.</li>
+              <li>4. Restore to return to the original copy and clear the direction.</li>
+            </ol>
+          </aside>
+        </div>
+
+        <div className="mt-8 grid gap-4 md:grid-cols-2">
+          <section className="rounded-3xl bg-white p-5 shadow-sm">
+            <h3 className="text-lg font-semibold text-gray-900">
+              Client-side translation, no server detour
+            </h3>
+            <p className="mt-3 text-sm leading-7 text-gray-700">
+              babulfish runs entirely in the browser. No server round-trips, no
+              API keys, and no text leaves the device while the page translates.
+            </p>
+          </section>
+
+          <section className="rounded-3xl bg-white p-5 shadow-sm">
+            <h3 className="text-lg font-semibold text-gray-900">
+              The stock React surface stays small
+            </h3>
+            <p className="mt-3 text-sm leading-7 text-gray-700">
+              <code>TranslatorProvider</code> wires the core once, the fixed globe
+              button proves the shipped stock UI, and the hook panel above proves
+              the provider snapshot the current boundary actually exposes.
+            </p>
+          </section>
+        </div>
+      </section>
     </main>
   )
 }

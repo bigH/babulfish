@@ -1,7 +1,14 @@
 import type { Snapshot } from "@babulfish/core"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
-import { appendStatusEntry, observeHostDocument, requireEventLog } from "./main-helpers.js"
+import {
+  appendStatusEntry,
+  observeHostDocument,
+  requireEventLog,
+  restoreTranslators,
+  setTranslatorLanguage,
+  type TranslatorHostElement,
+} from "./main-helpers.js"
 
 function createSnapshot(overrides: Partial<Snapshot> = {}): Snapshot {
   return {
@@ -71,5 +78,38 @@ describe("demo main helpers", () => {
       "childList",
       document.getElementById("outside"),
     )
+  })
+
+  it("sets target-lang on every translator host element", () => {
+    const first = document.createElement("div")
+    const second = document.createElement("div")
+
+    setTranslatorLanguage([first, second], "ar")
+
+    expect(first.getAttribute("target-lang")).toBe("ar")
+    expect(second.getAttribute("target-lang")).toBe("ar")
+  })
+
+  it("removes target-lang and delegates restore() for every translator host element", () => {
+    const restoreFirst = vi.fn()
+    const restoreSecond = vi.fn()
+    const first = Object.assign(
+      document.createElement("div"),
+      { restore: restoreFirst },
+    ) as TranslatorHostElement
+    const second = Object.assign(
+      document.createElement("div"),
+      { restore: restoreSecond },
+    ) as TranslatorHostElement
+
+    first.setAttribute("target-lang", "es")
+    second.setAttribute("target-lang", "ar")
+
+    restoreTranslators([first, second])
+
+    expect(first.hasAttribute("target-lang")).toBe(false)
+    expect(second.hasAttribute("target-lang")).toBe(false)
+    expect(restoreFirst).toHaveBeenCalledTimes(1)
+    expect(restoreSecond).toHaveBeenCalledTimes(1)
   })
 })
