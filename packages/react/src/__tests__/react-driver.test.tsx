@@ -34,9 +34,14 @@ const originalSnapshotDescriptor = Object.getOwnPropertyDescriptor(
   mockCore,
   "snapshot",
 )
+const { mockTranslatorProvider } = vi.hoisted(() => ({
+  mockTranslatorProvider: vi.fn(
+    ({ children }: { children: React.ReactNode }) => children,
+  ),
+}))
 
 vi.mock("../provider.js", () => ({
-  TranslatorProvider: ({ children }: { children: React.ReactNode }) => children,
+  TranslatorProvider: mockTranslatorProvider,
 }))
 
 vi.mock("../context.js", () => ({
@@ -122,5 +127,32 @@ describe("ReactConformanceDriver", () => {
     await expect(driver.create()).rejects.toThrow(
       "React conformance driver requires core.snapshot to be a getter",
     )
+  })
+
+  it("pins the provider DOM root contract", async () => {
+    const driver = ReactConformanceDriver()
+    const overriddenRoot = document.createElement("section")
+    const driverCore = await driver.create({
+      dom: {
+        root: overriddenRoot,
+        roots: [".ignored"],
+        structuredText: { selector: "[data-structured]" },
+      },
+    })
+
+    try {
+      expect(mockTranslatorProvider).toHaveBeenCalledTimes(1)
+      expect(mockTranslatorProvider.mock.calls[0]?.[0]).toMatchObject({
+        config: {
+          dom: {
+            root: document,
+            roots: ["#app"],
+            structuredText: { selector: "[data-structured]" },
+          },
+        },
+      })
+    } finally {
+      await driver.dispose(driverCore)
+    }
   })
 })

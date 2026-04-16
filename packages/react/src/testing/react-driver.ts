@@ -25,6 +25,18 @@ type SnapshotContract = {
   snapshot: Snapshot | null
 }
 
+function createPinnedDomConfig(
+  root: ParentNode | Document,
+  dom?: BabulfishConfig["dom"],
+): NonNullable<BabulfishConfig["dom"]> {
+  const { root: _ignoredRoot, roots: _ignoredRoots, ...domConfig } = dom ?? {}
+  return {
+    ...domConfig,
+    roots: ["#app"],
+    root,
+  }
+}
+
 function captureSnapshotContract(core: BabulfishCore): SnapshotContract {
   const descriptor = Object.getOwnPropertyDescriptor(core, "snapshot")
   const unboundGetSnapshot = descriptor?.get
@@ -83,10 +95,11 @@ export function ReactConformanceDriver(): ConformanceDriver {
         core: null,
         contract: null,
       }
+      const domRoot = document
 
       const mergedConfig: BabulfishConfig = {
         ...config,
-        dom: { roots: ["#app"], root: document, ...config?.dom },
+        dom: createPinnedDomConfig(domRoot, config?.dom),
       }
 
       const { unmount } = await act(async () =>
