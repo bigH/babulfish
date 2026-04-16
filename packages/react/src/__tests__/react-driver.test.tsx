@@ -30,6 +30,10 @@ const mockCore = {
   dispose,
   languages: [],
 }
+const originalSnapshotDescriptor = Object.getOwnPropertyDescriptor(
+  mockCore,
+  "snapshot",
+)
 
 vi.mock("../provider.js", () => ({
   TranslatorProvider: ({ children }: { children: React.ReactNode }) => children,
@@ -68,6 +72,9 @@ async function publishSnapshot(nextSnapshot: Snapshot): Promise<void> {
 
 describe("ReactConformanceDriver", () => {
   beforeEach(() => {
+    if (originalSnapshotDescriptor) {
+      Object.defineProperty(mockCore, "snapshot", originalSnapshotDescriptor)
+    }
     listeners.clear()
     currentSnapshot = createSnapshot("idle")
     vi.clearAllMocks()
@@ -101,5 +108,19 @@ describe("ReactConformanceDriver", () => {
       if (!disposed) await driver.dispose(driverCore)
       listeners.clear()
     }
+  })
+
+  it("fails fast when the provider core snapshot is not a getter", async () => {
+    Object.defineProperty(mockCore, "snapshot", {
+      value: currentSnapshot,
+      configurable: true,
+      enumerable: true,
+    })
+
+    const driver = ReactConformanceDriver()
+
+    await expect(driver.create()).rejects.toThrow(
+      "React conformance driver requires core.snapshot to be a getter",
+    )
   })
 })

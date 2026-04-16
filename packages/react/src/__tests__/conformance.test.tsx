@@ -9,11 +9,21 @@ import { scenarios, scenariosForDriver } from "@babulfish/core/testing"
 import { __resetEngineForTests } from "@babulfish/core/engine/testing"
 import { ReactConformanceDriver } from "../testing/react-driver.js"
 
-const driver = ReactConformanceDriver()
-const applicable = scenariosForDriver(driver)
+const applicable = scenariosForDriver(ReactConformanceDriver())
 
 function resetDOM(): void {
   document.body.innerHTML = '<div id="app"><p>Hello world</p></div>' // eslint-disable-line no-unsanitized/property -- hardcoded test fixture
+}
+
+async function runScenario(scenario: (typeof applicable)[number]): Promise<void> {
+  const driver = ReactConformanceDriver()
+
+  try {
+    await scenario.run(driver)
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    throw new Error(`[driver="${driver.id}"] [scenario="${scenario.id}"] ${msg}`)
+  }
 }
 
 beforeEach(() => {
@@ -24,19 +34,14 @@ beforeEach(() => {
 
 describe("conformance — react driver", () => {
   it("is explicitly DOM-capable", () => {
-    expect(driver.supportsDOM).toBe(true)
+    expect(ReactConformanceDriver().supportsDOM).toBe(true)
   })
 
   it("runs the full shared scenario suite", () => {
     expect(applicable).toHaveLength(scenarios.length)
   })
 
-  it.each([...applicable])("$id — $description", async (scenario) => {
-    try {
-      await scenario.run(driver)
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
-      throw new Error(`[driver="${driver.id}"] [scenario="${scenario.id}"] ${msg}`)
-    }
+  it.each(applicable)("$id — $description", async (scenario) => {
+    await runScenario(scenario)
   })
 })
