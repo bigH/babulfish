@@ -1,6 +1,6 @@
 import type { Language } from "@babulfish/core"
-import { useContext, useEffect, useRef, type ReactNode } from "react"
-import { TranslatorContext } from "./context.js"
+import { useEffect, useRef, type ReactNode } from "react"
+import { useResolvedLanguages } from "./context.js"
 
 export type TranslateDropdownProps = {
   readonly onSelect: (code: string) => void
@@ -43,14 +43,7 @@ export function TranslateDropdown({
   languages: languagesProp,
   focusedIndex = -1,
 }: TranslateDropdownProps) {
-  const ctx = useContext(TranslatorContext)
-  const languages = languagesProp ?? ctx?.languages
-
-  if (!languages) {
-    throw new Error(
-      "TranslateDropdown requires either a languages prop or a <TranslatorProvider>",
-    )
-  }
+  const languages = useResolvedLanguages(languagesProp)
 
   const listRef = useRef<HTMLUListElement>(null)
 

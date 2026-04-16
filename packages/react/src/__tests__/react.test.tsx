@@ -1069,6 +1069,17 @@ describe("TranslateDropdown", () => {
     expect(screen.getByText("French")).toBeInTheDocument()
     expect(screen.queryByText("German")).not.toBeInTheDocument()
   })
+
+  it("treats an explicit empty languages list as authoritative", () => {
+    render(
+      <Wrapper>
+        <TranslateDropdown onSelect={() => {}} languages={[]} />
+      </Wrapper>,
+    )
+
+    expect(screen.queryAllByRole("option")).toHaveLength(0)
+    expect(screen.queryByText("German")).not.toBeInTheDocument()
+  })
 })
 
 describe("useTranslateDOM", () => {
