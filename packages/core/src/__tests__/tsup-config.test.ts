@@ -4,17 +4,34 @@ import { readFileSync } from "node:fs"
 import { describe, expect, it } from "vitest"
 import tsupConfig from "../../tsup.config.ts"
 
-describe("core tsup config", () => {
-  it("keeps its configured entrypoints aligned with package exports", () => {
-    const packageJsonUrl = new URL("../../package.json", import.meta.url)
-    const packageJson = JSON.parse(readFileSync(packageJsonUrl, "utf8")) as {
-      exports: Record<string, unknown>
-    }
-    const exportedEntryKeys = Object.keys(packageJson.exports)
-      .map((subpath) => (subpath === "." ? "index" : subpath.slice(2)))
-      .sort()
-    const configuredEntryKeys = Object.keys(tsupConfig.entry).sort()
+type PackageExportTarget = {
+  import: string
+  types: string
+}
 
-    expect(configuredEntryKeys).toEqual(exportedEntryKeys)
+function readPackageExports(): Record<string, PackageExportTarget> {
+  const packageJsonUrl = new URL("../../package.json", import.meta.url)
+  const packageJson = JSON.parse(readFileSync(packageJsonUrl, "utf8")) as {
+    exports: Record<string, PackageExportTarget>
+  }
+
+  return packageJson.exports
+}
+
+function expectedExportsFromEntries(entries: Record<string, string>): Record<string, PackageExportTarget> {
+  return Object.fromEntries(
+    Object.keys(entries).map((entryKey) => [
+      entryKey === "index" ? "." : `./${entryKey}`,
+      {
+        import: `./dist/${entryKey}.js`,
+        types: `./dist/${entryKey}.d.ts`,
+      },
+    ]),
+  )
+}
+
+describe("core tsup config", () => {
+  it("keeps package exports aligned with configured entrypoints and dist filenames", () => {
+    expect(readPackageExports()).toEqual(expectedExportsFromEntries(tsupConfig.entry))
   })
 })
