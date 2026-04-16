@@ -81,6 +81,15 @@ describe("conformance — vanilla DOM driver", () => {
     await rootOverrideScenario.run(createVanillaDomDriver(fragment))
   })
 
+  it("keeps a fragment-backed root pinned on the driver", () => {
+    const range = document.createRange()
+    const fragment = range.createContextualFragment('<div id="app"><p>Hello world</p></div>')
+    const fragmentDriver = createVanillaDomDriver(fragment)
+
+    expect(fragmentDriver.supportsDOM).toBe(true)
+    expect(fragmentDriver.root).toBe(fragment)
+  })
+
   it.each([...scenariosForDriver(driver)])("$id — $description", async (scenario) => {
     await scenario.run(driver)
   })
