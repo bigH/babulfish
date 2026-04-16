@@ -3,7 +3,7 @@ import type { DOMTranslatorConfig, DOMTranslator } from "../dom/translator.js"
 import { createDOMTranslator } from "../dom/translator.js"
 import { acquireEngine, registerCoreEngine } from "./engine-handle.js"
 import { createStore, type Snapshot } from "./store.js"
-import type { ModelState } from "./store.js"
+import type { ModelState, TranslationState } from "./store.js"
 import { createProgressController } from "./progress.js"
 import {
   createReadonlyLanguageList,
@@ -65,6 +65,14 @@ async function raceWithAbort<T>(promise: Promise<T>, signal?: AbortSignal): Prom
   }
 }
 
+const IDLE_MODEL_STATE: ModelState = Object.freeze({ status: "idle" })
+const READY_MODEL_STATE: ModelState = Object.freeze({ status: "ready" })
+const IDLE_TRANSLATION_STATE: TranslationState = Object.freeze({ status: "idle" })
+const INITIAL_TRANSLATION_STATE: TranslationState = Object.freeze({
+  status: "translating",
+  progress: 0,
+})
+
 export function createBabulfish(config?: BabulfishConfig): BabulfishCore {
   const capabilities = detectCapabilities(config?.engine?.device)
   const store = createStore(capabilities)
@@ -77,34 +85,66 @@ export function createBabulfish(config?: BabulfishConfig): BabulfishCore {
   const defaultRoot = config?.dom?.root
   let disposed = false
 
-  const unsubStatus = engine.on("status-change", ({ to, error }) => {
+  function assertNotDisposed(): void {
+    if (disposed) throw new Error("Core is disposed")
+  }
+
+  function modelStateForStatus(
+    previousSnapshot: Snapshot,
+    nextStatus: ModelState["status"],
+    error?: unknown,
+  ): ModelState {
+    switch (nextStatus) {
+      case "downloading":
+        return {
+          status: "downloading",
+          progress:
+            previousSnapshot.model.status === "downloading" ? previousSnapshot.model.progress : 0,
+        }
+      case "ready":
+        return READY_MODEL_STATE
+      case "error":
+        return { status: "error", error }
+      default:
+        return IDLE_MODEL_STATE
+    }
+  }
+
+  function setTranslationStarted(lang: string): void {
+    store.set((prev) => ({
+      ...prev,
+      translation: INITIAL_TRANSLATION_STATE,
+      currentLanguage: lang,
+    }))
+  }
+
+  function setTranslationIdle(): void {
     store.set((prev) => {
-      let model: ModelState
-      switch (to) {
-        case "downloading":
-          model = {
-            status: "downloading" as const,
-            progress: prev.model.status === "downloading" ? prev.model.progress : 0,
-          }
-          break
-        case "ready":
-          model = { status: "ready" as const }
-          break
-        case "error":
-          model = { status: "error" as const, error }
-          break
-        default:
-          model = { status: "idle" as const }
-      }
-      return { ...prev, model }
+      if (prev.translation.status === "idle") return prev
+      return { ...prev, translation: IDLE_TRANSLATION_STATE }
     })
-  })
+  }
+
+  function restoreTranslationState(): void {
+    store.set((prev) => {
+      if (prev.translation.status === "idle" && prev.currentLanguage === null) return prev
+      return {
+        ...prev,
+        translation: IDLE_TRANSLATION_STATE,
+        currentLanguage: null,
+      }
+    })
+  }
+
+  const unsubStatus = engine.on("status-change", ({ to, error }) =>
+    store.set((prev) => ({ ...prev, model: modelStateForStatus(prev, to, error) })),
+  )
 
   const unsubProgress = engine.on("progress", ({ loaded, total }) => {
     store.set((prev) => {
       const p = total > 0 ? loaded / total : 0
       if (prev.model.status === "downloading" && prev.model.progress === p) return prev
-      return { ...prev, model: { status: "downloading" as const, progress: p } }
+      return { ...prev, model: { status: "downloading", progress: p } }
     })
   })
 
@@ -130,12 +170,12 @@ export function createBabulfish(config?: BabulfishConfig): BabulfishCore {
   }
 
   async function loadModel(opts?: { signal?: AbortSignal }): Promise<void> {
-    if (disposed) throw new Error("Core is disposed")
+    assertNotDisposed()
     await raceWithAbort(engine.load(), opts?.signal)
   }
 
   async function translateTo(lang: string, opts?: TranslateOptions): Promise<void> {
-    if (disposed) throw new Error("Core is disposed")
+    assertNotDisposed()
 
     if (lang === "restore") {
       throw new Error(
@@ -151,21 +191,11 @@ export function createBabulfish(config?: BabulfishConfig): BabulfishCore {
         })
       : null
 
-    store.set((prev) => ({
-      ...prev,
-      translation: { status: "translating" as const, progress: 0 },
-      currentLanguage: lang,
-    }))
+    setTranslationStarted(lang)
 
     function resetTranslationIfCurrentRun(): void {
       if (!run.isCurrent()) return
-      store.set((prev) => {
-        if (prev.translation.status === "idle") return prev
-        return {
-          ...prev,
-          translation: { status: "idle" as const },
-        }
-      })
+      setTranslationIdle()
     }
 
     try {
@@ -194,7 +224,7 @@ export function createBabulfish(config?: BabulfishConfig): BabulfishCore {
     lang: string,
     opts?: { signal?: AbortSignal },
   ): Promise<string> {
-    if (disposed) throw new Error("Core is disposed")
+    assertNotDisposed()
     return raceWithAbort(engine.translate(text, lang), opts?.signal)
   }
 
@@ -206,24 +236,14 @@ export function createBabulfish(config?: BabulfishConfig): BabulfishCore {
     const translator = getDomTranslator(opts?.root)
     if (translator) translator.restore()
 
-    store.set((prev) => {
-      if (prev.translation.status === "idle" && prev.currentLanguage === null) return prev
-      return {
-        ...prev,
-        translation: { status: "idle" as const },
-        currentLanguage: null,
-      }
-    })
+    restoreTranslationState()
   }
 
   function abort(): void {
     if (disposed) return
     progress.abortCurrent()
     if (domTranslator) domTranslator.abort()
-    store.set((prev) => {
-      if (prev.translation.status === "idle") return prev
-      return { ...prev, translation: { status: "idle" as const } }
-    })
+    setTranslationIdle()
   }
 
   async function dispose(): Promise<void> {

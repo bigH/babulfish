@@ -238,6 +238,40 @@ describe("4.3 — cancellation", () => {
     expect(core.snapshot.translation.status).toBe("idle")
   })
 
+  it("abort() preserves the last requested language", async () => {
+    setupPipelineMock()
+    const core = createBabulfish()
+    await core.loadModel()
+    await core.translateTo("es")
+
+    core.abort()
+
+    expect(core.snapshot.translation.status).toBe("idle")
+    expect(core.snapshot.currentLanguage).toBe("es")
+  })
+
+  it("restore() clears the last requested language", async () => {
+    setupPipelineMock()
+    const core = createBabulfish()
+    await core.loadModel()
+    await core.translateTo("es")
+
+    core.restore()
+
+    expect(core.snapshot.translation.status).toBe("idle")
+    expect(core.snapshot.currentLanguage).toBeNull()
+  })
+
+  it("abort() is silent when translation is already idle", () => {
+    const core = createBabulfish()
+    const snaps = snapshots(core)
+
+    core.abort()
+    core.abort()
+
+    expect(snaps).toHaveLength(0)
+  })
+
   it("dispose rejects further method calls", async () => {
     const core = createBabulfish()
     await core.dispose()
