@@ -592,6 +592,33 @@ describe("TranslateButton", () => {
     expect(screen.getByText("French")).toBeInTheDocument()
   })
 
+  it("forwards dropdownItem class names to every ready dropdown option", async () => {
+    mockLoadModel.mockImplementation(async () => {
+      setMockSnapshot({
+        model: { status: "ready" as const },
+      })
+    })
+
+    render(
+      <Wrapper config={DOM_CONFIG}>
+        <TranslateButton classNames={{ dropdownItem: "custom-dropdown-item" }} />
+      </Wrapper>,
+    )
+
+    const button = screen.getByRole("button")
+
+    fireEvent.click(button)
+    await act(async () => {
+      fireEvent.click(button)
+    })
+
+    fireEvent.click(button)
+
+    for (const option of screen.getAllByRole("option")) {
+      expect(option).toHaveClass("custom-dropdown-item")
+    }
+  })
+
   it("shows an explicit mobile warning state", () => {
     setMockSnapshot({
       capabilities: {
@@ -712,6 +739,57 @@ describe("TranslateButton", () => {
     })
 
     expect(button).not.toHaveTextContent("50%")
+  })
+
+  it("keeps the dropdown open but disabled while translating", async () => {
+    mockLoadModel.mockImplementation(async () => {
+      setMockSnapshot({
+        model: { status: "ready" as const },
+      })
+    })
+
+    const deferred = createDeferred<void>()
+    mockTranslateTo.mockImplementation(async (lang) => {
+      setMockSnapshot({
+        translation: { status: "translating", progress: 0.5 },
+        currentLanguage: lang,
+      })
+      await deferred.promise
+      setMockSnapshot({
+        translation: { status: "idle" as const },
+      })
+    })
+
+    render(
+      <Wrapper config={DOM_CONFIG}>
+        <TranslateButton classNames={{ dropdownItem: "custom-dropdown-item" }} />
+      </Wrapper>,
+    )
+
+    const button = screen.getByRole("button")
+
+    fireEvent.click(button)
+    await act(async () => {
+      fireEvent.click(button)
+    })
+
+    fireEvent.click(button)
+    await act(async () => {
+      fireEvent.click(screen.getByText("Spanish"))
+      await Promise.resolve()
+    })
+
+    const listbox = screen.getByRole("listbox")
+    expect(listbox.style.pointerEvents).toBe("none")
+    expect(listbox.style.opacity).toBe("0.5")
+    for (const option of screen.getAllByRole("option")) {
+      expect(option).toHaveClass("custom-dropdown-item")
+    }
+
+    await act(async () => {
+      deferred.resolve()
+      await Promise.resolve()
+    })
   })
 
   it("shows non-zero download progress from hook state", async () => {

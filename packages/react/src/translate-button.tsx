@@ -440,6 +440,10 @@ export function TranslateButton({
 
   const isDownloading = state.kind === "downloading"
   const isTranslating = state.kind === "translating"
+  const dropdownState =
+    state.kind === "ready" || state.kind === "translating"
+      ? state
+      : null
   const isProgressState = isDownloading || isTranslating
   const progressValue = isDownloading
     ? modelProgress
@@ -491,6 +495,7 @@ export function TranslateButton({
       }
     />
   )
+  const dropdownFocusedIndex = isTranslating ? -1 : focusedIndex
 
   return (
     <div
@@ -591,25 +596,15 @@ export function TranslateButton({
             )
         )}
 
-        {/* Language dropdown */}
-        {state.kind === "ready" && state.dropdownOpen && (
+        {dropdownState?.dropdownOpen && (
           <TranslateDropdown
             value={currentLanguage}
-            disabled={false}
+            disabled={isTranslating}
             onSelect={handleLanguageSelect}
             onRestore={handleRestore}
-            focusedIndex={focusedIndex}
+            focusedIndex={dropdownFocusedIndex}
             className={classNames?.dropdown}
-          />
-        )}
-        {state.kind === "translating" && state.dropdownOpen && (
-          <TranslateDropdown
-            value={currentLanguage}
-            disabled
-            onSelect={() => {}}
-            onRestore={() => {}}
-            focusedIndex={-1}
-            className={classNames?.dropdown}
+            itemClassName={classNames?.dropdownItem}
           />
         )}
     </div>

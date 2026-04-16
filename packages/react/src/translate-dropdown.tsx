@@ -8,6 +8,7 @@ export type TranslateDropdownProps = {
   readonly value?: string | null
   readonly disabled?: boolean
   readonly className?: string
+  readonly itemClassName?: string
   readonly renderOption?: (lang: Language, active: boolean) => ReactNode
   readonly languages?: readonly Language[]
   readonly focusedIndex?: number
@@ -37,6 +38,7 @@ export function TranslateDropdown({
   value = null,
   disabled = false,
   className,
+  itemClassName,
   renderOption,
   languages: languagesProp,
   focusedIndex = -1,
@@ -105,6 +107,7 @@ export function TranslateDropdown({
           tabIndex={-1}
           data-focused={focusedIndex === 0 || undefined}
           data-active={isOriginalActive || undefined}
+          className={itemClassName}
           onClick={handleRestore}
           style={itemStyle(isOriginalActive)}
         >
@@ -125,6 +128,7 @@ export function TranslateDropdown({
               role="option"
               aria-selected={isActive}
               tabIndex={-1}
+              className={itemClassName}
               onClick={() => handleSelect(lang.code)}
             >
               {renderOption(lang, isActive)}
@@ -141,6 +145,7 @@ export function TranslateDropdown({
             tabIndex={-1}
             data-focused={isFocused || undefined}
             data-active={isActive || undefined}
+            className={itemClassName}
             onClick={() => handleSelect(lang.code)}
             style={itemStyle(isActive)}
           >
