@@ -99,10 +99,28 @@ type LinkedGroup = {
   readonly sourceText: string
 }
 
+type VisibleWork =
+  | {
+      readonly kind: "richText"
+      readonly rootIndex: number
+      readonly anchor: Element
+      readonly element: Element
+    }
+  | {
+      readonly kind: "structuredText"
+      readonly rootIndex: number
+      readonly anchor: Element
+      readonly unit: StructuredTextUnit
+    }
+  | {
+      readonly kind: "text"
+      readonly rootIndex: number
+      readonly anchor: Text
+      readonly batch: TaggedTextNode[]
+    }
+
 type PhaseWork = {
-  md: Element[]
-  structured: StructuredTextUnit[]
-  batches: TaggedTextNode[][]
+  visible: VisibleWork[]
   attrs: TranslatableAttr[]
 }
 
@@ -178,6 +196,22 @@ function compareDocumentOrder(a: Node, b: Node): number {
   if (relation & Node.DOCUMENT_POSITION_PRECEDING) return 1
   if (relation & Node.DOCUMENT_POSITION_FOLLOWING) return -1
   return 0
+}
+
+function findOwningRootIndex(
+  node: Node,
+  roots: readonly Element[],
+): number {
+  for (let i = 0; i < roots.length; i++) {
+    const root = roots[i]!
+    if (root === node || root.contains(node)) return i
+  }
+  return roots.length
+}
+
+function compareVisibleWork(a: VisibleWork, b: VisibleWork): number {
+  if (a.rootIndex !== b.rootIndex) return a.rootIndex - b.rootIndex
+  return compareDocumentOrder(a.anchor, b.anchor)
 }
 
 function buildStructuredToken(key: string, slotId: number): string {
@@ -726,8 +760,8 @@ export function createDOMTranslator(config: DOMTranslatorConfig): DOMTranslator 
 
   function collectTranslatableAttrs(root: Element): TranslatableAttr[] {
     const items: TranslatableAttr[] = []
-    for (const attrName of attrNames) {
-      for (const el of root.querySelectorAll(`[${attrName}]`)) {
+    for (const el of root.querySelectorAll("*")) {
+      for (const attrName of attrNames) {
         const sourceText = getOriginalAttrValue(el, attrName)
         if (sourceText == null || shouldSkip(sourceText)) continue
         const text = captureOriginalAttrValue(el, attrName)
@@ -859,6 +893,26 @@ export function createDOMTranslator(config: DOMTranslatorConfig): DOMTranslator 
       ).filter(({ node }) =>
         !claims.linkedTextNodes.has(node) && !claims.structuredTextNodes.has(node))
       const allBatches = buildBatches(allNodes, charLimit)
+      const allVisible: VisibleWork[] = [
+        ...allRich.map((element): VisibleWork => ({
+          kind: "richText",
+          rootIndex: findOwningRootIndex(element, roots),
+          anchor: element,
+          element,
+        })),
+        ...allStructured.map((unit): VisibleWork => ({
+          kind: "structuredText",
+          rootIndex: findOwningRootIndex(unit.root, roots),
+          anchor: unit.root,
+          unit,
+        })),
+        ...allBatches.map((batch): VisibleWork => ({
+          kind: "text",
+          rootIndex: findOwningRootIndex(batch[0]!.node, roots),
+          anchor: batch[0]!.node,
+          batch,
+        })),
+      ].sort(compareVisibleWork)
       const allAttrs = roots.flatMap(collectTranslatableAttrs)
 
       const total =
@@ -881,18 +935,12 @@ export function createDOMTranslator(config: DOMTranslatorConfig): DOMTranslator 
         )
         const phaseCount = config.phases.length + 1
         const phases: PhaseWork[] = Array.from({ length: phaseCount }, () => ({
-          md: [],
-          structured: [],
-          batches: [],
+          visible: [],
           attrs: [],
         }))
 
-        for (const el of allRich) phases[assignPhase(el, phaseRoots)]!.md.push(el)
-        for (const unit of allStructured) {
-          phases[assignPhase(unit.root, phaseRoots)]!.structured.push(unit)
-        }
-        for (const batch of allBatches) {
-          phases[assignPhase(batch[0]!.node, phaseRoots)]!.batches.push(batch)
+        for (const work of allVisible) {
+          phases[assignPhase(work.anchor, phaseRoots)]!.visible.push(work)
         }
         for (const attr of allAttrs) {
           phases[assignPhase(attr.el, phaseRoots)]!.attrs.push(attr)
@@ -909,9 +957,7 @@ export function createDOMTranslator(config: DOMTranslatorConfig): DOMTranslator 
         await translateLinked(linkedGroups, targetLang, signal, progress)
 
         const singlePhase: PhaseWork = {
-          md: allRich,
-          structured: allStructured,
-          batches: allBatches,
+          visible: allVisible,
           attrs: allAttrs,
         }
         await translatePhaseWork(singlePhase, targetLang, signal, progress)
@@ -927,41 +973,32 @@ export function createDOMTranslator(config: DOMTranslatorConfig): DOMTranslator 
     signal: AbortSignal,
     progress: () => void,
   ): Promise<void> {
-    // Rich text elements
-    for (const el of phase.md) {
+    for (const work of phase.visible) {
       if (signal.aborted) return
-      await translateRichElement(el, targetLang, signal)
+      if (work.kind === "richText") {
+        await translateRichElement(work.element, targetLang, signal)
+      } else if (work.kind === "structuredText") {
+        await translateStructuredUnit(work.unit, targetLang, signal)
+      } else {
+        const parents = new Set(
+          work.batch.map((t) => t.node.parentElement).filter(Boolean) as Element[],
+        )
+        for (const p of parents) {
+          notifyStart(p, config.hooks?.onTranslateStart)
+        }
+
+        const chunk = work.batch.map((t) => t.text).join("\n")
+        const result = await config.translate(chunk, targetLang)
+        if (signal.aborted) return
+
+        applyTranslation(work.batch, result)
+
+        for (const p of parents) {
+          notifyEnd(p, config.hooks?.onTranslateEnd)
+        }
+      }
+
       if (signal.aborted) return
-      progress()
-    }
-
-    // Structured text roots
-    for (const unit of phase.structured) {
-      if (signal.aborted) return
-      await translateStructuredUnit(unit, targetLang, signal)
-      if (signal.aborted) return
-      progress()
-    }
-
-    // Text node batches
-    for (const batch of phase.batches) {
-      if (signal.aborted) return
-
-      const parents = new Set(
-        batch.map((t) => t.node.parentElement).filter(Boolean) as Element[],
-      )
-      for (const p of parents)
-        notifyStart(p, config.hooks?.onTranslateStart)
-
-      const chunk = batch.map((t) => t.text).join("\n")
-      const result = await config.translate(chunk, targetLang)
-      if (signal.aborted) return
-
-      applyTranslation(batch, result)
-
-      for (const p of parents)
-        notifyEnd(p, config.hooks?.onTranslateEnd)
-
       progress()
     }
 

@@ -611,7 +611,7 @@ describe("DOM translator", () => {
     const t = makeTranslator(translate, { richText: RICH_TEXT_CONFIG })
     await t.translate("es-ES")
 
-    expectTranslateCalls(translate, "**bold**", "Normal text")
+    expectTranslateCalls(translate, "Normal text", "**bold**")
   })
 
   // -----------------------------------------------------------------------
@@ -1249,6 +1249,230 @@ describe("DOM translator", () => {
     expect(callOrder.indexOf("Section heading")).toBeLessThan(
       callOrder.indexOf("Body text"),
     )
+  })
+
+  it("keeps linkedBy work first overall before mixed visible work in a phase", async () => {
+    const rich = setUpRichSpan("Rich **source**", "Rich <strong>source</strong>")
+    const structured = document.createElement("p")
+    structured.className = "structured"
+    structured.innerHTML = "Structured <em>phrase</em>" // eslint-disable-line no-unsanitized/property -- test-only static fixture
+    const linked = createElement("h2", {
+      text: "Linked title",
+      attrs: { "data-section-title": "intro" },
+    })
+    setUpMain([
+      { tag: "p", text: "Plain text" },
+      rich,
+      structured,
+      linked,
+    ])
+
+    const callKinds: string[] = []
+    translate.mockImplementation(async (text: string) => {
+      if (text === "Linked title") {
+        callKinds.push("linked")
+        return "Titulo enlazado"
+      }
+      if (text === "Plain text") {
+        callKinds.push("plain")
+        return "Texto plano"
+      }
+      if (text === "Rich **source**") {
+        callKinds.push("rich")
+        return "Rico **origen**"
+      }
+      if (text.includes(TEST_STRUCTURED_TOKEN_PREFIX)) {
+        callKinds.push("structured")
+        return replaceAllVisibleText(text, {
+          Structured: "Estructurado",
+          phrase: "frase",
+        })
+      }
+      throw new Error(`Unexpected translate input: ${text}`)
+    })
+
+    const t = makeTranslator(translate, {
+      phases: ["main"],
+      linkedBy: {
+        selector: "[data-section-title]",
+        keyAttribute: "data-section-title",
+      },
+      richText: RICH_TEXT_CONFIG,
+      structuredText: STRUCTURED_TEXT_CONFIG,
+    })
+    await t.translate("es-ES")
+
+    expect(callKinds).toEqual(["linked", "plain", "rich", "structured"])
+  })
+
+  it("merges plain batches, richText, and structuredText by document order inside a phase", async () => {
+    const main = document.createElement("main")
+
+    const mixed = document.createElement("p")
+    mixed.append(document.createTextNode("Before"))
+    const rich = setUpRichSpan("Rich **source**", "Rich <strong>source</strong>")
+    mixed.append(rich, document.createTextNode("After"))
+
+    const structured = document.createElement("p")
+    structured.className = "structured"
+    structured.innerHTML = "Structured <em>phrase</em>" // eslint-disable-line no-unsanitized/property -- test-only static fixture
+
+    const tail = createElement("p", { text: "Tail text" })
+
+    main.append(mixed, structured, tail)
+    document.body.appendChild(main)
+
+    const callKinds: string[] = []
+    const onTranslateStart = vi.fn()
+    const onTranslateEnd = vi.fn()
+    const onProgress = vi.fn()
+
+    translate.mockImplementation(async (text: string) => {
+      if (text === "Before\nAfter") {
+        callKinds.push("batch")
+        return "Antes\nDespues"
+      }
+      if (text === "Rich **source**") {
+        callKinds.push("rich")
+        return "Rico **origen**"
+      }
+      if (text.includes(TEST_STRUCTURED_TOKEN_PREFIX)) {
+        callKinds.push("structured")
+        return replaceAllVisibleText(text, {
+          Structured: "Estructurado",
+          phrase: "frase",
+        })
+      }
+      if (text === "Tail text") {
+        callKinds.push("tail")
+        return "Texto final"
+      }
+      throw new Error(`Unexpected translate input: ${text}`)
+    })
+
+    const t = makeTranslator(translate, {
+      phases: ["main"],
+      richText: RICH_TEXT_CONFIG,
+      structuredText: STRUCTURED_TEXT_CONFIG,
+      hooks: { onTranslateStart, onTranslateEnd, onProgress },
+    })
+    await t.translate("es-ES")
+
+    expect(callKinds).toEqual(["batch", "rich", "structured", "tail"])
+    expect(onTranslateStart.mock.calls.map(([element]) => element)).toEqual([
+      mixed,
+      rich,
+      structured,
+      tail,
+    ])
+    expect(onTranslateEnd.mock.calls.map(([element]) => element)).toEqual([
+      mixed,
+      rich,
+      structured,
+      tail,
+    ])
+    expect(onProgress.mock.calls).toEqual([
+      [1, 4],
+      [2, 4],
+      [3, 4],
+      [4, 4],
+    ])
+  })
+
+  it("runs attrs after visible work in document order by element and translateAttributes order", async () => {
+    const rich = setUpRichSpan("Rich **source**", "Rich <strong>source</strong>")
+    rich.setAttribute("title", "Rich title")
+
+    const plain = createElement("p", {
+      text: "Plain text",
+      attrs: { title: "Plain title" },
+    })
+    const link = createElement("a", {
+      text: "Link text",
+      attrs: {
+        title: "Link title",
+        "aria-label": "Link label",
+      },
+    })
+    setUpMain([plain, link, rich])
+
+    const callKinds: string[] = []
+    const onTranslateStart = vi.fn()
+    const onTranslateEnd = vi.fn()
+    const onProgress = vi.fn()
+
+    translate.mockImplementation(async (text: string) => {
+      if (text === "Plain text") {
+        callKinds.push("plain")
+        return "Texto plano"
+      }
+      if (text === "Link text") {
+        callKinds.push("link")
+        return "Texto del enlace"
+      }
+      if (text === "Rich **source**") {
+        callKinds.push("rich")
+        return "Rico **origen**"
+      }
+      if (text === "Plain title") {
+        callKinds.push("plain:title")
+        return "Titulo plano"
+      }
+      if (text === "Link label") {
+        callKinds.push("link:aria-label")
+        return "Etiqueta del enlace"
+      }
+      if (text === "Link title") {
+        callKinds.push("link:title")
+        return "Titulo del enlace"
+      }
+      if (text === "Rich title") {
+        callKinds.push("rich:title")
+        return "Titulo enriquecido"
+      }
+      throw new Error(`Unexpected translate input: ${text}`)
+    })
+
+    const t = makeTranslator(translate, {
+      phases: ["main"],
+      richText: RICH_TEXT_CONFIG,
+      translateAttributes: ["aria-label", "title"],
+      hooks: { onTranslateStart, onTranslateEnd, onProgress },
+    })
+    await t.translate("es-ES")
+
+    expect(callKinds).toEqual([
+      "plain",
+      "link",
+      "rich",
+      "plain:title",
+      "link:aria-label",
+      "link:title",
+      "rich:title",
+    ])
+    expect(onTranslateStart.mock.calls.map(([element]) => element)).toEqual([
+      plain,
+      link,
+      rich,
+    ])
+    expect(onTranslateEnd.mock.calls.map(([element]) => element)).toEqual([
+      plain,
+      link,
+      rich,
+    ])
+    expect(onProgress.mock.calls).toEqual([
+      [1, 7],
+      [2, 7],
+      [3, 7],
+      [4, 7],
+      [5, 7],
+      [6, 7],
+      [7, 7],
+    ])
+    expect(plain.getAttribute("title")).toBe("Titulo plano")
+    expect(link.getAttribute("aria-label")).toBe("Etiqueta del enlace")
+    expect(link.getAttribute("title")).toBe("Titulo del enlace")
+    expect(rich.getAttribute("title")).toBe("Titulo enriquecido")
   })
 
   // -----------------------------------------------------------------------
