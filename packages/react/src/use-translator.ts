@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from "react"
 import { useTranslatorContext } from "./context.js"
 import type { ModelState, TranslationState } from "@babulfish/core"
-import { SSR_SNAPSHOT } from "./ssr.js"
+import { SSR_CORE } from "./ssr.js"
 
 export type { ModelState, TranslationState }
 
@@ -10,7 +10,7 @@ export function useTranslator() {
   const snapshot = useSyncExternalStore(
     core.subscribe,
     () => core.snapshot,
-    () => SSR_SNAPSHOT,
+    () => SSR_CORE.snapshot,
   )
 
   return {

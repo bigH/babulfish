@@ -1,17 +1,19 @@
 import { describe, expect, it } from "vitest"
-import { SSR_CORE, SSR_SNAPSHOT } from "../ssr.js"
+import { SSR_CORE } from "../ssr.js"
 
 describe("SSR fallback", () => {
   it("exposes a shared immutable idle snapshot", () => {
-    expect(SSR_CORE.snapshot).toBe(SSR_SNAPSHOT)
-    expect(SSR_SNAPSHOT.model.status).toBe("idle")
-    expect(SSR_SNAPSHOT.translation.status).toBe("idle")
-    expect(SSR_SNAPSHOT.currentLanguage).toBeNull()
-    expect(SSR_SNAPSHOT.capabilities.ready).toBe(false)
-    expect(Object.isFrozen(SSR_SNAPSHOT)).toBe(true)
-    expect(Object.isFrozen(SSR_SNAPSHOT.model)).toBe(true)
-    expect(Object.isFrozen(SSR_SNAPSHOT.translation)).toBe(true)
-    expect(Object.isFrozen(SSR_SNAPSHOT.capabilities)).toBe(true)
+    const snapshot = SSR_CORE.snapshot
+
+    expect(SSR_CORE.snapshot).toBe(snapshot)
+    expect(snapshot.model.status).toBe("idle")
+    expect(snapshot.translation.status).toBe("idle")
+    expect(snapshot.currentLanguage).toBeNull()
+    expect(snapshot.capabilities.ready).toBe(false)
+    expect(Object.isFrozen(snapshot)).toBe(true)
+    expect(Object.isFrozen(snapshot.model)).toBe(true)
+    expect(Object.isFrozen(snapshot.translation)).toBe(true)
+    expect(Object.isFrozen(snapshot.capabilities)).toBe(true)
   })
 
   it("does not expose mutable language state on the shared singleton", () => {
@@ -24,8 +26,10 @@ describe("SSR fallback", () => {
   })
 
   it("keeps SSR operations as immediate no-ops", async () => {
+    const snapshot = SSR_CORE.snapshot
+
     expect(typeof SSR_CORE.subscribe(() => {})).toBe("function")
-    expect(SSR_CORE.snapshot).toBe(SSR_SNAPSHOT)
+    expect(SSR_CORE.snapshot).toBe(snapshot)
     await expect(SSR_CORE.loadModel()).resolves.toBeUndefined()
     await expect(SSR_CORE.translateTo("fr")).resolves.toBeUndefined()
     await expect(SSR_CORE.translateText("hello", "fr")).resolves.toBe("")

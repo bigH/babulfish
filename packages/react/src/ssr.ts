@@ -5,7 +5,7 @@ const noop = () => {}
 const resolveVoid = (): Promise<void> => Promise.resolve()
 const resolveEmptyString = (): Promise<string> => Promise.resolve("")
 
-export const SSR_SNAPSHOT: Snapshot = Object.freeze({
+const SSR_SNAPSHOT: Snapshot = Object.freeze({
   model: Object.freeze({ status: "idle" as const }),
   translation: Object.freeze({ status: "idle" as const }),
   currentLanguage: null,

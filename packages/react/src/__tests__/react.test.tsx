@@ -2,6 +2,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import { render, screen, fireEvent, act, cleanup } from "@testing-library/react"
 import { Profiler } from "react"
+import { renderToString } from "react-dom/server"
 import type { Snapshot } from "@babulfish/core"
 
 // ---------------------------------------------------------------------------
@@ -287,6 +288,34 @@ describe("TranslatorProvider", () => {
     )
 
     expect(mockCreateBabulfish).toHaveBeenCalledTimes(1)
+  })
+
+  it("uses the shared inert SSR fallback during server render", () => {
+    vi.stubGlobal("document", undefined)
+
+    try {
+      const html = renderToString(
+        <TranslatorProvider>
+          <HookInspector />
+          <DOMHookInspector />
+        </TranslatorProvider>,
+      )
+
+      expect(mockCreateBabulfish).not.toHaveBeenCalled()
+      expect(html).toContain('data-testid="model-status">idle<')
+      expect(html).toContain('data-testid="translation-status">idle<')
+      expect(html).toContain('data-testid="current-language">none<')
+      expect(html).toContain('data-testid="capabilities-ready">false<')
+      expect(html).toContain('data-testid="is-supported">false<')
+      expect(html).toContain('data-testid="has-webgpu">false<')
+      expect(html).toContain('data-testid="can-translate">false<')
+      expect(html).toContain('data-testid="device">none<')
+      expect(html).toContain('data-testid="is-mobile">false<')
+      expect(html).toContain('data-testid="language-count">0<')
+      expect(html).toContain('data-testid="dom-progress">null<')
+    } finally {
+      vi.unstubAllGlobals()
+    }
   })
 
   it("disposes the created core on unmount", () => {

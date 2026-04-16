@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from "react"
 import { useTranslatorContext } from "./context.js"
-import { SSR_SNAPSHOT } from "./ssr.js"
+import { SSR_CORE } from "./ssr.js"
 
 export type UseTranslateDOMReturn = {
   translatePage(lang: string): Promise<void>
@@ -13,7 +13,7 @@ export function useTranslateDOM(): UseTranslateDOMReturn {
   const snapshot = useSyncExternalStore(
     core.subscribe,
     () => core.snapshot,
-    () => SSR_SNAPSHOT,
+    () => SSR_CORE.snapshot,
   )
 
   const progress =
