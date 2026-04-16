@@ -212,6 +212,61 @@ function setMockSnapshot(overrides: SnapshotOverrides = {}) {
   })
 }
 
+function renderTranslateButton(
+  props: React.ComponentProps<typeof TranslateButton> = {},
+) {
+  render(
+    <Wrapper config={DOM_CONFIG}>
+      <TranslateButton {...props} />
+    </Wrapper>,
+  )
+
+  return screen.getByRole("button")
+}
+
+function mockReadyModelLoad() {
+  mockLoadModel.mockImplementation(async () => {
+    setMockSnapshot({
+      model: { status: "ready" as const },
+    })
+  })
+}
+
+async function confirmModelDownload(button: HTMLElement) {
+  fireEvent.click(button)
+  expect(screen.getByRole("tooltip")).toHaveTextContent(
+    /click again to confirm/i,
+  )
+
+  await act(async () => {
+    fireEvent.click(button)
+    await Promise.resolve()
+  })
+}
+
+async function renderReadyTranslateButton(
+  props: React.ComponentProps<typeof TranslateButton> = {},
+) {
+  mockReadyModelLoad()
+
+  const button = renderTranslateButton(props)
+  await confirmModelDownload(button)
+
+  return button
+}
+
+function openLanguageDropdown(button: HTMLElement) {
+  fireEvent.click(button)
+  return screen.getByRole("listbox")
+}
+
+async function selectLanguage(label: string) {
+  await act(async () => {
+    fireEvent.click(screen.getByText(label))
+    await Promise.resolve()
+  })
+}
+
 beforeEach(() => {
   vi.clearAllMocks()
   listeners.clear()
@@ -434,13 +489,7 @@ describe("useTranslator", () => {
 
 describe("TranslateButton", () => {
   it("shows explainer tooltip on hover", () => {
-    render(
-      <Wrapper config={DOM_CONFIG}>
-        <TranslateButton />
-      </Wrapper>,
-    )
-
-    const button = screen.getByRole("button")
+    const button = renderTranslateButton()
     fireEvent.mouseEnter(button)
 
     expect(screen.getByRole("tooltip")).toBeInTheDocument()
@@ -448,13 +497,7 @@ describe("TranslateButton", () => {
   })
 
   it("shows confirm tooltip on first click", () => {
-    render(
-      <Wrapper config={DOM_CONFIG}>
-        <TranslateButton />
-      </Wrapper>,
-    )
-
-    fireEvent.click(screen.getByRole("button"))
+    fireEvent.click(renderTranslateButton())
 
     expect(screen.getByRole("tooltip")).toBeInTheDocument()
     expect(screen.getByText(/click again to confirm/i)).toBeInTheDocument()
@@ -462,13 +505,7 @@ describe("TranslateButton", () => {
   })
 
   it("dismisses confirm tooltip on click outside", () => {
-    render(
-      <Wrapper config={DOM_CONFIG}>
-        <TranslateButton />
-      </Wrapper>,
-    )
-
-    fireEvent.click(screen.getByRole("button"))
+    fireEvent.click(renderTranslateButton())
     expect(screen.getByRole("tooltip")).toBeInTheDocument()
 
     clickOutside()
@@ -476,13 +513,7 @@ describe("TranslateButton", () => {
   })
 
   it("dismisses confirm tooltip on Escape key", () => {
-    render(
-      <Wrapper config={DOM_CONFIG}>
-        <TranslateButton />
-      </Wrapper>,
-    )
-
-    fireEvent.click(screen.getByRole("button"))
+    fireEvent.click(renderTranslateButton())
     expect(screen.getByRole("tooltip")).toBeInTheDocument()
 
     fireEvent.keyDown(document, { key: "Escape" })
@@ -490,26 +521,9 @@ describe("TranslateButton", () => {
   })
 
   it("dismisses ready dropdown on click outside", async () => {
-    mockLoadModel.mockImplementation(async () => {
-      setMockSnapshot({
-        model: { status: "ready" as const },
-      })
-    })
+    const button = await renderReadyTranslateButton()
+    openLanguageDropdown(button)
 
-    render(
-      <Wrapper config={DOM_CONFIG}>
-        <TranslateButton />
-      </Wrapper>,
-    )
-
-    const button = screen.getByRole("button")
-
-    fireEvent.click(button)
-    await act(async () => {
-      fireEvent.click(button)
-    })
-
-    fireEvent.click(button)
     expect(screen.getByRole("listbox")).toBeInTheDocument()
 
     clickOutside()
@@ -517,26 +531,9 @@ describe("TranslateButton", () => {
   })
 
   it("dismisses ready dropdown on Escape key", async () => {
-    mockLoadModel.mockImplementation(async () => {
-      setMockSnapshot({
-        model: { status: "ready" as const },
-      })
-    })
+    const button = await renderReadyTranslateButton()
+    openLanguageDropdown(button)
 
-    render(
-      <Wrapper config={DOM_CONFIG}>
-        <TranslateButton />
-      </Wrapper>,
-    )
-
-    const button = screen.getByRole("button")
-
-    fireEvent.click(button)
-    await act(async () => {
-      fireEvent.click(button)
-    })
-
-    fireEvent.click(button)
     expect(screen.getByRole("listbox")).toBeInTheDocument()
 
     fireEvent.keyDown(document, { key: "Escape" })
@@ -544,21 +541,8 @@ describe("TranslateButton", () => {
   })
 
   it("starts download on confirm click", async () => {
-    render(
-      <Wrapper config={DOM_CONFIG}>
-        <TranslateButton />
-      </Wrapper>,
-    )
-
-    const button = screen.getByRole("button")
-
-    // IDLE -> CONFIRM
-    fireEvent.click(button)
-
-    // CONFIRM -> DOWNLOADING
-    await act(async () => {
-      fireEvent.click(button)
-    })
+    const button = renderTranslateButton()
+    await confirmModelDownload(button)
 
     expect(mockLoadModel).toHaveBeenCalledTimes(1)
   })
@@ -566,21 +550,8 @@ describe("TranslateButton", () => {
   it("returns to the idle button state when model download fails", async () => {
     mockLoadModel.mockRejectedValueOnce(new Error("boom"))
 
-    render(
-      <Wrapper config={DOM_CONFIG}>
-        <TranslateButton />
-      </Wrapper>,
-    )
-
-    const button = screen.getByRole("button")
-
-    fireEvent.click(button)
-    expect(screen.getByRole("tooltip")).toBeInTheDocument()
-
-    await act(async () => {
-      fireEvent.click(button)
-      await Promise.resolve()
-    })
+    const button = renderTranslateButton()
+    await confirmModelDownload(button)
 
     expect(mockLoadModel).toHaveBeenCalledTimes(1)
     expect(screen.queryByRole("tooltip")).not.toBeInTheDocument()
@@ -589,28 +560,9 @@ describe("TranslateButton", () => {
   })
 
   it("shows language dropdown when button clicked in ready state", async () => {
-    mockLoadModel.mockImplementation(async () => {
-      setMockSnapshot({
-        model: { status: "ready" as const },
-      })
-    })
+    const button = await renderReadyTranslateButton()
+    openLanguageDropdown(button)
 
-    render(
-      <Wrapper config={DOM_CONFIG}>
-        <TranslateButton />
-      </Wrapper>,
-    )
-
-    const button = screen.getByRole("button")
-
-    // IDLE -> CONFIRM -> DOWNLOADING -> READY
-    fireEvent.click(button)
-    await act(async () => {
-      fireEvent.click(button)
-    })
-
-    // READY -> open dropdown
-    fireEvent.click(button)
     expect(screen.getByRole("listbox")).toBeInTheDocument()
     expect(screen.getByText("Original")).toBeInTheDocument()
     expect(screen.getByText("Spanish")).toBeInTheDocument()
@@ -618,26 +570,10 @@ describe("TranslateButton", () => {
   })
 
   it("forwards dropdownItem class names to every ready dropdown option", async () => {
-    mockLoadModel.mockImplementation(async () => {
-      setMockSnapshot({
-        model: { status: "ready" as const },
-      })
+    const button = await renderReadyTranslateButton({
+      classNames: { dropdownItem: "custom-dropdown-item" },
     })
-
-    render(
-      <Wrapper config={DOM_CONFIG}>
-        <TranslateButton classNames={{ dropdownItem: "custom-dropdown-item" }} />
-      </Wrapper>,
-    )
-
-    const button = screen.getByRole("button")
-
-    fireEvent.click(button)
-    await act(async () => {
-      fireEvent.click(button)
-    })
-
-    fireEvent.click(button)
+    openLanguageDropdown(button)
 
     for (const option of screen.getAllByRole("option")) {
       expect(option).toHaveClass("custom-dropdown-item")
@@ -717,12 +653,6 @@ describe("TranslateButton", () => {
   })
 
   it("shows non-zero translation progress from hook state", async () => {
-    mockLoadModel.mockImplementation(async () => {
-      setMockSnapshot({
-        model: { status: "ready" as const },
-      })
-    })
-
     const deferred = createDeferred<void>()
     mockTranslateTo.mockImplementation(async (lang) => {
       setMockSnapshot({
@@ -735,26 +665,9 @@ describe("TranslateButton", () => {
       })
     })
 
-    render(
-      <Wrapper config={DOM_CONFIG}>
-        <TranslateButton />
-      </Wrapper>,
-    )
-
-    const button = screen.getByRole("button")
-
-    // Get to ready state
-    fireEvent.click(button)
-    await act(async () => {
-      fireEvent.click(button)
-    })
-
-    // Open dropdown and select Spanish
-    fireEvent.click(button)
-    await act(async () => {
-      fireEvent.click(screen.getByText("Spanish"))
-      await Promise.resolve()
-    })
+    const button = await renderReadyTranslateButton()
+    openLanguageDropdown(button)
+    await selectLanguage("Spanish")
 
     expect(button).toHaveTextContent("50%")
 
@@ -786,12 +699,6 @@ describe("TranslateButton", () => {
   })
 
   it("keeps the dropdown open but disabled while translating", async () => {
-    mockLoadModel.mockImplementation(async () => {
-      setMockSnapshot({
-        model: { status: "ready" as const },
-      })
-    })
-
     const deferred = createDeferred<void>()
     mockTranslateTo.mockImplementation(async (lang) => {
       setMockSnapshot({
@@ -804,24 +711,11 @@ describe("TranslateButton", () => {
       })
     })
 
-    render(
-      <Wrapper config={DOM_CONFIG}>
-        <TranslateButton classNames={{ dropdownItem: "custom-dropdown-item" }} />
-      </Wrapper>,
-    )
-
-    const button = screen.getByRole("button")
-
-    fireEvent.click(button)
-    await act(async () => {
-      fireEvent.click(button)
+    const button = await renderReadyTranslateButton({
+      classNames: { dropdownItem: "custom-dropdown-item" },
     })
-
-    fireEvent.click(button)
-    await act(async () => {
-      fireEvent.click(screen.getByText("Spanish"))
-      await Promise.resolve()
-    })
+    openLanguageDropdown(button)
+    await selectLanguage("Spanish")
 
     const listbox = screen.getByRole("listbox")
     expect(listbox.style.pointerEvents).toBe("none")
@@ -848,20 +742,8 @@ describe("TranslateButton", () => {
       })
     })
 
-    render(
-      <Wrapper config={DOM_CONFIG}>
-        <TranslateButton />
-      </Wrapper>,
-    )
-
-    const button = screen.getByRole("button")
-
-    // Get to confirm state
-    fireEvent.click(button)
-    await act(async () => {
-      fireEvent.click(button)
-      await Promise.resolve()
-    })
+    const button = renderTranslateButton()
+    await confirmModelDownload(button)
 
     expect(button).toHaveTextContent("25%")
 
