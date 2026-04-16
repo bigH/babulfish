@@ -4,7 +4,8 @@ export default defineConfig({
   entry: {
     index: "src/index.ts",
   },
-  format: "esm",
+  clean: true,
+  format: ["esm"],
   dts: true,
   sourcemap: true,
   external: ["react", "@babulfish/core", "@babulfish/styles"],
