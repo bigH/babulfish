@@ -6,14 +6,14 @@ const STRUCTURED_SOURCE = [
   "while code stays opaque.",
 ].join("\n")
 const STRUCTURED_DOM_SUFFIX = " [dom-structured]"
-const ROOT_SELECTORS = {
-  copy: "[data-demo-copy]",
-  aside: "[data-demo-aside]",
-} as const
+const DEMO_ROOTS = [
+  { label: "copy", selector: "[data-demo-copy]" },
+  { label: "aside", selector: "[data-demo-aside]" },
+] as const
 
 const core = createBabulfish({
   dom: {
-    roots: [ROOT_SELECTORS.copy, ROOT_SELECTORS.aside],
+    roots: DEMO_ROOTS.map(({ selector }) => selector),
     structuredText: { selector: "[data-structured]" },
     preserve: {
       matchers: ["babulfish", "TranslateGemma", "WebGPU"],
@@ -41,20 +41,27 @@ function requireElement<T extends new (...args: any[]) => HTMLElement>(
   return el as InstanceType<T>
 }
 
+function requireRoot(selector: string): HTMLElement {
+  const root = document.querySelector<HTMLElement>(selector)
+  if (root === null) {
+    throw new Error(`Expected demo root ${selector} to exist`)
+  }
+  return root
+}
+
 function toPercent(progress: number): string {
   return `${Math.round(progress * 100)}%`
 }
 
-function directionFor(selector: string): string {
-  const root = document.querySelector<HTMLElement>(selector)
-  return root?.getAttribute("dir") ?? "none"
-}
+const translatedRoots = DEMO_ROOTS.map(({ label, selector }) => ({
+  label,
+  root: requireRoot(selector),
+}))
 
 function formatDirections(): string {
-  return [
-    `copy: ${directionFor(ROOT_SELECTORS.copy)}`,
-    `aside: ${directionFor(ROOT_SELECTORS.aside)}`,
-  ].join(" / ")
+  return translatedRoots
+    .map(({ label, root }) => `${label}: ${root.getAttribute("dir") ?? "none"}`)
+    .join(" / ")
 }
 
 function modelStatusText(model: Snapshot["model"]): string {
