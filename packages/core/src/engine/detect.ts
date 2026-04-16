@@ -13,18 +13,13 @@ export type TranslationCapabilities = {
 const MOBILE_WIDTH_THRESHOLD = 768
 
 type EnvironmentSnapshot = {
-  readonly hasWindow: boolean
   readonly hasWebGPU: boolean
   readonly isMobile: boolean
 }
 
-function getEnvironmentSnapshot(): EnvironmentSnapshot {
+function getBrowserEnvironmentSnapshot(): EnvironmentSnapshot | null {
   if (typeof window === "undefined") {
-    return {
-      hasWindow: false,
-      hasWebGPU: false,
-      isMobile: false,
-    }
+    return null
   }
 
   const touchPoints =
@@ -32,7 +27,6 @@ function getEnvironmentSnapshot(): EnvironmentSnapshot {
   const hasTouch = "ontouchstart" in window || touchPoints > 0
 
   return {
-    hasWindow: true,
     hasWebGPU:
       typeof navigator !== "undefined" && "gpu" in navigator,
     isMobile:
@@ -40,7 +34,7 @@ function getEnvironmentSnapshot(): EnvironmentSnapshot {
   }
 }
 
-function resolveDeviceWithWebGPU(
+function resolveDevice(
   preference: DevicePreference,
   hasWebGPU: boolean,
 ): ResolvedDevice {
@@ -57,18 +51,22 @@ function resolveDeviceWithWebGPU(
 export function getTranslationCapabilities(
   preference: DevicePreference = "auto",
 ): TranslationCapabilities {
-  const environment = getEnvironmentSnapshot()
-  const device = resolveDeviceWithWebGPU(
-    preference,
-    environment.hasWebGPU,
-  )
+  const environment = getBrowserEnvironmentSnapshot()
+  if (!environment) {
+    return {
+      hasWebGPU: false,
+      isMobile: false,
+      device: resolveDevice(preference, false),
+      canTranslate: false,
+    }
+  }
+
+  const device = resolveDevice(preference, environment.hasWebGPU)
 
   return {
     hasWebGPU: environment.hasWebGPU,
     isMobile: environment.isMobile,
     device,
-    canTranslate:
-      environment.hasWindow &&
-      (device === "wasm" || environment.hasWebGPU),
+    canTranslate: device === "wasm" || environment.hasWebGPU,
   }
 }

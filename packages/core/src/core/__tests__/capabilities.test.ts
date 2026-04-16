@@ -38,4 +38,21 @@ describe("detectCapabilities", () => {
     })
     expect(Object.isFrozen(capabilities)).toBe(true)
   })
+
+  it("keeps browser detection ready when navigator is unavailable", () => {
+    setGlobal("window", { innerWidth: 1280 })
+    clearGlobal("navigator")
+
+    const capabilities = detectCapabilities()
+
+    expect(capabilities).toEqual({
+      ready: true,
+      hasWebGPU: false,
+      canTranslate: true,
+      device: "wasm",
+      isMobile: false,
+    })
+    expect(capabilities).not.toBe(SSR_CAPABILITIES)
+    expect(Object.isFrozen(capabilities)).toBe(true)
+  })
 })
