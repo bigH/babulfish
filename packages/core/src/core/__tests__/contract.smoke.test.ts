@@ -15,6 +15,7 @@ import { __resetEngineForTests, getEngineIdentity } from "../../engine/testing/i
 import { loadPipeline } from "../../engine/pipeline-loader.js"
 
 const mockLoadPipeline = vi.mocked(loadPipeline)
+const APP_FIXTURE = '<div id="app"><p>Hello</p></div>'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -45,8 +46,8 @@ function createMockPipeline(generate = createMockGenerator()) {
   return { generate, pipeline }
 }
 
-function setupPipelineMock() {
-  const { generate, pipeline } = createMockPipeline()
+function setupPipelineMock(generate = createMockGenerator()) {
+  const { pipeline } = createMockPipeline(generate)
   mockLoadPipeline.mockResolvedValue(pipeline)
   return { generate, pipeline }
 }
@@ -55,14 +56,35 @@ function setupFailingPipelineMock(error: string): void {
   const generate = vi.fn(async () => {
     throw new Error(error)
   })
-  const pipeline = createMockPipeline(generate).pipeline
-  mockLoadPipeline.mockResolvedValue(pipeline)
+  setupPipelineMock(generate)
 }
 
 function snapshots(core: ReturnType<typeof createBabulfish>) {
   const collected: Snapshot[] = []
   core.subscribe((s) => collected.push(s))
   return collected
+}
+
+function createAppRoot() {
+  const root = document.createElement("div")
+  root.innerHTML = APP_FIXTURE
+  return root
+}
+
+async function expectAbortListenerReleased(
+  signal: AbortSignal,
+  operation: () => Promise<unknown>,
+): Promise<void> {
+  const addEventListener = vi.spyOn(signal, "addEventListener")
+  const removeEventListener = vi.spyOn(signal, "removeEventListener")
+
+  await operation()
+
+  expect(addEventListener).toHaveBeenCalledWith("abort", expect.any(Function), { once: true })
+  expect(removeEventListener).toHaveBeenCalledWith(
+    "abort",
+    addEventListener.mock.calls[0]?.[1] as EventListener,
+  )
 }
 
 // ---------------------------------------------------------------------------
@@ -222,16 +244,11 @@ describe("4.3 — cancellation", () => {
     setupPipelineMock()
     const core = createBabulfish()
     const controller = new AbortController()
-    const addEventListener = vi.spyOn(controller.signal, "addEventListener")
-    const removeEventListener = vi.spyOn(controller.signal, "removeEventListener")
 
     await core.loadModel()
-    await core.translateText("hello", "es", { signal: controller.signal })
-
-    expect(addEventListener).toHaveBeenCalledWith("abort", expect.any(Function), { once: true })
-    expect(removeEventListener).toHaveBeenCalledWith(
-      "abort",
-      addEventListener.mock.calls[0]?.[1] as EventListener,
+    await expectAbortListenerReleased(
+      controller.signal,
+      () => core.translateText("hello", "es", { signal: controller.signal }),
     )
   })
 
@@ -239,23 +256,17 @@ describe("4.3 — cancellation", () => {
     setupPipelineMock()
     const core = createBabulfish()
     const controller = new AbortController()
-    const addEventListener = vi.spyOn(controller.signal, "addEventListener")
-    const removeEventListener = vi.spyOn(controller.signal, "removeEventListener")
 
-    await core.loadModel({ signal: controller.signal })
-
-    expect(addEventListener).toHaveBeenCalledWith("abort", expect.any(Function), { once: true })
-    expect(removeEventListener).toHaveBeenCalledWith(
-      "abort",
-      addEventListener.mock.calls[0]?.[1] as EventListener,
+    await expectAbortListenerReleased(
+      controller.signal,
+      () => core.loadModel({ signal: controller.signal }),
     )
   })
 
   it("translateTo failure resets translation status to idle", async () => {
     setupFailingPipelineMock("translation failed")
 
-    const root = document.createElement("div")
-    root.innerHTML = '<div id="app"><p>Hello</p></div>'
+    const root = createAppRoot()
 
     const core = createBabulfish({
       dom: {
@@ -272,8 +283,7 @@ describe("4.3 — cancellation", () => {
   it("translateTo removes external abort listener after success", async () => {
     setupPipelineMock()
 
-    const root = document.createElement("div")
-    root.innerHTML = '<div id="app"><p>Hello</p></div>'
+    const root = createAppRoot()
 
     const core = createBabulfish({
       dom: {
@@ -282,16 +292,11 @@ describe("4.3 — cancellation", () => {
       },
     })
     const controller = new AbortController()
-    const addEventListener = vi.spyOn(controller.signal, "addEventListener")
-    const removeEventListener = vi.spyOn(controller.signal, "removeEventListener")
 
     await core.loadModel()
-    await core.translateTo("es", { signal: controller.signal })
-
-    expect(addEventListener).toHaveBeenCalledWith("abort", expect.any(Function), { once: true })
-    expect(removeEventListener).toHaveBeenCalledWith(
-      "abort",
-      addEventListener.mock.calls[0]?.[1] as EventListener,
+    await expectAbortListenerReleased(
+      controller.signal,
+      () => core.translateTo("es", { signal: controller.signal }),
     )
   })
 })
@@ -312,8 +317,7 @@ describe("4.4 — root lifetime", () => {
     const { generate } = setupPipelineMock()
     generate.mockResolvedValueOnce([{ generated_text: createMockResult("hello", "hola") }])
 
-    const root = document.createElement("div")
-    root.innerHTML = '<div id="app"><p>Hello</p></div>'
+    const root = createAppRoot()
     const outputTransform = vi.fn((translated: string) => translated.toUpperCase())
 
     const core = createBabulfish({
