@@ -6,6 +6,12 @@ import { fileURLToPath } from "node:url"
 
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const cleanupTargets = new Set()
+const EXPECTED_CORE_SNAPSHOT_KEYS = [
+  "capabilities",
+  "currentLanguage",
+  "model",
+  "translation",
+]
 const EXPECTED_CORE_RUNTIME_KEYS = [
   "DEFAULT_LANGUAGES",
   "createBabulfish",
@@ -155,6 +161,7 @@ const reactFreeOutput = runNode(
   `
 import { readFileSync } from "node:fs"
 
+const expectedCoreSnapshotKeys = ${JSON.stringify(EXPECTED_CORE_SNAPSHOT_KEYS)}
 const expectedCoreKeys = ${JSON.stringify(EXPECTED_CORE_RUNTIME_KEYS)}
 const expectedCoreDomKeys = ${JSON.stringify(EXPECTED_CORE_DOM_RUNTIME_KEYS)}
 
@@ -173,9 +180,20 @@ assert(
   "@babulfish/core runtime exports drifted",
 )
 const core = coreModule.createBabulfish()
+assert(typeof core.loadModel === "function", "loadModel missing")
+assert(typeof core.translateTo === "function", "translateTo missing")
+assert(typeof core.translateText === "function", "translateText missing")
+assert(typeof core.restore === "function", "restore missing")
+assert(typeof core.abort === "function", "abort missing")
 assert(typeof core.subscribe === "function", "subscribe missing")
 assert(typeof core.dispose === "function", "dispose missing")
 assert(typeof core.snapshot === "object" && core.snapshot !== null, "snapshot missing")
+assert(
+  JSON.stringify(Object.keys(core.snapshot).toSorted()) === JSON.stringify(expectedCoreSnapshotKeys),
+  "snapshot shape drifted",
+)
+assert(Array.isArray(core.languages), "languages missing")
+assert(core.languages.length > 0, "languages should not be empty")
 await core.dispose()
 ok("OK [@babulfish/core]: createBabulfish contract present")
 
@@ -224,6 +242,20 @@ assert(
   readFileSync(new URL(metaCss), "utf8").includes('@import "@babulfish/styles/css";'),
   "babulfish/css should bridge to @babulfish/styles/css",
 )
+const stylesSource = readFileSync(new URL(stylesCss), "utf8")
+for (const marker of [
+  "--babulfish-accent",
+  "--babulfish-error",
+  "--babulfish-border",
+  "--babulfish-surface",
+  "--babulfish-muted",
+  ".babulfish-pulse",
+  ".babulfish-active",
+  ".babulfish-settled",
+  ".babulfish-popup",
+]) {
+  assert(stylesSource.includes(marker), "@babulfish/styles/css missing documented marker: " + marker)
+}
 ok("OK [css]: styles/react/meta css specifiers resolve")
 
 for (const specifier of ["@babulfish/react", "babulfish"]) {
@@ -256,6 +288,9 @@ run(
 
 const reactInstalledOutput = runNode(
   `
+import React from "react"
+import { renderToString } from "react-dom/server"
+
 function assert(condition, message) {
   if (!condition) throw new Error(message)
 }
@@ -280,8 +315,48 @@ assert(
   "babulfish runtime exports drifted",
 )
 
+function InspectWith({ module }) {
+  const state = module.useTranslator()
+  return React.createElement(
+    "span",
+    null,
+    [
+      state.model.status,
+      state.translation.status,
+      state.currentLanguage ?? "null",
+      String(state.languages.length),
+      String(state.capabilitiesReady),
+    ].join("|"),
+  )
+}
+
+const reactSsrHtml = renderToString(
+  React.createElement(
+    reactModule.TranslatorProvider,
+    null,
+    React.createElement(InspectWith, { module: reactModule }),
+  ),
+)
+assert(
+  reactSsrHtml.includes("idle|idle|null|0|false"),
+  "@babulfish/react SSR fallback drifted",
+)
+
+const metaSsrHtml = renderToString(
+  React.createElement(
+    metaModule.TranslatorProvider,
+    null,
+    React.createElement(InspectWith, { module: metaModule }),
+  ),
+)
+assert(
+  metaSsrHtml.includes("idle|idle|null|0|false"),
+  "babulfish SSR fallback drifted",
+)
+
 console.log("OK [@babulfish/react]: imports once react is installed")
 console.log("OK [babulfish]: matches @babulfish/react runtime surface")
+console.log("OK [react-ssr]: provider fallback renders on the server")
   `,
   projectDir,
 )

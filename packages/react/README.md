@@ -1,9 +1,11 @@
 # @babulfish/react
 
 React bindings for babulfish client-side translation.
-Thin projection of [`@babulfish/core`](../core/README.md) — all state flows through `useSyncExternalStore`, no internal `useState` for core-owned data.
+Use this package when you want the shipped React provider, hooks, and stock UI. Use [`@babulfish/core`](../core/README.md) directly when you are building your own binding or working outside React. [`babulfish`](../babulfish/README.md) is the same runtime surface under the permanent unscoped compat name.
 
 ## Quick start
+
+Install this inside an existing React 18 or 19 app:
 
 ```bash
 npm install @babulfish/react @huggingface/transformers
@@ -42,20 +44,29 @@ function YourPage() {
 
 ## CSS
 
-Import styles via either path — they resolve to the same stylesheet:
+Import either path. Both resolve to the same stylesheet:
 
 ```ts
-import "@babulfish/react/css"   // convenience re-export
-import "@babulfish/styles/css"  // direct import
+import "@babulfish/react/css"
+import "@babulfish/styles/css"
 ```
 
 See [`@babulfish/styles`](../styles/README.md) for the custom-property contract.
 
-## Components
+## Provider boundary
 
 ### `<TranslatorProvider>`
 
-Wraps your app with a `BabulfishCore` context. Accepts an optional `config` prop (`TranslatorConfig`, the same shape as `BabulfishConfig` from `@babulfish/core`). Lazy-creates the core instance on first client render; SSR-safe.
+Wraps your app in a `BabulfishCore` context.
+
+- Creates one core per mounted provider.
+- Creates that core once on first client render. Rerenders do not recreate it.
+- Reads `config` when the core is created. Changing `config` after mount does not recreate or reconfigure the provider core.
+- Uses a shared inert SSR fallback on the server, then switches to the client core after mount.
+
+If you need a different config after mount, remount the provider.
+
+`config` is `TranslatorConfig`, which is the same shape as `BabulfishConfig` from [`@babulfish/core`](../core/README.md). DOM options pass through unchanged:
 
 ```tsx
 <TranslatorProvider
@@ -74,50 +85,59 @@ Wraps your app with a `BabulfishCore` context. Accepts an optional `config` prop
 </TranslatorProvider>
 ```
 
-DOM options pass through to core unchanged. See [`@babulfish/core`](../core/README.md) for `structuredText`, supported v1 shapes, fallback behavior, and DOM-only `outputTransform` semantics.
+There is no React-only wrapper API for `structuredText` or `outputTransform`. The provider forwards the core DOM contract as-is.
+
+## Components
 
 ### `<TranslateButton>`
 
-Pre-built 5-state translation button (idle, confirm, downloading, ready, translating). Renders a globe icon with progress ring and tooltip.
+Pre-built five-state translation button: idle, confirm, downloading, ready, translating.
 
 | Prop | Type | Description |
 |---|---|---|
 | `classNames` | `TranslateButtonClassNames` | Override CSS class names for each sub-element |
 | `icon` | `ReactNode` | Custom icon element |
 | `renderTooltip` | `(state) => ReactNode` | Custom tooltip renderer |
-| `progressRing` | `boolean` | Show download progress ring (default: true) |
+| `progressRing` | `{ downloadColor?: string; translateColor?: string }` | Override the ring colors used for download and translation progress |
+
+`classNames` accepts `button`, `tooltip`, `dropdown`, `dropdownItem`, and `progressRing`.
 
 ### `<TranslateDropdown>`
 
-Language picker dropdown with an "Original" restore option.
+Language picker dropdown. It only shows the `"Original"` restore option when `onRestore` is provided.
 
 | Prop | Type | Description |
 |---|---|---|
 | `onSelect` | `(code: string) => void` | Called when a language is selected |
-| `onRestore` | `() => void` | Called when "Original" is selected |
-| `value` | `string` | Currently selected language code |
+| `onRestore` | `() => void` | Optional restore handler for the `"Original"` row |
+| `value` | `string \| null` | Currently selected language code |
 | `disabled` | `boolean` | Disable the dropdown |
-| `languages` | `Language[]` | Override language list |
+| `languages` | `readonly Language[]` | Override language list |
 
 ## Hooks
 
 ### `useTranslator()`
 
-Returns the full translator state and actions:
+Returns the current provider snapshot plus the core actions:
 
 | Field | Type | Description |
 |---|---|---|
 | `model` | `ModelState` | `{ status, progress?, error? }` |
 | `translation` | `TranslationState` | `{ status, progress? }` |
 | `currentLanguage` | `string \| null` | Active target language |
-| `languages` | `ReadonlyArray<Language>` | Available languages |
-| `loadModel` | `() => Promise<void>` | Start model download |
-| `translateTo` | `(code: string) => Promise<void>` | Translate DOM to language |
-| `restore` | `() => void` | Restore original content |
-| `translate` | `(text, lang) => Promise<string>` | Translate a single string |
-| `isSupported` | `boolean` | Browser can run translations |
-| `hasWebGPU` | `boolean` | WebGPU available |
-| `canTranslate` | `boolean` | Model loaded and ready |
+| `languages` | `ReadonlyArray<Language>` | Available target languages |
+| `capabilitiesReady` | `boolean` | Capability detection has completed |
+| `isSupported` | `boolean` | Current browser can translate |
+| `hasWebGPU` | `boolean` | WebGPU is available |
+| `canTranslate` | `boolean` | Translation is available on this device/path |
+| `device` | `"webgpu" \| "wasm" \| null` | Active runtime path when available |
+| `isMobile` | `boolean` | Mobile-device detection flag |
+| `loadModel` | `() => Promise<void>` | Download and initialize the model |
+| `translateTo` | `(code: string) => Promise<void>` | Translate configured DOM roots to a language |
+| `restore` | `() => void` | Restore original DOM content |
+| `translate` | `(text: string, lang: string) => Promise<string>` | Raw `translateText()` helper from core |
+
+`translate` is the raw string API. It does not apply DOM transforms and does not touch configured roots.
 
 ### `useTranslateDOM()`
 
@@ -125,11 +145,12 @@ Convenience hook for page-level translate/restore:
 
 | Field | Type | Description |
 |---|---|---|
-| `translatePage` | `(lang: string) => Promise<void>` | Translate the page |
-| `restorePage` | `() => void` | Restore original content |
-| `progress` | `number \| null` | Translation progress (0–1) |
+| `translatePage` | `(lang: string) => Promise<void>` | Calls `core.translateTo(lang)` |
+| `restorePage` | `() => void` | Calls `core.restore()` |
+| `progress` | `number \| null` | Translation progress while translating, otherwise `null` |
 
 ## Related packages
 
-- [`@babulfish/core`](../core/README.md) — UI-agnostic engine and contract
+- [`@babulfish/core`](../core/README.md) — engine, DOM contract, and experimental testing surface
 - [`@babulfish/styles`](../styles/README.md) — CSS custom properties and animations
+- [`babulfish`](../babulfish/README.md) — unscoped compat alias with the same runtime surface

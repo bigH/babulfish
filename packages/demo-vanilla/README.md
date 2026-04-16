@@ -1,6 +1,18 @@
 # @babulfish/demo-vanilla
 
-Zero-framework translation demo — proves that `@babulfish/core` works with pure DOM APIs and no UI framework. Uses Vite as a dev server with COOP/COEP headers for WebGPU `SharedArrayBuffer` support.
+Private Vite demo showing direct [`@babulfish/core`](../core/README.md) integration with no UI framework.
+This package is not published to npm. It exists to prove the current DOM contract without a binding layer in the way.
+
+## What it proves
+
+- `createBabulfish()` works directly against plain DOM APIs.
+- Multiple configured `dom.roots` translate together while the status panel stays outside the translated scope.
+- `structuredText` claims supported inline-rich DOM as one logical unit.
+- `preserve.matchers` and `shouldSkip` keep demo-specific strings exact.
+- `outputTransform` is DOM-only, while `translateText()` still returns raw engine output.
+- Restore resets the DOM, and Arabic flips the translated roots to RTL.
+
+The Vite server sends the COOP/COEP headers needed for WebGPU `SharedArrayBuffer` support during local development.
 
 ## Run
 
@@ -15,9 +27,8 @@ pnpm --filter @babulfish/demo-vanilla build
 pnpm --filter @babulfish/demo-vanilla preview
 ```
 
-## Related packages
+## Related docs
 
-- [`@babulfish/core`](../core/README.md) — the engine this demo uses directly
-- [`@babulfish/styles`](../styles/README.md) — CSS custom properties imported by this demo
-- [`@babulfish/demo-webcomponent`](../demo-webcomponent/README.md) — Shadow DOM custom element demo
-- [Root README](../../README.md) — "Pick your binding" overview
+- [`@babulfish/core`](../core/README.md) — engine and DOM contract
+- [`@babulfish/styles`](../styles/README.md) — stylesheet imported by this demo
+- [Root README](../../README.md) — package chooser and release flow

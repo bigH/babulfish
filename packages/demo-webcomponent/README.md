@@ -1,6 +1,40 @@
 # @babulfish/demo-webcomponent
 
-A zero-framework demo proving babulfish works inside Shadow DOM via a custom element. Two `<babulfish-translator>` instances share a single translation engine while rendering into isolated shadow trees.
+Private Vite demo with a demo-local `<babulfish-translator>` custom element.
+This package is not published to npm, and there is no published web-component package in this repo. The point here is to prove that [`@babulfish/core`](../core/README.md) works inside Shadow DOM and that a host page can drive those roots through a small element contract.
+
+## What it proves
+
+- Two custom elements render into separate shadow roots while sharing one translation engine.
+- The host page drives both instances through the `target-lang` attribute and the public `restore()` method.
+- Each element emits `babulfish-status` with the current core `Snapshot`.
+- The host controls interact without reaching through the shadow boundary to mutate translated content directly.
+
+## Demo-local element contract
+
+### `<babulfish-translator>`
+
+Renders a small translation UI into its own shadow root: language select, restore button, load-model button, translated content, and status line.
+
+### Attribute
+
+| Attribute | Type | Description |
+|---|---|---|
+| `target-lang` | `string` | When the model is ready, setting this triggers `core.translateTo(value)` |
+
+### Event
+
+| Event | Type | Bubbles | Composed | Detail |
+|---|---|---|---|---|
+| `babulfish-status` | `CustomEvent` | `true` | `true` | `Snapshot` from `@babulfish/core` |
+
+### Method
+
+| Method | Signature | Description |
+|---|---|---|
+| `restore()` | `() => void` | Clears `target-lang`, calls `core.restore()`, and resets the local select |
+
+This element contract is demo code, not package contract.
 
 ## Run
 
@@ -8,68 +42,20 @@ A zero-framework demo proving babulfish works inside Shadow DOM via a custom ele
 pnpm --filter @babulfish/demo-webcomponent dev
 ```
 
-## Custom Element API
-
-### `<babulfish-translator>`
-
-Renders a self-contained translation UI into its Shadow DOM: language selector, restore button, model loader, translatable content, and status bar.
-
-### Attributes
-
-| Attribute      | Type     | Description                                                                 |
-|----------------|----------|-----------------------------------------------------------------------------|
-| `target-lang`  | `string` | Setting this attribute triggers `core.translateTo(value)` if a model is loaded. |
-
-### Events
-
-| Event              | Type          | Bubbles | Composed | Detail                                |
-|--------------------|---------------|---------|----------|---------------------------------------|
-| `babulfish-status` | `CustomEvent` | `true`  | `true`   | `Snapshot` from `@babulfish/core`     |
-
-The `detail` payload is a frozen `Snapshot` object:
-
-```ts
-{
-  model: { status: "idle" | "downloading" | "ready" | "error", progress?: number, error?: unknown }
-  translation: { status: "idle" | "translating", progress?: number }
-  currentLanguage: string | null
-  capabilities: { ready: boolean, hasWebGPU: boolean, canTranslate: boolean, device: "webgpu" | "wasm" | null, isMobile: boolean }
-}
-```
-
-Listen from the host page:
-
-```js
-document.querySelector("babulfish-translator")
-  .addEventListener("babulfish-status", (e) => {
-    console.log(e.detail.model.status)
-  })
-```
-
-### Methods
-
-| Method      | Signature    | Description                                    |
-|-------------|--------------|------------------------------------------------|
-| `restore()` | `() => void` | Restores original content and resets language.  |
-
-### Lifecycle
-
-- **`connectedCallback`** — attaches Shadow DOM, creates `BabulfishCore` scoped to the shadow root, subscribes to snapshots, and wires controls.
-- **`disconnectedCallback`** — unsubscribes and calls `core.dispose()`, releasing the engine ref-count.
-
-Multiple elements on the same page share one engine instance (singleton). The model downloads once regardless of how many elements exist.
-
-## Build
+Build and preview:
 
 ```bash
 pnpm --filter @babulfish/demo-webcomponent build
+pnpm --filter @babulfish/demo-webcomponent preview
 ```
 
-Produces a static `dist/` folder servable with `pnpm --filter @babulfish/demo-webcomponent preview`.
+Run the element tests:
 
-## Related packages
+```bash
+pnpm --filter @babulfish/demo-webcomponent test
+```
 
-- [`@babulfish/core`](../core/README.md) — the engine this demo uses directly
-- [`@babulfish/styles`](../styles/README.md) — CSS custom properties
-- [`@babulfish/demo-vanilla`](../demo-vanilla/README.md) — Zero-framework vanilla DOM demo
-- [Root README](../../README.md) — "Pick your binding" overview
+## Related docs
+
+- [`@babulfish/core`](../core/README.md) — engine and DOM contract
+- [Root README](../../README.md) — package chooser and release flow

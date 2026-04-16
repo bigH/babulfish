@@ -1,7 +1,7 @@
 # @babulfish/core
 
 UI-agnostic translation engine and DOM orchestrator for babulfish.
-Use this package directly when building framework-agnostic integrations, custom elements, or your own binding layer.
+Use this package directly when building framework-agnostic integrations, custom elements, or your own binding layer. If you want the shipped React provider, hooks, and stock UI, use [`@babulfish/react`](../react/README.md) instead. Use [`babulfish`](../babulfish/README.md) only when you need the unscoped compat import.
 
 ## Quick start
 
@@ -32,6 +32,7 @@ core.restore()
 ## API summary
 
 The public API centers on `createBabulfish(config?)`, which returns a `BabulfishCore` instance for model lifecycle, DOM translation, and snapshot subscriptions.
+The config table below is intentionally a highlights view, not the full DOM config matrix.
 
 ### `createBabulfish(config?): BabulfishCore`
 
@@ -43,6 +44,8 @@ The public API centers on `createBabulfish(config?)`, which returns a `Babulfish
 | `dom.structuredText` | `StructuredTextConfig` | Claim supported inline-rich DOM as one logical prose unit |
 | `dom.outputTransform` | `(translated, context) => string` | Normalize DOM-bound output immediately before writes |
 | `languages` | `readonly Language[]` | Override the built-in language list |
+
+For the full DOM config surface, read `DOMTranslatorConfig` from `@babulfish/core/dom` plus the behavior notes below. That surface also includes `preserve`, `skipTags`, `shouldSkip`, `richText`, `linkedBy`, `phases`, `batchCharLimit`, `rtlLanguages`, `translateAttributes`, and `hooks`.
 
 ### `BabulfishCore`
 
@@ -72,6 +75,14 @@ The public API centers on `createBabulfish(config?)`, which returns a `Babulfish
 ## DOM config
 
 `createBabulfish({ dom: ... })` uses the same DOM translator contract exported from `@babulfish/core/dom`.
+
+### Other current DOM behavior
+
+- `dom.roots` selects the translated descendants inside `document` or an explicit `dom.root`.
+- `dom.preserve.matchers` protects exact strings before translation and restores them after the DOM write.
+- Default skip rules already avoid tags such as `code` and `pre`. `dom.shouldSkip(text, defaultSkip)` lets you extend that rule without replacing it.
+- `restore()` restores plain text, linked groups, authored `richText`, structured roots, translated attributes, and root direction back to the original DOM state.
+- RTL languages set `dir="rtl"` on translated roots, non-RTL languages set `dir="ltr"`, and `restore()` clears that direction state.
 
 ### `structuredText`
 
