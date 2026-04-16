@@ -237,10 +237,14 @@ describe("TranslatorProvider", () => {
     expect(screen.getByTestId("child")).toHaveTextContent("hello")
   })
 
-  it("throws when hook used outside provider", () => {
+  it("fails fast when translator hooks are used outside provider", () => {
     const spy = vi.spyOn(console, "error").mockImplementation(() => {})
     expect(() => render(<HookInspector />)).toThrow(
-      "useTranslator must be used within <TranslatorProvider>",
+      "Translator hooks must be used within <TranslatorProvider>",
+    )
+    cleanup()
+    expect(() => render(<DOMHookInspector />)).toThrow(
+      "Translator hooks must be used within <TranslatorProvider>",
     )
     spy.mockRestore()
   })

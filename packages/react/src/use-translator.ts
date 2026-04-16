@@ -1,14 +1,8 @@
-import { useSyncExternalStore } from "react"
-import { useTranslatorContext } from "./context.js"
-import { SSR_CORE } from "./ssr.js"
+import { useTranslatorContext, useTranslatorSnapshot } from "./context.js"
 
 export function useTranslator() {
   const core = useTranslatorContext()
-  const snapshot = useSyncExternalStore(
-    core.subscribe,
-    () => core.snapshot,
-    () => SSR_CORE.snapshot,
-  )
+  const snapshot = useTranslatorSnapshot(core)
 
   return {
     model: snapshot.model,
