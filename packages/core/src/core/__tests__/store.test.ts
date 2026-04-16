@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest"
 
+import { SSR_CAPABILITIES } from "../capabilities.js"
 import { createStore } from "../store.js"
 
 describe("createStore", () => {
@@ -12,7 +13,23 @@ describe("createStore", () => {
       currentLanguage: null,
       capabilities: store.get().capabilities,
     })
+    expect(store.get().capabilities).toBe(SSR_CAPABILITIES)
     expect(Object.isFrozen(store.get())).toBe(true)
+  })
+
+  it("starts with provided capabilities and freezes them", () => {
+    const capabilities = {
+      ready: true,
+      hasWebGPU: false,
+      canTranslate: true,
+      device: "wasm",
+      isMobile: false,
+    } as const
+
+    const store = createStore(capabilities)
+
+    expect(store.get().capabilities).toBe(capabilities)
+    expect(Object.isFrozen(store.get().capabilities)).toBe(true)
   })
 
   it("does not notify listeners for no-op updates", () => {

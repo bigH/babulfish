@@ -31,12 +31,16 @@ function normalizeSnapshot(snapshot: Snapshot): Snapshot {
   })
 }
 
-const INITIAL_SNAPSHOT: Snapshot = normalizeSnapshot({
-  model: { status: "idle" as const },
-  translation: { status: "idle" as const },
-  currentLanguage: null,
-  capabilities: SSR_CAPABILITIES,
-})
+function createInitialSnapshot(
+  capabilities: Capabilities = SSR_CAPABILITIES,
+): Snapshot {
+  return normalizeSnapshot({
+    model: { status: "idle" as const },
+    translation: { status: "idle" as const },
+    currentLanguage: null,
+    capabilities,
+  })
+}
 
 export type Store = {
   get(): Snapshot
@@ -45,8 +49,8 @@ export type Store = {
   dispose(): void
 }
 
-export function createStore(): Store {
-  let current = INITIAL_SNAPSHOT
+export function createStore(initialCapabilities: Capabilities = SSR_CAPABILITIES): Store {
+  let current = createInitialSnapshot(initialCapabilities)
   const listeners = new Set<(snapshot: Snapshot) => void>()
   let disposed = false
 

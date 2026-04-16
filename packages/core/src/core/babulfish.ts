@@ -62,7 +62,8 @@ async function raceWithAbort<T>(promise: Promise<T>, signal?: AbortSignal): Prom
 }
 
 export function createBabulfish(config?: BabulfishConfig): BabulfishCore {
-  const store = createStore()
+  const capabilities = detectCapabilities(config?.engine?.device)
+  const store = createStore(capabilities)
   const progress = createProgressController()
   const handle = acquireEngine(config?.engine)
   const engine = handle.engine
@@ -100,9 +101,6 @@ export function createBabulfish(config?: BabulfishConfig): BabulfishCore {
       return { ...prev, model: { status: "downloading" as const, progress: p } }
     })
   })
-
-  const capabilities = detectCapabilities(config?.engine?.device)
-  store.set((prev) => ({ ...prev, capabilities }))
 
   function buildDomTranslator(rootOverride?: ParentNode | Document): DOMTranslator | null {
     if (!config?.dom) return null

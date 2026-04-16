@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 // ---------------------------------------------------------------------------
 // Mock pipeline-loader — the ONLY file that imports @huggingface/transformers
@@ -13,9 +13,15 @@ import type { Snapshot } from "../store.js"
 import { DEFAULT_LANGUAGES, type Language } from "../languages.js"
 import { __resetEngineForTests, getEngineIdentity } from "../../engine/testing/index.js"
 import { loadPipeline } from "../../engine/pipeline-loader.js"
+import {
+  captureGlobalDescriptors,
+  restoreGlobals,
+  setGlobal,
+} from "../../__tests__/globals.test-utils.js"
 
 const mockLoadPipeline = vi.mocked(loadPipeline)
 const APP_FIXTURE = '<div id="app"><p>Hello</p></div>'
+const originalGlobals = captureGlobalDescriptors()
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -96,6 +102,10 @@ beforeEach(() => {
   __resetEngineForTests()
 })
 
+afterEach(() => {
+  restoreGlobals(originalGlobals)
+})
+
 // ---- 4.1 Engine singleton + multi-instance --------------------------------
 
 describe("4.1 — engine singleton + multi-instance", () => {
@@ -153,6 +163,21 @@ describe("4.2 — snapshot monolithic + structural sharing", () => {
   it("initial snapshot is Object.isFrozen", () => {
     const core = createBabulfish()
     expect(Object.isFrozen(core.snapshot)).toBe(true)
+  })
+
+  it("initial snapshot reflects detected capabilities", () => {
+    setGlobal("window", { innerWidth: 400, ontouchstart: null })
+    setGlobal("navigator", { maxTouchPoints: 1 })
+
+    const core = createBabulfish({ engine: { device: "webgpu" } })
+
+    expect(core.snapshot.capabilities).toEqual({
+      ready: true,
+      hasWebGPU: false,
+      canTranslate: false,
+      device: "webgpu",
+      isMobile: true,
+    })
   })
 
   it("snapshot after loadModel is frozen", async () => {
