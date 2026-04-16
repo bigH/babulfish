@@ -5,7 +5,11 @@ import { acquireEngine, registerCoreEngine } from "./engine-handle.js"
 import { createStore, type Snapshot } from "./store.js"
 import type { ModelState } from "./store.js"
 import { createProgressController } from "./progress.js"
-import { DEFAULT_LANGUAGES, type Language } from "./languages.js"
+import {
+  createReadonlyLanguageList,
+  DEFAULT_LANGUAGES,
+  type Language,
+} from "./languages.js"
 import { detectCapabilities } from "./capabilities.js"
 
 export type TranslateOptions = {
@@ -61,17 +65,15 @@ async function raceWithAbort<T>(promise: Promise<T>, signal?: AbortSignal): Prom
   }
 }
 
-function cloneLanguages(languages: readonly Language[]): ReadonlyArray<Language> {
-  return Object.freeze(languages.map((language) => Object.freeze({ ...language })))
-}
-
 export function createBabulfish(config?: BabulfishConfig): BabulfishCore {
   const capabilities = detectCapabilities(config?.engine?.device)
   const store = createStore(capabilities)
   const progress = createProgressController()
   const handle = acquireEngine(config?.engine)
   const engine = handle.engine
-  const languages = config?.languages ? cloneLanguages(config.languages) : DEFAULT_LANGUAGES
+  const languages = config?.languages
+    ? createReadonlyLanguageList(config.languages)
+    : DEFAULT_LANGUAGES
   const defaultRoot = config?.dom?.root
   let disposed = false
 
