@@ -2,7 +2,7 @@ import { useSyncExternalStore } from "react"
 import { useTranslatorContext } from "./context.js"
 import { SSR_CORE } from "./ssr.js"
 
-export type UseTranslateDOMReturn = {
+type UseTranslateDOMReturn = {
   translatePage(lang: string): Promise<void>
   restorePage(): void
   readonly progress: number | null

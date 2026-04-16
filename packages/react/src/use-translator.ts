@@ -1,9 +1,6 @@
 import { useSyncExternalStore } from "react"
 import { useTranslatorContext } from "./context.js"
-import type { ModelState, TranslationState } from "@babulfish/core"
 import { SSR_CORE } from "./ssr.js"
-
-export type { ModelState, TranslationState }
 
 export function useTranslator() {
   const core = useTranslatorContext()

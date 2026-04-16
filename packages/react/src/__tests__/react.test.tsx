@@ -89,7 +89,7 @@ import { useTranslator } from "../use-translator.js"
 import { useTranslateDOM } from "../use-translate-dom.js"
 import { TranslateButton } from "../translate-button.js"
 import { TranslateDropdown } from "../translate-dropdown.js"
-import type { TranslatorConfig } from "../provider.js"
+import type { TranslatorConfig } from "../index.js"
 
 // ---------------------------------------------------------------------------
 // Helpers

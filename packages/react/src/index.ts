@@ -6,7 +6,11 @@ export { TranslateDropdown } from "./translate-dropdown.js"
 
 export { DEFAULT_LANGUAGES } from "@babulfish/core"
 
-export type { ModelState, TranslationState } from "@babulfish/core"
-export type { TranslatorConfig, TranslatorLanguage } from "./provider.js"
+export type {
+  BabulfishConfig as TranslatorConfig,
+  Language as TranslatorLanguage,
+  ModelState,
+  TranslationState,
+} from "@babulfish/core"
 export type { TranslateButtonClassNames, TranslateButtonProps } from "./translate-button.js"
 export type { TranslateDropdownProps } from "./translate-dropdown.js"

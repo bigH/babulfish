@@ -4,15 +4,11 @@ import type { BabulfishConfig, BabulfishCore } from "@babulfish/core"
 import { TranslatorContext } from "./context.js"
 import { SSR_CORE } from "./ssr.js"
 
-export type TranslatorConfig = BabulfishConfig
-
-export type { Language as TranslatorLanguage } from "@babulfish/core"
-
 export function TranslatorProvider({
   config,
   children,
 }: {
-  config?: TranslatorConfig
+  config?: BabulfishConfig
   children: ReactNode
 }) {
   const [core] = useState<BabulfishCore>(() => {
