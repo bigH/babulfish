@@ -56,6 +56,7 @@ describe("createStore", () => {
 
   it("freezes snapshot slices for updated state", () => {
     const store = createStore()
+    const capabilities = store.get().capabilities
 
     store.set((snapshot) => ({
       ...snapshot,
@@ -68,6 +69,25 @@ describe("createStore", () => {
     expect(Object.isFrozen(snapshot.model)).toBe(true)
     expect(Object.isFrozen(snapshot.translation)).toBe(true)
     expect(Object.isFrozen(snapshot.capabilities)).toBe(true)
+    expect(snapshot.capabilities).toBe(capabilities)
+  })
+
+  it("rejects capability replacement after initialization", () => {
+    const store = createStore()
+    const replacementCapabilities = {
+      ready: true,
+      hasWebGPU: false,
+      canTranslate: true,
+      device: "wasm",
+      isMobile: false,
+    } as const
+
+    expect(() =>
+      store.set((snapshot) => ({
+        ...snapshot,
+        capabilities: replacementCapabilities,
+      })),
+    ).toThrow("Store capabilities are immutable")
   })
 
   it("becomes inert after dispose", () => {
