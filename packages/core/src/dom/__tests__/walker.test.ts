@@ -41,4 +41,27 @@ describe("collectTextNodes", () => {
 
     expect(nodes.map((node) => node.text)).toEqual(["Normal text"])
   })
+
+  it("uses stored original text when a node has already been translated", () => {
+    const root = document.createElement("div")
+    const paragraph = document.createElement("p")
+    const textNode = document.createTextNode("Hello")
+    paragraph.appendChild(textNode)
+    root.appendChild(paragraph)
+
+    const originalTexts = new WeakMap<Text, string>()
+    originalTexts.set(textNode, "Hello")
+    textNode.textContent = "Hola"
+
+    const nodes = collectTextNodes(
+      root,
+      {
+        skipTags: buildSkipTags(),
+        shouldSkip: defaultShouldSkip,
+      },
+      originalTexts,
+    )
+
+    expect(nodes.map((node) => node.text)).toEqual(["Hello"])
+  })
 })

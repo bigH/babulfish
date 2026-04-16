@@ -41,6 +41,29 @@ function getSourceText(
   return originalTexts.get(node) ?? node.textContent ?? ""
 }
 
+export function forEachTextNode(
+  root: Element,
+  visit: (node: Text) => void,
+): void {
+  const walker = root.ownerDocument!.createTreeWalker(root, NodeFilter.SHOW_TEXT)
+  let current = walker.nextNode() as Text | null
+  while (current) {
+    visit(current)
+    current = walker.nextNode() as Text | null
+  }
+}
+
+export function captureOriginalText(
+  node: Text,
+  originalTexts: WeakMap<Text, string>,
+  fallback: string = node.textContent ?? "",
+): string {
+  const original = originalTexts.get(node)
+  if (original != null) return original
+  originalTexts.set(node, fallback)
+  return fallback
+}
+
 function isInsideSkipped(
   node: Node,
   skipTags: ReadonlySet<string>,
@@ -63,6 +86,7 @@ export function collectTextNodes(
   originalTexts: WeakMap<Text, string>,
 ): TaggedTextNode[] {
   const skipSelectors = config.skipInside ?? []
+  const nodes: TaggedTextNode[] = []
   const walker = root.ownerDocument!.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
     acceptNode(node: Text) {
       if (isInsideSkipped(node, config.skipTags, skipSelectors))
@@ -75,13 +99,9 @@ export function collectTextNodes(
     },
   })
 
-  const nodes: TaggedTextNode[] = []
   let current = walker.nextNode() as Text | null
   while (current) {
-    const sourceText = getSourceText(current, originalTexts)
-    if (!originalTexts.has(current)) {
-      originalTexts.set(current, sourceText)
-    }
+    const sourceText = captureOriginalText(current, originalTexts)
     nodes.push({ node: current, text: sourceText })
     current = walker.nextNode() as Text | null
   }

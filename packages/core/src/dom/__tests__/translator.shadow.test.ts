@@ -118,4 +118,36 @@ describe("DOMTranslator with custom root", () => {
     translator.restore()
     expect(fixture.texts[0]?.textContent).toBe("original")
   })
+
+  it.each([
+    { label: "DocumentFragment", mode: "fragment" as const },
+    { label: "ShadowRoot", mode: "shadow" as const },
+  ])("restore traverses nested text nodes inside a $label", async ({ mode }) => {
+    const root =
+      mode === "shadow"
+        ? (() => {
+            const host = document.createElement("div")
+            document.body.appendChild(host)
+            return host.attachShadow({ mode: "open" })
+          })()
+        : document.createDocumentFragment()
+    const section = document.createElement("section")
+    const paragraph = document.createElement("p")
+    const leading = document.createTextNode("hello ")
+    const strong = document.createElement("strong")
+    strong.textContent = "world"
+    const trailing = document.createTextNode(" again")
+    paragraph.append(leading, strong, trailing)
+    section.appendChild(paragraph)
+    root.appendChild(section)
+
+    const translator = createTranslator(root)
+
+    await translator.translate("de")
+    expect(paragraph.textContent).toBe("HELLO WORLD AGAIN")
+
+    translator.restore()
+    expect(paragraph.textContent).toBe("hello world again")
+    expect(strong.textContent).toBe("world")
+  })
 })

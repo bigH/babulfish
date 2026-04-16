@@ -4,7 +4,13 @@
 
 import type { TaggedTextNode } from "./walker.js"
 import type { PreserveMatcher } from "./preserve.js"
-import { collectTextNodes, defaultShouldSkip, buildSkipTags } from "./walker.js"
+import {
+  buildSkipTags,
+  captureOriginalText,
+  collectTextNodes,
+  defaultShouldSkip,
+  forEachTextNode,
+} from "./walker.js"
 import {
   applyTranslation,
   buildBatches,
@@ -312,22 +318,6 @@ export function createDOMTranslator(config: DOMTranslatorConfig): DOMTranslator 
   if (config.richText) skipSelectors.push(`[${config.richText.sourceAttribute}]`)
   if (config.linkedBy) skipSelectors.push(`[${config.linkedBy.keyAttribute}]`)
 
-  function captureLinkedOriginalText(node: Text, key: string): string {
-    const original = originalTexts.get(node)
-    if (original != null) return original
-    const current = originalLinkedSources.get(key) ?? node.textContent ?? ""
-    originalTexts.set(node, current)
-    return current
-  }
-
-  function captureOriginalTextValue(node: Text): string {
-    const original = originalTexts.get(node)
-    if (original != null) return original
-    const current = node.textContent ?? ""
-    originalTexts.set(node, current)
-    return current
-  }
-
   function captureOriginalStructuredSubtree(root: Element): string {
     const original = originalStructuredRoots.get(root)
     if (original != null) return original
@@ -460,7 +450,11 @@ export function createDOMTranslator(config: DOMTranslatorConfig): DOMTranslator 
       })
 
       for (const { el, textNode } of writableTargets) {
-        captureLinkedOriginalText(textNode, key)
+        captureOriginalText(
+          textNode,
+          originalTexts,
+          originalLinkedSources.get(key) ?? textNode.textContent ?? "",
+        )
         textNode.textContent = transformed
         notifyEnd(el, config.hooks?.onTranslateEnd)
       }
@@ -599,7 +593,7 @@ export function createDOMTranslator(config: DOMTranslatorConfig): DOMTranslator 
           return false
         }
 
-        const source = captureOriginalTextValue(textNode)
+        const source = captureOriginalText(textNode, originalTexts)
         const trimmed = source.trim()
         if (!trimmed) return true
         if (shouldSkip(trimmed)) return false
@@ -1091,16 +1085,13 @@ export function createDOMTranslator(config: DOMTranslatorConfig): DOMTranslator 
     // Restore text nodes
     const roots = resolveRoots(config.roots, scope)
     for (const root of roots) {
-      const walker = root.ownerDocument!.createTreeWalker(root, NodeFilter.SHOW_TEXT)
-      let current = walker.nextNode() as Text | null
-      while (current) {
+      forEachTextNode(root, (current) => {
         const original = originalTexts.get(current)
         if (original != null) {
           current.textContent = original
           originalTexts.delete(current)
         }
-        current = walker.nextNode() as Text | null
-      }
+      })
     }
   }
 
