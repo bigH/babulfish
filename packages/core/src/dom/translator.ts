@@ -17,7 +17,7 @@ import {
   DEFAULT_BATCH_CHAR_LIMIT,
 } from "./batcher.js"
 import { insertPlaceholders, restorePlaceholders } from "./preserve.js"
-import { isWellFormedMarkdown } from "./markdown.js"
+import { isWellFormedMarkdown, stripInlineMarkdownMarkers } from "./markdown.js"
 
 // ---------------------------------------------------------------------------
 // Config types
@@ -27,7 +27,7 @@ export type RichTextConfig = {
   readonly selector: string
   readonly sourceAttribute: string
   readonly render: (markdown: string) => string
-  readonly validate?: (html: string) => boolean
+  readonly validate?: (markdown: string) => boolean
 }
 
 export type LinkedConfig = {
@@ -801,7 +801,7 @@ export function createDOMTranslator(config: DOMTranslatorConfig): DOMTranslator 
       // Default (renderInlineMarkdownToHtml) escapes all text segments.
       el.innerHTML = render(transformed) // eslint-disable-line no-unsanitized/property
     } else {
-      el.textContent = transformed.replaceAll("**", "").replaceAll("*", "")
+      el.textContent = stripInlineMarkdownMarkers(transformed)
     }
 
     notifyEnd(el, config.hooks?.onTranslateEnd)

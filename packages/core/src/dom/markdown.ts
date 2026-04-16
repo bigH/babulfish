@@ -117,3 +117,7 @@ export function renderInlineMarkdownToHtml(source: string): string {
 export function isWellFormedMarkdown(text: string): boolean {
   return isWellFormedMarkdownText(text)
 }
+
+export function stripInlineMarkdownMarkers(source: string): string {
+  return source.replaceAll("**", "").replaceAll("*", "")
+}

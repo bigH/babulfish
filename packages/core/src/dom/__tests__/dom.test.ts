@@ -1844,6 +1844,68 @@ describe("DOM translator", () => {
     expect(span.innerHTML).not.toContain("<strong>")
   })
 
+  it("passes transformed markdown to custom richText validate before render", async () => {
+    const { span } = setUpRichTextMain(
+      "hello **world**",
+      "hello <strong>world</strong>",
+    )
+
+    const outputTransform = vi.fn((translated: string) => `${translated} *again*`)
+    const validate = vi.fn((markdown: string) => markdown === "hola **mundo** *again*")
+    const render = vi.fn((markdown: string) =>
+      renderInlineMarkdownToHtml(markdown).toUpperCase(),
+    )
+
+    translate.mockResolvedValueOnce("hola **mundo**")
+
+    const t = makeTranslator(translate, {
+      richText: {
+        ...RICH_TEXT_CONFIG,
+        render,
+        validate,
+      },
+      outputTransform,
+    })
+    await t.translate("es-ES")
+
+    expect(outputTransform).toHaveBeenCalledTimes(1)
+    expect(validate).toHaveBeenCalledTimes(1)
+    expect(validate).toHaveBeenCalledWith("hola **mundo** *again*")
+    expect(render).toHaveBeenCalledTimes(1)
+    expect(render).toHaveBeenCalledWith("hola **mundo** *again*")
+    expect(span.innerHTML).toBe("HOLA <strong>MUNDO</strong> <em>AGAIN</em>")
+  })
+
+  it("skips custom richText render and strips markers when validate rejects transformed markdown", async () => {
+    const { span } = setUpRichTextMain(
+      "hello **world**",
+      "hello <strong>world</strong>",
+    )
+
+    const outputTransform = vi.fn(() => "hola **mundo** *otra*")
+    const validate = vi.fn(() => false)
+    const render = vi.fn((markdown: string) => renderInlineMarkdownToHtml(markdown))
+
+    translate.mockResolvedValueOnce("hola **mundo**")
+
+    const t = makeTranslator(translate, {
+      richText: {
+        ...RICH_TEXT_CONFIG,
+        render,
+        validate,
+      },
+      outputTransform,
+    })
+    await t.translate("es-ES")
+
+    expect(validate).toHaveBeenCalledTimes(1)
+    expect(validate).toHaveBeenCalledWith("hola **mundo** *otra*")
+    expect(render).not.toHaveBeenCalled()
+    expect(span.textContent).toBe("hola mundo otra")
+    expect(span.innerHTML).not.toContain("<strong>")
+    expect(span.innerHTML).not.toContain("<em>")
+  })
+
   // -----------------------------------------------------------------------
   // NEW: LinkedBy config
   // -----------------------------------------------------------------------
