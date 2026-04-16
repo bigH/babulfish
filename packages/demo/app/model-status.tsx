@@ -16,6 +16,24 @@ type StatusRow = {
   readonly value: string
 }
 
+type ActionButton = {
+  readonly label: string
+  readonly disabled: boolean
+  readonly onClick: () => void
+  readonly tone: "primary" | "secondary"
+}
+
+const ACTION_BUTTON_CLASS_NAMES = {
+  primary:
+    "rounded-full bg-gray-900 px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:bg-gray-300",
+  secondary:
+    "rounded-full border border-gray-300 px-4 py-2 text-sm font-medium text-gray-900 disabled:cursor-not-allowed disabled:opacity-50",
+} as const
+
+function formatPercent(progress: number): string {
+  return `${Math.round(progress * 100)}%`
+}
+
 function formatWebGPUStatus(
   capabilitiesReady: boolean,
   hasWebGPU: boolean,
@@ -49,7 +67,7 @@ function formatModelStatus(model: ModelState): string {
     case "idle":
       return "Not loaded"
     case "downloading":
-      return `Downloading (${Math.round(model.progress * 100)}%)`
+      return `Downloading (${formatPercent(model.progress)})`
     case "ready":
       return "Ready"
     case "error":
@@ -62,7 +80,7 @@ function formatTranslationStatus(translation: TranslationState): string {
     case "idle":
       return "Idle"
     case "translating":
-      return `Translating (${Math.round(translation.progress * 100)}%)`
+      return `Translating (${formatPercent(translation.progress)})`
   }
 }
 
@@ -94,6 +112,40 @@ export function ModelStatus() {
   const translating = translation.status === "translating"
   const canDriveTranslation = modelReady && !translating
   const canRestore = modelReady && currentLanguage !== null && !translating
+  const actionButtons: ReadonlyArray<ActionButton> = [
+    {
+      label: "Load model",
+      disabled: model.status !== "idle",
+      onClick: () => {
+        void loadModel()
+      },
+      tone: "primary",
+    },
+    {
+      label: "Translate to Spanish",
+      disabled: !canDriveTranslation,
+      onClick: () => {
+        void translatePage("es-ES")
+      },
+      tone: "secondary",
+    },
+    {
+      label: "Translate to Arabic (RTL)",
+      disabled: !canDriveTranslation,
+      onClick: () => {
+        void translatePage("ar")
+      },
+      tone: "secondary",
+    },
+    {
+      label: "Restore original",
+      disabled: !canRestore,
+      onClick: () => {
+        restorePage()
+      },
+      tone: "secondary",
+    },
+  ]
 
   const rows: ReadonlyArray<StatusRow> = [
     {
@@ -118,7 +170,7 @@ export function ModelStatus() {
     },
     {
       label: "Hook Progress",
-      value: progress === null ? "None" : `${Math.round(progress * 100)}%`,
+      value: progress === null ? "None" : formatPercent(progress),
     },
     {
       label: "Language",
@@ -149,46 +201,17 @@ export function ModelStatus() {
         </div>
 
         <div className="grid gap-2 sm:grid-cols-2 lg:w-[24rem]">
-          <button
-            type="button"
-            className="rounded-full bg-gray-900 px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:bg-gray-300"
-            disabled={model.status !== "idle"}
-            onClick={() => {
-              void loadModel()
-            }}
-          >
-            Load model
-          </button>
-          <button
-            type="button"
-            className="rounded-full border border-gray-300 px-4 py-2 text-sm font-medium text-gray-900 disabled:cursor-not-allowed disabled:opacity-50"
-            disabled={!canDriveTranslation}
-            onClick={() => {
-              void translatePage("es-ES")
-            }}
-          >
-            Translate to Spanish
-          </button>
-          <button
-            type="button"
-            className="rounded-full border border-gray-300 px-4 py-2 text-sm font-medium text-gray-900 disabled:cursor-not-allowed disabled:opacity-50"
-            disabled={!canDriveTranslation}
-            onClick={() => {
-              void translatePage("ar")
-            }}
-          >
-            Translate to Arabic (RTL)
-          </button>
-          <button
-            type="button"
-            className="rounded-full border border-gray-300 px-4 py-2 text-sm font-medium text-gray-900 disabled:cursor-not-allowed disabled:opacity-50"
-            disabled={!canRestore}
-            onClick={() => {
-              restorePage()
-            }}
-          >
-            Restore original
-          </button>
+          {actionButtons.map(({ label, disabled, onClick, tone }) => (
+            <button
+              key={label}
+              type="button"
+              className={ACTION_BUTTON_CLASS_NAMES[tone]}
+              disabled={disabled}
+              onClick={onClick}
+            >
+              {label}
+            </button>
+          ))}
         </div>
       </div>
 

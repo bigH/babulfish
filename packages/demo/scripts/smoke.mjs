@@ -16,6 +16,9 @@ const shutdownTimeoutMs = 5_000
 const homepageMarkers = [
   "babulfish React Demo",
   "React provider integration, visible lifecycle, restore, and RTL.",
+  "Provider",
+  "Hooks",
+  "Root behavior",
   "React Boundary Proof",
   "useTranslator()",
   "useTranslateDOM()",
@@ -25,6 +28,8 @@ const homepageMarkers = [
   "Restore original",
   "Translated Root",
   "Only this container is inside",
+  "Try This",
+  "Client-side translation, no server detour",
   "The stock React surface stays small",
 ]
 
