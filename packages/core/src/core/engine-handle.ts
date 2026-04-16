@@ -6,14 +6,13 @@ export type EngineHandle = {
   readonly id: symbol
 }
 
-type SharedEngineHandle = {
-  readonly engine: Translator
-  readonly id: symbol
+const coreEngineIdentity = Symbol("core-engine-identity")
+
+type EngineIdentityCarrier = {
+  readonly [coreEngineIdentity]?: symbol
 }
 
-let sharedEngine: SharedEngineHandle | null = null
-
-const coreEngineMap = new WeakMap<object, symbol>()
+let sharedEngine: EngineHandle | null = null
 
 export function acquireEngine(config?: EngineConfig): EngineHandle {
   if (!sharedEngine) {
@@ -25,12 +24,17 @@ export function acquireEngine(config?: EngineConfig): EngineHandle {
   return sharedEngine
 }
 
-export function registerCoreEngine(core: object, id: symbol): void {
-  coreEngineMap.set(core, id)
+export function tagCoreWithEngineIdentity(core: object, id: symbol): void {
+  Object.defineProperty(core as EngineIdentityCarrier, coreEngineIdentity, {
+    value: id,
+    enumerable: false,
+    writable: false,
+    configurable: false,
+  })
 }
 
 export function getEngineIdentityForCore(core: object): symbol | undefined {
-  return coreEngineMap.get(core)
+  return (core as EngineIdentityCarrier)[coreEngineIdentity]
 }
 
 export function __resetSharedEngine(): void {

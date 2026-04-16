@@ -109,6 +109,10 @@ afterEach(() => {
 // ---- 4.1 Engine singleton + multi-instance --------------------------------
 
 describe("4.1 — engine singleton + multi-instance", () => {
+  it("engine identity helper ignores non-core objects", () => {
+    expect(getEngineIdentity({})).toBeUndefined()
+  })
+
   it("two createBabulfish calls share the same engine", () => {
     const a = createBabulfish()
     const b = createBabulfish()
