@@ -161,6 +161,11 @@ const STRUCTURED_TEXT_CONFIG: DOMTranslatorConfig["structuredText"] = {
   selector: ".structured",
 }
 
+const TEST_STRUCTURED_TOKEN_PREFIX = "\u27EAbf-st:"
+const TEST_STRUCTURED_TOKEN_SUFFIX = "\u27EB"
+
+type StructuredIntegrityFailureMode = "missing" | "duplicate" | "reordered"
+
 function replaceAllVisibleText(
   input: string,
   replacements: Record<string, string>,
@@ -170,6 +175,68 @@ function replaceAllVisibleText(
     result = result.replaceAll(source, translated)
   }
   return result
+}
+
+function collectStructuredTokens(input: string): string[] {
+  const tokens: string[] = []
+  let cursor = 0
+
+  while (true) {
+    const start = input.indexOf(TEST_STRUCTURED_TOKEN_PREFIX, cursor)
+    if (start < 0) return tokens
+
+    const end = input.indexOf(
+      TEST_STRUCTURED_TOKEN_SUFFIX,
+      start + TEST_STRUCTURED_TOKEN_PREFIX.length,
+    )
+    if (end < 0) {
+      throw new Error("Malformed structured token output in test fixture")
+    }
+
+    tokens.push(input.slice(start, end + TEST_STRUCTURED_TOKEN_SUFFIX.length))
+    cursor = end + TEST_STRUCTURED_TOKEN_SUFFIX.length
+  }
+}
+
+function damageStructuredOutput(
+  input: string,
+  mode: StructuredIntegrityFailureMode,
+  replacements: Record<string, string>,
+): string {
+  const translated = replaceAllVisibleText(input, replacements)
+  const [first, second] = collectStructuredTokens(translated)
+
+  if (!first) {
+    throw new Error("Expected at least one structured token in test fixture")
+  }
+
+  switch (mode) {
+    case "missing":
+      return translated.replace(first, "")
+    case "duplicate":
+      return translated.replace(first, `${first}${first}`)
+    case "reordered": {
+      if (!second) {
+        throw new Error("Expected at least two structured tokens in test fixture")
+      }
+      const swapMarker = "__bf-structured-swap__"
+      return translated
+        .replace(first, swapMarker)
+        .replace(second, first)
+        .replace(swapMarker, second)
+    }
+  }
+}
+
+async function waitForDefined<T>(
+  getValue: () => T | null,
+): Promise<T> {
+  for (let attempt = 0; attempt < 20; attempt++) {
+    const value = getValue()
+    if (value !== null) return value
+    await new Promise((resolve) => setTimeout(resolve, 0))
+  }
+  throw new Error("Timed out waiting for test value")
 }
 
 // ---------------------------------------------------------------------------
@@ -909,6 +976,216 @@ describe("DOM translator", () => {
     expect(translate).toHaveBeenCalledTimes(1)
     expect(translate.mock.calls[0]?.[0]).toContain("\n")
     expect(paragraph.innerHTML).toBe("Linea uno<br>Linea dos")
+  })
+
+  it.each([
+    { label: "missing", mode: "missing" as const },
+    { label: "duplicate", mode: "duplicate" as const },
+    { label: "reordered", mode: "reordered" as const },
+  ])("falls back locally when structured output has $label tokens", async ({ mode }) => {
+    const main = setUpHtmlMain(
+      '<p class="structured">Hello <strong>world</strong> again</p>',
+    )
+    const paragraph = main.querySelector("p")!
+
+    const onTranslateStart = vi.fn()
+    const onTranslateEnd = vi.fn()
+    const onProgress = vi.fn()
+
+    let callCount = 0
+    translate.mockImplementation(async (text: string) => {
+      callCount++
+      if (callCount === 1) {
+        return damageStructuredOutput(text, mode, {
+          Hello: "Hola",
+          world: "mundo",
+          again: "otra vez",
+        })
+      }
+      return "Hola mundo otra vez"
+    })
+
+    const t = makeTranslator(translate, {
+      structuredText: STRUCTURED_TEXT_CONFIG,
+      hooks: { onTranslateStart, onTranslateEnd, onProgress },
+    })
+    await t.translate("es-ES")
+
+    expect(translate).toHaveBeenCalledTimes(2)
+    expect(paragraph.querySelector("strong")).not.toBeNull()
+    expect(paragraph.querySelector("strong")?.textContent).toBe("")
+    expect(paragraph.textContent).toBe("Hola mundo otra vez")
+    expect(onTranslateStart).toHaveBeenCalledTimes(1)
+    expect(onTranslateStart).toHaveBeenCalledWith(paragraph)
+    expect(onTranslateEnd).toHaveBeenCalledTimes(1)
+    expect(onTranslateEnd).toHaveBeenCalledWith(paragraph)
+    expect(onProgress).toHaveBeenCalledTimes(1)
+    expect(onProgress).toHaveBeenCalledWith(1, 1)
+  })
+
+  it.each([
+    { label: "success", mode: null },
+    { label: "fallback", mode: "missing" as const },
+  ])("keeps attrs inside structured roots as separate work after structured $label", async ({
+    mode,
+  }) => {
+    const main = setUpHtmlMain(
+      '<p class="structured"><a href="/docs" title="Read docs">Hello <strong>world</strong></a></p>',
+    )
+    const paragraph = main.querySelector("p")!
+    const link = main.querySelector("a")!
+
+    let callCount = 0
+    translate.mockImplementation(async (text: string) => {
+      callCount++
+      if (callCount === 1 && mode) {
+        return damageStructuredOutput(text, mode, {
+          Hello: "Hola",
+          world: "mundo",
+        })
+      }
+      if (callCount <= (mode ? 2 : 1)) {
+        return mode
+          ? "Hola mundo"
+          : replaceAllVisibleText(text, {
+            Hello: "Hola",
+            world: "mundo",
+          })
+      }
+      return "Leer docs"
+    })
+
+    const t = makeTranslator(translate, {
+      structuredText: STRUCTURED_TEXT_CONFIG,
+    })
+    await t.translate("es-ES")
+
+    expect(link.getAttribute("title")).toBe("Leer docs")
+    expect(translate.mock.calls.some(([source]) => source === "Read docs")).toBe(true)
+    expect(paragraph.querySelector("strong")).not.toBeNull()
+  })
+
+  it("aborts before exact structured commit and leaves the subtree unchanged", async () => {
+    const main = setUpHtmlMain(
+      '<p class="structured">Hello <strong>world</strong></p>',
+    )
+    const paragraph = main.querySelector("p")!
+    const originalInnerHTML = paragraph.innerHTML
+
+    let serialized = ""
+    let resolveTranslation: ((value: string) => void) | null = null
+    translate.mockImplementationOnce(async (text: string) => {
+      serialized = text
+      return await new Promise<string>((resolve) => {
+        resolveTranslation = resolve
+      })
+    })
+
+    const t = makeTranslator(translate, {
+      structuredText: STRUCTURED_TEXT_CONFIG,
+    })
+    const promise = t.translate("es-ES")
+
+    const exactResolver = await waitForDefined(() => resolveTranslation)
+    t.abort()
+    exactResolver(replaceAllVisibleText(serialized, {
+      Hello: "Hola",
+      world: "mundo",
+    }))
+    await promise
+
+    expect(t.isTranslating).toBe(false)
+    expect(paragraph.innerHTML).toBe(originalInnerHTML)
+  })
+
+  it("aborts before structured fallback commit and leaves the subtree unchanged", async () => {
+    const main = setUpHtmlMain(
+      '<p class="structured">Hello <strong>world</strong></p>',
+    )
+    const paragraph = main.querySelector("p")!
+    const originalInnerHTML = paragraph.innerHTML
+
+    let resolveFallback: ((value: string) => void) | null = null
+    let callCount = 0
+    translate.mockImplementation(async (text: string) => {
+      callCount++
+      if (callCount === 1) {
+        return damageStructuredOutput(text, "missing", {
+          Hello: "Hola",
+          world: "mundo",
+        })
+      }
+      return await new Promise<string>((resolve) => {
+        resolveFallback = resolve
+      })
+    })
+
+    const t = makeTranslator(translate, {
+      structuredText: STRUCTURED_TEXT_CONFIG,
+    })
+    const promise = t.translate("es-ES")
+
+    const fallbackResolver = await waitForDefined(() => resolveFallback)
+    t.abort()
+    fallbackResolver("Hola mundo")
+    await promise
+
+    expect(t.isTranslating).toBe(false)
+    expect(paragraph.innerHTML).toBe(originalInnerHTML)
+  })
+
+  it("restores structured roots after structured fallback", async () => {
+    const main = setUpHtmlMain(
+      '<p class="structured">Hello <strong>world</strong></p>',
+    )
+    const paragraph = main.querySelector("p")!
+    const originalInnerHTML = paragraph.innerHTML
+
+    let callCount = 0
+    translate.mockImplementation(async (text: string) => {
+      callCount++
+      if (callCount === 1) {
+        return damageStructuredOutput(text, "reordered", {
+          Hello: "Hola",
+          world: "mundo",
+        })
+      }
+      return "Hola mundo"
+    })
+
+    const t = makeTranslator(translate, {
+      structuredText: STRUCTURED_TEXT_CONFIG,
+    })
+    await t.translate("es-ES")
+
+    expect(paragraph.innerHTML).not.toBe(originalInnerHTML)
+
+    t.restore()
+    expect(paragraph.innerHTML).toBe(originalInnerHTML)
+  })
+
+  it("restores structured roots from their original subtree snapshot", async () => {
+    const main = setUpHtmlMain(
+      '<p class="structured">Hello <strong>world</strong></p>',
+    )
+    const paragraph = main.querySelector("p")!
+    const originalInnerHTML = paragraph.innerHTML
+
+    translate.mockImplementation(async (text: string) =>
+      replaceAllVisibleText(text, {
+        Hello: "Hola",
+        world: "mundo",
+      }))
+
+    const t = makeTranslator(translate, {
+      structuredText: STRUCTURED_TEXT_CONFIG,
+    })
+    await t.translate("es-ES")
+
+    paragraph.innerHTML = "mutated <em>markup</em>" // eslint-disable-line no-unsanitized/property -- test-only dynamic mutation
+
+    t.restore()
+    expect(paragraph.innerHTML).toBe(originalInnerHTML)
   })
 
   // -----------------------------------------------------------------------

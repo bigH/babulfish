@@ -132,6 +132,10 @@ type StructuredTextUnit = {
   readonly tokenSequence: readonly StructuredTokenDescriptor[]
 }
 
+type StructuredCommitPlan = {
+  readonly values: ReadonlyMap<number, string>
+}
+
 type VisibleClaims = {
   readonly linkedTextNodes: Set<Text>
   readonly richRoots: readonly Element[]
@@ -243,6 +247,7 @@ export function createDOMTranslator(config: DOMTranslatorConfig): DOMTranslator 
   // Instance-scoped state — no module singletons
   const originalTexts = new WeakMap<Text, string>()
   const originalRichElements = new Map<Element, string>()
+  const originalStructuredRoots = new Map<Element, string>()
   const originalAttrs = new Map<Element, Record<string, string>>()
   const originalLinkedSources = new Map<string, string>()
   const savedDirs = new Map<Element, string | null>()
@@ -280,6 +285,44 @@ export function createDOMTranslator(config: DOMTranslatorConfig): DOMTranslator 
     const current = node.textContent ?? ""
     originalTexts.set(node, current)
     return current
+  }
+
+  function captureOriginalStructuredSubtree(root: Element): string {
+    const original = originalStructuredRoots.get(root)
+    if (original != null) return original
+    const current = root.innerHTML
+    originalStructuredRoots.set(root, current)
+    return current
+  }
+
+  function restoreStructuredRoot(root: Element): void {
+    const original = originalStructuredRoots.get(root)
+    if (original == null || root.innerHTML === original) return
+    root.innerHTML = original // eslint-disable-line no-unsanitized/property
+  }
+
+  function restoreStructuredUnitForFallback(unit: StructuredTextUnit): void {
+    const original = originalStructuredRoots.get(unit.root)
+    if (original == null || unit.root.innerHTML === original) return
+
+    for (const { node } of unit.textSlots) {
+      if (!unit.root.contains(node)) continue
+      const source = originalTexts.get(node)
+      if (source != null) node.textContent = source
+    }
+
+    for (const attrName of attrNames) {
+      for (const el of unit.root.querySelectorAll(`[${attrName}]`)) {
+        const source = getOriginalAttrValue(el, attrName)
+        if (source != null) {
+          el.setAttribute(attrName, source)
+        }
+      }
+    }
+
+    if (unit.root.innerHTML !== original) {
+      unit.root.innerHTML = original // eslint-disable-line no-unsanitized/property
+    }
   }
 
   function getOriginalAttrValue(el: Element, attrName: string): string | null {
@@ -596,10 +639,42 @@ export function createDOMTranslator(config: DOMTranslatorConfig): DOMTranslator 
     }
   }
 
+  function collectStructuredTokens(
+    translated: string,
+  ): string[] | null {
+    const tokens: string[] = []
+    let cursor = 0
+
+    while (true) {
+      const start = translated.indexOf(STRUCTURED_TOKEN_PREFIX, cursor)
+      if (start < 0) return tokens
+
+      const end = translated.indexOf(
+        STRUCTURED_TOKEN_SUFFIX,
+        start + STRUCTURED_TOKEN_PREFIX.length,
+      )
+      if (end < 0) return null
+
+      tokens.push(translated.slice(start, end + STRUCTURED_TOKEN_SUFFIX.length))
+      cursor = end + STRUCTURED_TOKEN_SUFFIX.length
+    }
+  }
+
   function extractStructuredTextValues(
     unit: StructuredTextUnit,
     translated: string,
-  ): Map<number, string> | null {
+  ): StructuredCommitPlan | null {
+    const foundTokens = collectStructuredTokens(translated)
+    if (!foundTokens) return null
+
+    const expectedTokens = unit.tokenSequence.map(({ token }) => token)
+    if (foundTokens.length !== expectedTokens.length) return null
+    if (new Set(foundTokens).size !== foundTokens.length) return null
+
+    for (let i = 0; i < expectedTokens.length; i++) {
+      if (foundTokens[i] !== expectedTokens[i]) return null
+    }
+
     const values = new Map<number, string>()
     let cursor = 0
     let activeTextSlotId: number | null = null
@@ -632,7 +707,21 @@ export function createDOMTranslator(config: DOMTranslatorConfig): DOMTranslator 
 
     if (activeTextSlotId != null) return null
     if (translated.slice(cursor).length > 0) return null
-    return values
+    return { values }
+  }
+
+  function buildStructuredFallbackSource(unit: StructuredTextUnit): string {
+    return unit.textSlots
+      .map(({ node }) => originalTexts.get(node) ?? node.textContent ?? "")
+      .join("\n")
+  }
+
+  function collectStructuredFallbackTargets(root: Element): TaggedTextNode[] {
+    return collectTextNodes(root, {
+      skipTags,
+      shouldSkip,
+      skipInside: skipSelectors,
+    }, originalTexts)
   }
 
   function collectTranslatableAttrs(root: Element): TranslatableAttr[] {
@@ -699,12 +788,28 @@ export function createDOMTranslator(config: DOMTranslatorConfig): DOMTranslator 
     if (signal.aborted) return
     const translated = restorePlaceholders(rawTranslation, slots)
 
-    const values = extractStructuredTextValues(unit, translated)
-    if (values) {
+    const exactCommit = extractStructuredTextValues(unit, translated)
+    if (exactCommit) {
+      if (signal.aborted) return
       for (const { node, slotId } of unit.textSlots) {
-        node.textContent = values.get(slotId) ?? ""
+        node.textContent = exactCommit.values.get(slotId) ?? ""
       }
+      notifyEnd(unit.root, config.hooks?.onTranslateEnd)
+      return
     }
+
+    const fallbackSource = buildStructuredFallbackSource(unit)
+    const { masked: maskedFallback, slots: fallbackSlots } = insertPlaceholders(
+      fallbackSource,
+      matchers,
+    )
+    const rawFallback = await config.translate(maskedFallback, targetLang)
+    if (signal.aborted) return
+    const fallbackTranslated = restorePlaceholders(rawFallback, fallbackSlots)
+
+    restoreStructuredUnitForFallback(unit)
+    const fallbackTargets = collectStructuredFallbackTargets(unit.root)
+    applyTranslation(fallbackTargets, fallbackTranslated)
 
     notifyEnd(unit.root, config.hooks?.onTranslateEnd)
   }
@@ -744,6 +849,9 @@ export function createDOMTranslator(config: DOMTranslatorConfig): DOMTranslator 
 
       const claims = buildVisibleClaims(linkedGroups, allRich)
       const allStructured = resolveStructuredUnits(roots, claims)
+      for (const unit of allStructured) {
+        captureOriginalStructuredSubtree(unit.root)
+      }
 
       const walkerConfig = { skipTags, shouldSkip, skipInside: skipSelectors }
       const allNodes = roots.flatMap((r) =>
@@ -894,6 +1002,11 @@ export function createDOMTranslator(config: DOMTranslatorConfig): DOMTranslator 
       el.innerHTML = original // eslint-disable-line no-unsanitized/property
     }
     originalRichElements.clear()
+
+    for (const root of originalStructuredRoots.keys()) {
+      restoreStructuredRoot(root)
+    }
+    originalStructuredRoots.clear()
 
     // Restore attributes
     for (const [el, attrs] of originalAttrs) {
