@@ -981,6 +981,33 @@ describe("DOM translator", () => {
     expect(paragraph.innerHTML).toBe("Ejecuta <code>npm test</code> ahora")
   })
 
+  it("applies preserve matchers before structured text translation", async () => {
+    const main = setUpHtmlMain(
+      '<p class="structured">Version <strong>v2.1.0</strong> ships today</p>',
+    )
+    const paragraph = main.querySelector("p")!
+
+    translate.mockImplementation(async (text: string) => {
+      expect(text).toContain("\u27EA0\u27EB")
+      expect(text).not.toContain("v2.1.0")
+
+      return replaceAllVisibleText(text, {
+        "ships today": "ya disponible",
+      })
+    })
+
+    const t = makeTranslator(translate, {
+      preserve: { matchers: [/v\d+\.\d+\.\d+/] },
+      structuredText: STRUCTURED_TEXT_CONFIG,
+    })
+    await t.translate("es-ES")
+
+    expect(translate).toHaveBeenCalledTimes(1)
+    expect(paragraph.innerHTML).toBe(
+      "Version <strong>v2.1.0</strong> ya disponible",
+    )
+  })
+
   it("round-trips br elements as logical line breaks in structured text", async () => {
     const main = setUpHtmlMain(
       '<p class="structured">Line one<br>Line two</p>',
@@ -1047,6 +1074,37 @@ describe("DOM translator", () => {
     expect(onTranslateEnd).toHaveBeenCalledWith(paragraph)
     expect(onProgress).toHaveBeenCalledTimes(1)
     expect(onProgress).toHaveBeenCalledWith(1, 1)
+  })
+
+  it("preserves matchers through structured fallback writes", async () => {
+    const main = setUpHtmlMain(
+      '<p class="structured">Version <strong>v2.1.0</strong> ships today</p>',
+    )
+    const paragraph = main.querySelector("p")!
+
+    let callCount = 0
+    translate.mockImplementation(async (text: string) => {
+      callCount++
+      expect(text).toContain("\u27EA0\u27EB")
+      expect(text).not.toContain("v2.1.0")
+
+      if (callCount === 1) {
+        return damageStructuredOutput(text, "missing", {
+          "ships today": "ya disponible",
+        })
+      }
+
+      return "Version \u27EA0\u27EB ya disponible"
+    })
+
+    const t = makeTranslator(translate, {
+      preserve: { matchers: [/v\d+\.\d+\.\d+/] },
+      structuredText: STRUCTURED_TEXT_CONFIG,
+    })
+    await t.translate("es-ES")
+
+    expect(translate).toHaveBeenCalledTimes(2)
+    expect(paragraph.textContent).toBe("Version v2.1.0 ya disponible")
   })
 
   it.each([

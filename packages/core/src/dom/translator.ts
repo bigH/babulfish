@@ -312,6 +312,17 @@ export function createDOMTranslator(config: DOMTranslatorConfig): DOMTranslator 
     return config.outputTransform ? config.outputTransform(translated, context) : translated
   }
 
+  async function translatePreservingMatches(
+    source: string,
+    targetLang: string,
+    signal: AbortSignal,
+  ): Promise<string | null> {
+    const { masked, slots } = insertPlaceholders(source, matchers)
+    const translated = await config.translate(masked, targetLang)
+    if (signal.aborted) return null
+    return restorePlaceholders(translated, slots)
+  }
+
   // Skip selectors: elements whose children should be excluded from
   // plain-text walking (they are translated separately).
   const skipSelectors: string[] = []
@@ -794,10 +805,8 @@ export function createDOMTranslator(config: DOMTranslatorConfig): DOMTranslator 
 
     notifyStart(el, config.hooks?.onTranslateStart)
 
-    const { masked, slots } = insertPlaceholders(source, matchers)
-    const rawTranslation = await config.translate(masked, targetLang)
-    if (signal.aborted) return
-    const translated = restorePlaceholders(rawTranslation, slots)
+    const translated = await translatePreservingMatches(source, targetLang, signal)
+    if (translated == null) return
     const transformed = transformDOMOutput(translated, {
       kind: "richText",
       targetLang,
@@ -824,10 +833,12 @@ export function createDOMTranslator(config: DOMTranslatorConfig): DOMTranslator 
   ): Promise<void> {
     notifyStart(unit.root, config.hooks?.onTranslateStart)
 
-    const { masked, slots } = insertPlaceholders(unit.serialized, matchers)
-    const rawTranslation = await config.translate(masked, targetLang)
-    if (signal.aborted) return
-    const translated = restorePlaceholders(rawTranslation, slots)
+    const translated = await translatePreservingMatches(
+      unit.serialized,
+      targetLang,
+      signal,
+    )
+    if (translated == null) return
     const transformed = transformDOMOutput(translated, {
       kind: "structuredText",
       targetLang,
@@ -845,13 +856,12 @@ export function createDOMTranslator(config: DOMTranslatorConfig): DOMTranslator 
     }
 
     const fallbackSource = buildStructuredFallbackSource(unit)
-    const { masked: maskedFallback, slots: fallbackSlots } = insertPlaceholders(
+    const fallbackTranslated = await translatePreservingMatches(
       fallbackSource,
-      matchers,
+      targetLang,
+      signal,
     )
-    const rawFallback = await config.translate(maskedFallback, targetLang)
-    if (signal.aborted) return
-    const fallbackTranslated = restorePlaceholders(rawFallback, fallbackSlots)
+    if (fallbackTranslated == null) return
     const transformedFallback = transformDOMOutput(fallbackTranslated, {
       kind: "structuredText",
       targetLang,
