@@ -13,6 +13,35 @@ import * as directDriver from "./testing/drivers/direct.js"
 import * as vanillaDomDriver from "./testing/drivers/vanilla-dom.js"
 import * as barrel from "./index.js"
 
+const EXPECTED_ROOT_RUNTIME_EXPORTS = [
+  "DEFAULT_LANGUAGES",
+  "createBabulfish",
+  "createDOMTranslator",
+  "createEngine",
+  "getTranslationCapabilities",
+  "isWellFormedMarkdown",
+  "parseInlineMarkdown",
+  "renderInlineMarkdownToHtml",
+] as const
+
+const EXPECTED_DOM_RUNTIME_EXPORTS = [
+  "createDOMTranslator",
+  "isWellFormedMarkdown",
+  "parseInlineMarkdown",
+  "renderInlineMarkdownToHtml",
+] as const
+
+type ExpectedStructuredTextConfig = {
+  readonly selector: string
+}
+
+type ExpectedDOMOutputTransformContext = {
+  readonly kind: "linked" | "richText" | "structuredText" | "text" | "attr"
+  readonly targetLang: string
+  readonly source: string
+  readonly attribute?: string
+}
+
 function expectValueReExports(
   actualModule: Record<string, unknown>,
   expectedExports: Record<string, unknown>,
@@ -54,6 +83,8 @@ describe("smoke tests", () => {
   })
 
   it("barrel re-exports core, engine, and dom", () => {
+    expect(Object.keys(barrel).toSorted()).toEqual(EXPECTED_ROOT_RUNTIME_EXPORTS)
+
     expectValueReExports(barrel, {
       createBabulfish,
       DEFAULT_LANGUAGES,
@@ -76,6 +107,9 @@ describe("smoke tests", () => {
     expectTypeOf<domTranslator.DOMTranslator>().toEqualTypeOf<barrel.DOMTranslator>()
     expectTypeOf<domTranslator.RichTextConfig>().toEqualTypeOf<barrel.RichTextConfig>()
     expectTypeOf<domTranslator.LinkedConfig>().toEqualTypeOf<barrel.LinkedConfig>()
+    expectTypeOf<barrel.StructuredTextConfig>().toEqualTypeOf<ExpectedStructuredTextConfig>()
+    expectTypeOf<barrel.DOMOutputTransformContext>()
+      .toEqualTypeOf<ExpectedDOMOutputTransformContext>()
     expectTypeOf<domTranslator.StructuredTextConfig>().toEqualTypeOf<barrel.StructuredTextConfig>()
     expectTypeOf<domTranslator.DOMOutputTransformContext>()
       .toEqualTypeOf<barrel.DOMOutputTransformContext>()
@@ -108,6 +142,8 @@ describe("smoke tests", () => {
   })
 
   it("dom barrel re-exports the public DOM surface", () => {
+    expect(Object.keys(domBarrel).toSorted()).toEqual(EXPECTED_DOM_RUNTIME_EXPORTS)
+
     expectValueReExports(domBarrel, {
       createDOMTranslator: domTranslator.createDOMTranslator,
       renderInlineMarkdownToHtml: markdown.renderInlineMarkdownToHtml,
@@ -126,6 +162,9 @@ describe("smoke tests", () => {
     expectTypeOf<domTranslator.DOMTranslator>().toEqualTypeOf<domBarrel.DOMTranslator>()
     expectTypeOf<domTranslator.RichTextConfig>().toEqualTypeOf<domBarrel.RichTextConfig>()
     expectTypeOf<domTranslator.LinkedConfig>().toEqualTypeOf<domBarrel.LinkedConfig>()
+    expectTypeOf<domBarrel.StructuredTextConfig>().toEqualTypeOf<ExpectedStructuredTextConfig>()
+    expectTypeOf<domBarrel.DOMOutputTransformContext>()
+      .toEqualTypeOf<ExpectedDOMOutputTransformContext>()
     expectTypeOf<domTranslator.StructuredTextConfig>()
       .toEqualTypeOf<domBarrel.StructuredTextConfig>()
     expectTypeOf<domTranslator.DOMOutputTransformContext>()

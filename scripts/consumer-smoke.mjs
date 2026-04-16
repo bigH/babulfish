@@ -6,6 +6,30 @@ import { fileURLToPath } from "node:url"
 
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const cleanupTargets = new Set()
+const EXPECTED_CORE_RUNTIME_KEYS = [
+  "DEFAULT_LANGUAGES",
+  "createBabulfish",
+  "createDOMTranslator",
+  "createEngine",
+  "getTranslationCapabilities",
+  "isWellFormedMarkdown",
+  "parseInlineMarkdown",
+  "renderInlineMarkdownToHtml",
+]
+const EXPECTED_CORE_DOM_RUNTIME_KEYS = [
+  "createDOMTranslator",
+  "isWellFormedMarkdown",
+  "parseInlineMarkdown",
+  "renderInlineMarkdownToHtml",
+]
+const EXPECTED_REACT_RUNTIME_KEYS = [
+  "DEFAULT_LANGUAGES",
+  "TranslateButton",
+  "TranslateDropdown",
+  "TranslatorProvider",
+  "useTranslateDOM",
+  "useTranslator",
+]
 
 function registerCleanup(target) {
   cleanupTargets.add(target)
@@ -131,6 +155,9 @@ const reactFreeOutput = runNode(
   `
 import { readFileSync } from "node:fs"
 
+const expectedCoreKeys = ${JSON.stringify(EXPECTED_CORE_RUNTIME_KEYS)}
+const expectedCoreDomKeys = ${JSON.stringify(EXPECTED_CORE_DOM_RUNTIME_KEYS)}
+
 function ok(message) {
   console.log(message)
 }
@@ -141,6 +168,10 @@ function assert(condition, message) {
 
 const coreModule = await import("@babulfish/core")
 assert(typeof coreModule.createBabulfish === "function", "createBabulfish missing")
+assert(
+  JSON.stringify(Object.keys(coreModule).toSorted()) === JSON.stringify(expectedCoreKeys),
+  "@babulfish/core runtime exports drifted",
+)
 const core = coreModule.createBabulfish()
 assert(typeof core.subscribe === "function", "subscribe missing")
 assert(typeof core.dispose === "function", "dispose missing")
@@ -157,9 +188,17 @@ assert(scenario, "snapshot-no-spurious-notify scenario missing")
 await scenario.run(driver)
 ok("OK [@babulfish/core/testing]: direct-driver scenario passed")
 
-await import("@babulfish/core/dom")
+const domModule = await import("@babulfish/core/dom")
+assert(
+  JSON.stringify(Object.keys(domModule).toSorted()) === JSON.stringify(expectedCoreDomKeys),
+  "@babulfish/core/dom runtime exports drifted",
+)
+assert(
+  coreModule.createDOMTranslator === domModule.createDOMTranslator,
+  "@babulfish/core should re-export createDOMTranslator",
+)
 await import("@babulfish/core/engine")
-ok("OK [@babulfish/core/dom]: import succeeds")
+ok("OK [@babulfish/core/dom]: documented runtime surface present")
 ok("OK [@babulfish/core/engine]: import succeeds")
 
 let missingReact = false
@@ -221,15 +260,24 @@ function assert(condition, message) {
   if (!condition) throw new Error(message)
 }
 
+const expectedReactKeys = ${JSON.stringify(EXPECTED_REACT_RUNTIME_KEYS)}
+
 const reactModule = await import("@babulfish/react")
 const metaModule = await import("babulfish")
 
 const reactKeys = Object.keys(reactModule).toSorted()
 const metaKeys = Object.keys(metaModule).toSorted()
-assert(reactKeys.length > 0, "@babulfish/react should export a public surface")
+assert(
+  JSON.stringify(reactKeys) === JSON.stringify(expectedReactKeys),
+  "@babulfish/react runtime exports drifted",
+)
 assert(
   JSON.stringify(reactKeys) === JSON.stringify(metaKeys),
   "babulfish and @babulfish/react should expose the same runtime keys",
+)
+assert(
+  JSON.stringify(metaKeys) === JSON.stringify(expectedReactKeys),
+  "babulfish runtime exports drifted",
 )
 
 console.log("OK [@babulfish/react]: imports once react is installed")

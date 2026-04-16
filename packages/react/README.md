@@ -55,13 +55,26 @@ See [`@babulfish/styles`](../styles/README.md) for the custom-property contract.
 
 ### `<TranslatorProvider>`
 
-Wraps your app with a `BabulfishCore` context. Accepts an optional `config` prop (`BabulfishConfig` from `@babulfish/core`). Lazy-creates the core instance on first client render; SSR-safe.
+Wraps your app with a `BabulfishCore` context. Accepts an optional `config` prop (`TranslatorConfig`, the same shape as `BabulfishConfig` from `@babulfish/core`). Lazy-creates the core instance on first client render; SSR-safe.
 
 ```tsx
-<TranslatorProvider config={{ dom: { roots: [".content"] } }}>
+<TranslatorProvider
+  config={{
+    dom: {
+      roots: [".content"],
+      structuredText: { selector: "[data-structured]" },
+      outputTransform: (translated, context) =>
+        context.kind === "text" || context.kind === "structuredText"
+          ? translated.normalize("NFC")
+          : translated,
+    },
+  }}
+>
   {children}
 </TranslatorProvider>
 ```
+
+DOM options pass through to core unchanged. See [`@babulfish/core`](../core/README.md) for `structuredText`, supported v1 shapes, fallback behavior, and DOM-only `outputTransform` semantics.
 
 ### `<TranslateButton>`
 

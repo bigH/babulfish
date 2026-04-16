@@ -1,4 +1,5 @@
 import { describe, expect, expectTypeOf, it } from "vitest"
+import type { BabulfishConfig, Language } from "@babulfish/core"
 import * as publicApi from "../index.js"
 import type * as PublicApi from "../index.js"
 
@@ -11,6 +12,20 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "useTranslator",
 ] as const satisfies readonly (keyof PublicApi)[]
 
+type ExpectedStructuredTextConfig = {
+  readonly selector: string
+}
+
+type ExpectedDOMOutputTransformContext = {
+  readonly kind: "linked" | "richText" | "structuredText" | "text" | "attr"
+  readonly targetLang: string
+  readonly source: string
+  readonly attribute?: string
+}
+
+type TranslatorDOMConfig = NonNullable<PublicApi.TranslatorConfig["dom"]>
+type TranslatorOutputTransform = NonNullable<TranslatorDOMConfig["outputTransform"]>
+
 describe("public React API contract", () => {
   it("exports exactly the documented React runtime names", () => {
     expect(Object.keys(publicApi).toSorted()).toEqual(EXPECTED_RUNTIME_EXPORTS)
@@ -18,28 +33,12 @@ describe("public React API contract", () => {
   })
 
   it("exports the documented React types", () => {
-    expectTypeOf<PublicApi.TranslatorLanguage>().toEqualTypeOf<{
-      readonly label: string
-      readonly code: string
-    }>()
-
-    expectTypeOf<PublicApi.TranslatorConfig>().toMatchTypeOf<{
-      readonly languages?: readonly PublicApi.TranslatorLanguage[]
-      readonly dom?: {
-        readonly structuredText?: {
-          readonly selector: string
-        }
-        readonly outputTransform?: (
-          translated: string,
-          context: {
-            readonly kind: "linked" | "richText" | "structuredText" | "text" | "attr"
-            readonly targetLang: string
-            readonly source: string
-            readonly attribute?: string
-          },
-        ) => string
-      }
-    }>()
+    expectTypeOf<PublicApi.TranslatorLanguage>().toEqualTypeOf<Language>()
+    expectTypeOf<PublicApi.TranslatorConfig>().toEqualTypeOf<BabulfishConfig>()
+    expectTypeOf<NonNullable<TranslatorDOMConfig["structuredText"]>>()
+      .toEqualTypeOf<ExpectedStructuredTextConfig>()
+    expectTypeOf<Parameters<TranslatorOutputTransform>[1]>()
+      .toEqualTypeOf<ExpectedDOMOutputTransformContext>()
 
     expectTypeOf<PublicApi.TranslateButtonClassNames>().toMatchTypeOf<{
       readonly button?: string

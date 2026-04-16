@@ -530,11 +530,20 @@ graph TD
 - keep site device policy in site config
 - use published packages or tarballs, not raw sibling `file:` installs
 
+Run 6 validation status from this workspace:
+
+- workspace-local inspection of `../bigH.github.io/app/components/translation-engine.ts` and `../bigH.github.io/app/lib/translate-dom.ts` says preserve policy maps to `dom.shouldSkip` and `dom.preserve.matchers`
+- the same local inspection says normalization policy maps to `dom.outputTransform`
+- animation policy maps to DOM hooks such as `onTranslateStart`, `onTranslateEnd`, and `onDirectionChange`
+- device policy maps to `engine.device` plus site-side capability gating
+- no site runtime suite was run from this repo; inline-rich prose, restore, RTL, and normalization still need final site-side validation against published packages or tarballs
+
 Migration-only follow-ups that remain separate from this library plan:
 
 - overlapping root cleanup if the site insists on overlapping selectors
 - React snapshot plumbing for real DOM progress if the site wants stock progress parity
-- final package-consumer validation in the site repo after the library feature lands
+- final site-side package-consumer validation against published packages or tarballs
+- real page validation for inline-rich prose, restore, RTL, and normalization behavior
 
 ## Explicit Defers
 

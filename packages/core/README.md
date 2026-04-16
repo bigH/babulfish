@@ -40,6 +40,8 @@ The public API centers on `createBabulfish(config?)`, which returns a `Babulfish
 | `engine` | `EngineConfig` | Model and device preferences |
 | `dom.roots` | `string[]` | CSS selectors for translatable subtrees |
 | `dom.root` | `ParentNode \| Document` | Scoping root (default: `document`) |
+| `dom.structuredText` | `StructuredTextConfig` | Claim supported inline-rich DOM as one logical prose unit |
+| `dom.outputTransform` | `(translated, context) => string` | Normalize DOM-bound output immediately before writes |
 | `languages` | `readonly Language[]` | Override the built-in language list |
 
 ### `BabulfishCore`
@@ -50,7 +52,7 @@ The public API centers on `createBabulfish(config?)`, which returns a `Babulfish
 | `subscribe` | `(listener: (s: Snapshot) => void) => () => void` | Subscribe to state changes; returns unsubscribe |
 | `loadModel` | `(opts?) => Promise<void>` | Download and initialize the translation model |
 | `translateTo` | `(lang, opts?) => Promise<void>` | Translate all DOM roots to the given language |
-| `translateText` | `(text, lang, opts?) => Promise<string>` | Translate a single string (no DOM side effects) |
+| `translateText` | `(text, lang, opts?) => Promise<string>` | Translate a single string with raw engine output (no DOM side effects or DOM transforms) |
 | `restore` | `(opts?) => void` | Restore original content |
 | `abort` | `() => void` | Cancel in-flight translation |
 | `dispose` | `() => Promise<void>` | Release engine ref-count and clean up |
@@ -66,6 +68,41 @@ The public API centers on `createBabulfish(config?)`, which returns a `Babulfish
   capabilities: { ready: boolean, hasWebGPU: boolean, canTranslate: boolean, device: "webgpu" | "wasm" | null, isMobile: boolean }
 }
 ```
+
+## DOM config
+
+`createBabulfish({ dom: ... })` uses the same DOM translator contract exported from `@babulfish/core/dom`.
+
+### `structuredText`
+
+Use `dom.structuredText = { selector }` when some live inline-rich DOM should translate as one logical prose unit instead of as plain text batches.
+
+- Selector resolution is descendants-only via `root.querySelectorAll(selector)`. If you want a whole region claimed as one unit, wrap it in a descendant element and target that wrapper.
+- Supported v1 shapes: eligible text nodes, `br`, `a`, `strong`/`b`, `em`/`i`, `u`, `s`/`del`, `mark`, `code`, and inert `span` wrappers.
+- Supported behavior: text translates as one unit, `br` round-trips as a logical newline, links and inline emphasis survive exact rehydration, and `code` stays opaque so its descendant text is not translated.
+- `dom.preserve.matchers` still apply to structured source extraction, just as they do for authored `richText`.
+- Unsupported or ineligible candidates are not claimed as structured text. The original DOM stays untouched and the subtree falls back to the normal plain-text plus translated-attribute collection path.
+- If a claimed structured root later fails exact rehydration, babulfish restores the original subtree first and then runs local structured fallback for that same root. That fallback preserves the DOM structure while falling back to text-node writes, so inline formatting meaning may be reduced.
+- Attributes inside a structured root still run later through `translateAttributes`; `structuredText` only changes how visible text is grouped.
+
+Unsupported or ineligible v1 shapes include:
+
+- nested block content such as paragraphs, headings, lists, tables, blockquotes, sectioning elements, or anything else that would require layout-aware rewriting
+- form controls, editable regions, and interactive widgets
+- media and embedded content such as `img`, `picture`, `video`, `audio`, `canvas`, or `iframe`
+- `svg`, `math`, ruby/annotation content, unknown namespaces, or custom elements
+- `script`, `style`, `noscript`, and `template`
+- descendants already claimed by `linkedBy` or authored `richText`
+- nested or overlapping `structuredText` candidates
+
+### `outputTransform`
+
+Use `dom.outputTransform(translated, context)` to normalize DOM-bound output immediately before babulfish writes it back.
+
+- It runs for `linked`, `richText`, `structuredText`, plain text batches, and translated attributes.
+- `context.source` is the human-readable pre-translation source for that logical unit. `context.attribute` is only set for attribute writes.
+- It is DOM-only. It does not change engine output, does not affect `translateText()`, and does not expose scheduler or placeholder internals.
+- If the transform produces invalid `richText` or invalid structured output, babulfish uses the same fallback rules as untransformed output.
 
 ## For binding authors
 
