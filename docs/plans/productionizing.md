@@ -12,6 +12,8 @@ The missing work is narrower:
 
 This plan may learn from `bigH.github.io`, but it must not standardize that site's DOM, selectors, animation policy, device policy, or recovery heuristics as package contract.
 
+Before any external migration, the next integration target should be this repo's own first-party demos: `packages/demo`, `packages/demo-vanilla`, and `packages/demo-webcomponent`. They are the right place to prove the shipped contract in code we control first. That is first-party validation of the current surface, not permission to reopen API design, widen runtime scope, or turn one demo's selectors or policies into package law.
+
 ## Scope And Hard Contract
 
 These rules are non-negotiable for the implementation work that follows:
@@ -361,7 +363,8 @@ graph TD
   T5[5. Add DOM-only outputTransform]
   T6[6. Expand tests + public-surface checks]
   T7[7. Update README + docs-check surface]
-  T8[8. Validate site migration + record follow-ups]
+  T8[8. Integrate first-party demos against shipped surface]
+  T9[9. Validate external site migration + record follow-ups]
 
   T1 --> T2
   T2 --> T3
@@ -373,6 +376,7 @@ graph TD
   T6 --> T7
   T6 --> T8
   T7 --> T8
+  T8 --> T9
 ```
 
 ## Task Breakdown
@@ -463,11 +467,29 @@ graph TD
      - `pnpm build`
      - `pnpm docs:check`
 
-8. **Validate the site migration and record follow-ups explicitly**
-   - Owner: Critic
+8. **Integrate the shipped surface into first-party demos before any external migration**
+   - Owner: Artisan
    - Blocked by: 6, 7
+   - Blocks: 9
+   - Acceptance criteria:
+     - `packages/demo` uses the shipped React/provider surface to demonstrate provider integration and the visible lifecycle, restore, and RTL behavior that the current React boundary actually exposes
+     - `packages/demo-vanilla` uses the shipped core DOM surface to demonstrate DOM roots/config integration, `structuredText`, DOM-only `outputTransform`, preserve / skip behavior, restore, and RTL behavior
+     - `packages/demo-webcomponent` uses the shipped core DOM surface to demonstrate isolated-root / Shadow DOM integration and any web-component-specific restore or lifecycle behavior that is already part of the current contract
+     - demo coverage is thorough but intentionally unsophisticated; the demos should show the contract that ships today, not aspirational behavior
+     - if a given capability is better demonstrated in one demo than another, use the better-fit demo instead of inventing wrappers or widening the surface area
+     - demo integration stays first-party validation only; do not turn demo selectors, preserve policy, or other app policy into package law
+   - Validation:
+     - `pnpm --filter babulfish-demo test`
+     - `pnpm --filter @babulfish/demo-vanilla build`
+     - `pnpm --filter @babulfish/demo-webcomponent build`
+     - `pnpm --filter @babulfish/demo-webcomponent test`
+
+9. **Validate the external site migration and record follow-ups explicitly**
+   - Owner: Critic
+   - Blocked by: 8
    - Blocks: none
    - Acceptance criteria:
+     - first-party demos already prove the shipped contract before this migration work starts
      - `bigH.github.io` can express its needs with config, hooks, and optional DOM transform instead of local core patches
      - migration-only follow-ups are written down explicitly instead of smuggled into library behavior
    - Validation:
@@ -485,6 +507,10 @@ graph TD
 - `packages/core/src/smoke.test.ts`
 - `packages/react/src/__tests__/conformance.test.tsx`
 - `packages/react/src/__tests__/public-api.test.ts`
+- `packages/demo/scripts/smoke.mjs`
+- `packages/demo-webcomponent/src/main.test.ts`
+- `packages/demo-webcomponent/src/__tests__/babulfish-translator.test.ts`
+- `packages/demo-webcomponent/src/vite-config.test.ts`
 
 ### New coverage to add
 
@@ -515,12 +541,28 @@ graph TD
 - public surface:
   - new core DOM types are pinned in `packages/core/src/smoke.test.ts`
   - React continues to expose only the intended runtime names and type surface
+- first-party demo integration:
+  - `packages/demo` proves React/provider integration without adding React-specific wrapper APIs for `structuredText` or DOM transform behavior
+  - `packages/demo-vanilla` exercises the shipped core DOM contract directly: roots/config, `structuredText`, DOM-only `outputTransform`, preserve / skip behavior, restore, and RTL
+  - `packages/demo-webcomponent` proves isolated-root / Shadow DOM integration using the shipped core DOM surface instead of custom compatibility layers
+  - demos stay intentionally simple and show current shipped behavior, not aspirational behavior or site-specific policy
 
-### Full verification before shipping
+### Full verification before external migration
 
+- `pnpm --filter babulfish-demo test`
+- `pnpm --filter @babulfish/demo-vanilla build`
+- `pnpm --filter @babulfish/demo-webcomponent build`
+- `pnpm --filter @babulfish/demo-webcomponent test`
 - `pnpm build`
 - `pnpm test`
 - `pnpm docs:check`
+
+## First-Party Demo Integration Notes
+
+- `packages/demo` is the React/provider proof point. Use it to show the provider-facing config shape, visible lifecycle behavior where the current React surface exposes it, restore, and RTL.
+- `packages/demo-vanilla` is the direct DOM proof point. Use it to show DOM roots/config integration, `structuredText`, DOM-only `outputTransform`, preserve / skip behavior, restore, and RTL without adding wrappers.
+- `packages/demo-webcomponent` is the isolated-root proof point. Use it to show Shadow DOM / custom-element integration with the shipped core DOM APIs.
+- Keep the demos honest and simple. They should demonstrate the contract that actually ships today, not invent new helpers or standardize one app's selectors or policy as package behavior.
 
 ## Migration Notes For `bigH.github.io`
 
@@ -530,7 +572,7 @@ graph TD
 - keep site device policy in site config
 - use published packages or tarballs, not raw sibling `file:` installs
 
-Run 6 validation status from this workspace:
+Run 7 migration validation status from this workspace:
 
 - workspace-local inspection of `../bigH.github.io/app/components/translation-engine.ts` and `../bigH.github.io/app/lib/translate-dom.ts` says preserve policy maps to `dom.shouldSkip` and `dom.preserve.matchers`
 - the same local inspection says normalization policy maps to `dom.outputTransform`
@@ -609,8 +651,22 @@ Remaining work should be split into separate runs with clean boundaries:
    - Add tests proving `translateText()` and engine output stay unchanged.
    - Do **not** widen the public API beyond this doc.
 
-5. **Run 6: public-surface tests, README/docs-check, and migration validation**
+5. **Run 6: public-surface tests and README/docs-check**
    - Update smoke/public API tests.
    - Update package READMEs.
    - Run `pnpm build`, `pnpm test`, and `pnpm docs:check`.
-   - Validate the site migration and write down any remaining follow-ups explicitly.
+
+6. **Run 6.5: integrate the shipped surface into the repo's first-party demos**
+   - Integrate the current shipped surface into `packages/demo`, `packages/demo-vanilla`, and `packages/demo-webcomponent` before touching `bigH.github.io`.
+   - Use the demos to show the real public surface area that ships today:
+     - `packages/demo` for React provider integration and the visible lifecycle / restore / RTL behavior the current React boundary actually exposes
+     - `packages/demo-vanilla` for core DOM roots/config, `structuredText`, DOM-only `outputTransform`, preserve / skip behavior, restore, and RTL
+     - `packages/demo-webcomponent` for isolated-root / Shadow DOM integration where that shape is the best fit
+   - Prefer demonstrating existing APIs over inventing wrappers or widening surface area.
+   - Coverage should be thorough, but the demos do not need to be sophisticated.
+   - Keep site-specific selector policy, preserve policy, and migration heuristics out of the library plan.
+
+7. **Run 7: external `bigH.github.io` migration validation**
+   - Start only after Run 6.5 proves the integration story in this repo's own demos.
+   - Validate the site migration against published packages or tarballs and write down any remaining follow-ups explicitly.
+   - Keep site-specific policy in site config, hooks, and migration notes instead of library behavior.
