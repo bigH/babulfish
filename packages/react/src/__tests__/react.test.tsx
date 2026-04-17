@@ -40,6 +40,7 @@ function createReadyEnablement(
     status,
     modelProfile: null,
     inference: null,
+    probe: Object.freeze({ status: "not-run" as const, kind: "adapter-smoke" as const, cache: null, note: "" }),
     verdict: Object.freeze(verdict),
   })
 }

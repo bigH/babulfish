@@ -58,6 +58,7 @@ describe("resolveRuntimePreferences", () => {
       enablement: {
         policy: "default",
         modelProfile: "auto",
+        probe: "off",
       },
     })
     expect(config).toEqual({

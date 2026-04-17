@@ -18,6 +18,12 @@ type MockCore = {
       readonly status: "ready"
       readonly modelProfile: null
       readonly inference: null
+      readonly probe: {
+        readonly status: "not-run"
+        readonly kind: "adapter-smoke"
+        readonly cache: null
+        readonly note: string
+      }
       readonly verdict: {
         readonly outcome: "gpu-preferred" | "wasm-only"
         readonly resolvedDevice: "webgpu" | "wasm"
@@ -95,6 +101,7 @@ function createMockCore(config?: {
         status: "ready" as const,
         modelProfile: null,
         inference: null,
+        probe: { status: "not-run" as const, kind: "adapter-smoke" as const, cache: null, note: "" },
         verdict: {
           outcome: resolvedDevice === "webgpu" ? "gpu-preferred" as const : "wasm-only" as const,
           resolvedDevice: resolvedDevice as "webgpu" | "wasm",

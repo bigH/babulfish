@@ -27,6 +27,7 @@ function createSnapshot(overrides: Partial<Snapshot> = {}): Snapshot {
       status: "ready",
       modelProfile: null,
       inference: null,
+      probe: { status: "not-run", kind: "adapter-smoke", cache: null, note: "" },
       verdict: {
         outcome: "gpu-preferred",
         resolvedDevice: "webgpu",

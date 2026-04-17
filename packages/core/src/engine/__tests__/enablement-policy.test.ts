@@ -116,7 +116,7 @@ describe("assessRuntimeEnablement", () => {
     expect(assessment.inference).toBeNull()
   })
 
-  it("uses a conservative WASM verdict when custom memory data is missing", () => {
+  it("returns needs-probe when custom memory data is missing", () => {
     const assessment = assessRuntimeEnablement(
       {
         enablement: {
@@ -130,10 +130,96 @@ describe("assessRuntimeEnablement", () => {
 
     expect(assessment.inference?.outcome).toBe("unknown")
     expect(assessment.verdict).toEqual({
-      outcome: "wasm-only",
-      resolvedDevice: "wasm",
+      outcome: "needs-probe",
+      resolvedDevice: null,
       reason:
-        "Approximate system memory is too weak for a confident WebGPU fit, so babulfish will use WASM.",
+        "Session 1 memory heuristic is inconclusive. A probe could verify WebGPU compatibility.",
     })
+  })
+})
+
+describe("needs-probe verdict", () => {
+  it("auto device with unknown inference produces needs-probe", () => {
+    const assessment = assessRuntimeEnablement(
+      undefined,
+      browserObservation({ approxDeviceMemoryGiB: null }),
+    )
+
+    expect(assessment.verdict.outcome).toBe("needs-probe")
+  })
+
+  it("auto device with null memory produces needs-probe", () => {
+    const assessment = assessRuntimeEnablement(
+      { device: "auto" },
+      browserObservation({ approxDeviceMemoryGiB: null }),
+    )
+
+    expect(assessment.verdict.outcome).toBe("needs-probe")
+  })
+
+  it("explicit webgpu with unknown inference produces needs-probe", () => {
+    const assessment = assessRuntimeEnablement(
+      { device: "webgpu" },
+      browserObservation({ approxDeviceMemoryGiB: null }),
+    )
+
+    expect(assessment.verdict.outcome).toBe("needs-probe")
+  })
+
+  it("forced wasm still produces wasm-only (no probe needed)", () => {
+    const assessment = assessRuntimeEnablement(
+      { device: "wasm" },
+      browserObservation({ approxDeviceMemoryGiB: null }),
+    )
+
+    expect(assessment.verdict.outcome).toBe("wasm-only")
+  })
+
+  it("auto without WebGPU still produces wasm-only (no probe possible)", () => {
+    const assessment = assessRuntimeEnablement(
+      undefined,
+      browserObservation({ hasWebGPU: false, approxDeviceMemoryGiB: null }),
+    )
+
+    expect(assessment.verdict.outcome).toBe("wasm-only")
+  })
+
+  it("explicit webgpu without WebGPU still produces denied (no probe possible)", () => {
+    const assessment = assessRuntimeEnablement(
+      { device: "webgpu" },
+      browserObservation({ hasWebGPU: false, approxDeviceMemoryGiB: null }),
+    )
+
+    expect(assessment.verdict.outcome).toBe("denied")
+  })
+
+  it("likely-no-fit still produces wasm-only for auto", () => {
+    const assessment = assessRuntimeEnablement(
+      undefined,
+      browserObservation({ approxDeviceMemoryGiB: 6.5 }),
+    )
+
+    expect(assessment.inference?.outcome).toBe("likely-no-fit")
+    expect(assessment.verdict.outcome).toBe("wasm-only")
+  })
+
+  it("likely-no-fit still produces denied for explicit webgpu", () => {
+    const assessment = assessRuntimeEnablement(
+      { device: "webgpu" },
+      browserObservation({ approxDeviceMemoryGiB: 6.5 }),
+    )
+
+    expect(assessment.inference?.outcome).toBe("likely-no-fit")
+    expect(assessment.verdict.outcome).toBe("denied")
+  })
+
+  it("likely-fit still produces gpu-preferred (no probe needed)", () => {
+    const assessment = assessRuntimeEnablement(
+      undefined,
+      browserObservation({ approxDeviceMemoryGiB: 16 }),
+    )
+
+    expect(assessment.inference?.outcome).toBe("likely-fit")
+    expect(assessment.verdict.outcome).toBe("gpu-preferred")
   })
 })

@@ -14,8 +14,20 @@ import { detectCapabilities } from "./capabilities.js"
 import {
   createIdleEnablementState,
   getOrCreateEnablementAssessment,
+  resolveRuntimePreferences,
+  NOT_RUN_PROBE_SUMMARY,
   type EnablementAssessment,
+  type ModelProfile,
+  type ProbeSummary,
 } from "../engine/runtime-plan.js"
+import { runAdapterSmokeProbe, PROBE_VERSION } from "../engine/probe.js"
+import {
+  createProbeCacheKey,
+  createObservationFingerprint,
+  getProbeCacheEntry,
+  setProbeCacheEntry,
+  type ProbeOutcome,
+} from "../engine/probe-cache.js"
 
 export type TranslateOptions = {
   readonly signal?: AbortSignal
@@ -194,6 +206,163 @@ export function createBabulfish(config?: BabulfishConfig): BabulfishCore {
     return handle
   }
 
+  function buildProbeCacheKey(modelProfile: ModelProfile | null): string {
+    const resolvedConfig = resolveRuntimePreferences(config?.engine)
+    return createProbeCacheKey({
+      modelProfileId: modelProfile?.id ?? "",
+      modelProfileVersion: modelProfile?.version ?? "",
+      modelId: resolvedConfig.modelId,
+      dtype: resolvedConfig.dtype,
+      device: resolvedConfig.device,
+      policyVersion: resolvedConfig.enablement.policy,
+      probeVersion: PROBE_VERSION,
+      observationFingerprint: createObservationFingerprint(capabilities),
+    })
+  }
+
+  function finalizeProbeOutcome(
+    initialAssessment: EnablementAssessment,
+    outcome: ProbeOutcome,
+    cacheStatus: "hit" | "miss",
+  ): EnablementAssessment {
+    const resolvedConfig = resolveRuntimePreferences(config?.engine)
+    const probeSummary: ProbeSummary = {
+      status: outcome.passed ? "passed" : "failed",
+      kind: "adapter-smoke",
+      cache: cacheStatus,
+      note: outcome.note,
+    }
+
+    let terminalAssessment: EnablementAssessment
+
+    if (outcome.passed) {
+      terminalAssessment = Object.freeze({
+        modelProfile: initialAssessment.modelProfile,
+        inference: initialAssessment.inference,
+        verdict: {
+          outcome: "gpu-preferred" as const,
+          resolvedDevice: "webgpu" as const,
+          reason: `Probe verified WebGPU adapter. ${outcome.note}`,
+        },
+        runtimePlan: Object.freeze({
+          modelId: resolvedConfig.modelId,
+          dtype: resolvedConfig.dtype,
+          resolvedDevice: "webgpu" as const,
+          sourceLanguage: resolvedConfig.sourceLanguage,
+          maxNewTokens: resolvedConfig.maxNewTokens,
+        }),
+      })
+    } else if (resolvedConfig.device === "webgpu") {
+      terminalAssessment = Object.freeze({
+        modelProfile: initialAssessment.modelProfile,
+        inference: initialAssessment.inference,
+        verdict: {
+          outcome: "denied" as const,
+          resolvedDevice: null,
+          reason: `WebGPU was explicitly requested, but the probe failed. ${outcome.note}`,
+        },
+        runtimePlan: null,
+      })
+    } else {
+      terminalAssessment = Object.freeze({
+        modelProfile: initialAssessment.modelProfile,
+        inference: initialAssessment.inference,
+        verdict: {
+          outcome: "wasm-only" as const,
+          resolvedDevice: "wasm" as const,
+          reason: `Probe could not verify WebGPU. Falling back to WASM. ${outcome.note}`,
+        },
+        runtimePlan: Object.freeze({
+          modelId: resolvedConfig.modelId,
+          dtype: resolvedConfig.dtype,
+          resolvedDevice: "wasm" as const,
+          sourceLanguage: resolvedConfig.sourceLanguage,
+          maxNewTokens: resolvedConfig.maxNewTokens,
+        }),
+      })
+    }
+
+    if (!disposed) {
+      assessment = terminalAssessment
+      store.set((prev) => ({
+        ...prev,
+        enablement: {
+          status: "ready" as const,
+          modelProfile: terminalAssessment.modelProfile,
+          inference: terminalAssessment.inference,
+          probe: probeSummary,
+          verdict: terminalAssessment.verdict,
+        },
+      }))
+    }
+
+    return terminalAssessment
+  }
+
+  async function runProbeFlow(
+    initialAssessment: EnablementAssessment,
+  ): Promise<EnablementAssessment> {
+    store.set((prev) => ({
+      ...prev,
+      enablement: {
+        status: "probing" as const,
+        modelProfile: initialAssessment.modelProfile,
+        inference: initialAssessment.inference,
+        probe: {
+          status: "running" as const,
+          kind: "adapter-smoke" as const,
+          cache: null,
+          note: "",
+        },
+        verdict: initialAssessment.verdict,
+      },
+    }))
+
+    const cacheKey = buildProbeCacheKey(initialAssessment.modelProfile)
+
+    const cached = getProbeCacheEntry(cacheKey)
+    if (cached) {
+      return finalizeProbeOutcome(initialAssessment, cached, "hit")
+    }
+
+    let probeResult
+    try {
+      probeResult = await runAdapterSmokeProbe()
+    } catch (error) {
+      if (!disposed) {
+        store.set((prev) => ({
+          ...prev,
+          enablement: {
+            status: "error" as const,
+            modelProfile: initialAssessment.modelProfile,
+            inference: initialAssessment.inference,
+            probe: {
+              status: "error" as const,
+              kind: "adapter-smoke" as const,
+              cache: "miss" as const,
+              note: error instanceof Error ? error.message : "Probe failed unexpectedly.",
+            },
+            verdict: initialAssessment.verdict,
+          },
+        }))
+      }
+      throw error
+    }
+
+    if (probeResult.aborted) {
+      throw new DOMException("Probe aborted", "AbortError")
+    }
+
+    const outcome: ProbeOutcome = {
+      passed: probeResult.passed,
+      features: probeResult.features,
+      note: probeResult.note,
+    }
+    setProbeCacheEntry(cacheKey, outcome)
+
+    return finalizeProbeOutcome(initialAssessment, outcome, "miss")
+  }
+
   async function ensureEnablementAssessment(): Promise<EnablementAssessment> {
     assertNotDisposed()
 
@@ -217,9 +386,14 @@ export function createBabulfish(config?: BabulfishConfig): BabulfishCore {
     })
 
     const nextAssessment = getOrCreateEnablementAssessment(config?.engine, capabilities)
-      .then((result) => {
-        if (disposed) {
-          return result
+      .then(async (result) => {
+        if (disposed) return result
+
+        const resolvedConfig = resolveRuntimePreferences(config?.engine)
+        const probeMode = resolvedConfig.enablement.probe
+
+        if (result.verdict.outcome === "needs-probe" && probeMode === "if-needed") {
+          return runProbeFlow(result)
         }
 
         assessment = result
@@ -229,6 +403,7 @@ export function createBabulfish(config?: BabulfishConfig): BabulfishCore {
             status: "ready",
             modelProfile: result.modelProfile,
             inference: result.inference,
+            probe: NOT_RUN_PROBE_SUMMARY,
             verdict: result.verdict,
           },
         }))

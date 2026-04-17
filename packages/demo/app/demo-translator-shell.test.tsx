@@ -39,6 +39,7 @@ vi.mock("@babulfish/react", () => ({
       status: "ready" as const,
       modelProfile: null,
       inference: null,
+      probe: { status: "not-run" as const, kind: "adapter-smoke" as const, cache: null, note: "" },
       verdict: {
         outcome: "gpu-preferred" as const,
         resolvedDevice: "webgpu" as const,

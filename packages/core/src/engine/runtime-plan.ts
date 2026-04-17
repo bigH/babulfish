@@ -25,9 +25,19 @@ export type ModelProfileInput = {
   readonly note?: string
 }
 
+export type ProbeMode = "off" | "if-needed" | "manual"
+
+export type ProbeSummary = {
+  readonly status: "not-run" | "running" | "passed" | "failed" | "skipped" | "error"
+  readonly kind: "adapter-smoke"
+  readonly cache: "hit" | "miss" | null
+  readonly note: string
+}
+
 export type EnablementConfig = {
   readonly policy?: "default"
   readonly modelProfile?: "auto" | ModelProfileInput
+  readonly probe?: ProbeMode
 }
 
 export type RuntimePreferenceConfig = {
@@ -63,6 +73,11 @@ export type EnablementVerdict =
       readonly reason: string
     }
   | {
+      readonly outcome: "needs-probe"
+      readonly resolvedDevice: null
+      readonly reason: string
+    }
+  | {
       readonly outcome: "denied"
       readonly resolvedDevice: null
       readonly reason: string
@@ -79,9 +94,10 @@ export type EnablementVerdict =
     }
 
 export type EnablementState = {
-  readonly status: "idle" | "assessing" | "ready" | "error"
+  readonly status: "idle" | "assessing" | "probing" | "ready" | "error"
   readonly modelProfile: ModelProfile | null
   readonly inference: FitInference | null
+  readonly probe: ProbeSummary
   readonly verdict: EnablementVerdict
 }
 
@@ -145,6 +161,13 @@ const BUILTIN_MODEL_PROFILES = Object.freeze([
   }),
 ] as const satisfies readonly ModelProfile[])
 
+export const NOT_RUN_PROBE_SUMMARY: ProbeSummary = Object.freeze({
+  status: "not-run",
+  kind: "adapter-smoke",
+  cache: null,
+  note: "",
+})
+
 export const UNKNOWN_ENABLEMENT_VERDICT: EnablementVerdict = Object.freeze({
   outcome: "unknown",
   resolvedDevice: null,
@@ -155,6 +178,7 @@ export const IDLE_ENABLEMENT_STATE: EnablementState = Object.freeze({
   status: "idle",
   modelProfile: null,
   inference: null,
+  probe: NOT_RUN_PROBE_SUMMARY,
   verdict: UNKNOWN_ENABLEMENT_VERDICT,
 })
 
@@ -235,6 +259,7 @@ export function resolveRuntimePreferences(
     enablement: Object.freeze({
       policy: config?.enablement?.policy ?? "default",
       modelProfile: config?.enablement?.modelProfile ?? "auto",
+      probe: config?.enablement?.probe ?? "off",
     }),
   })
 }
@@ -380,10 +405,10 @@ export function assessRuntimeEnablement(
         modelProfile,
         inference,
         verdict: {
-          outcome: "denied",
+          outcome: "needs-probe",
           resolvedDevice: null,
           reason:
-            "WebGPU was explicitly requested, but Session 1 cannot verify the heuristic fit for this device.",
+            "WebGPU was explicitly requested but the memory heuristic is inconclusive. A probe could verify compatibility.",
         },
         runtimePlan: null,
       })
@@ -393,12 +418,12 @@ export function assessRuntimeEnablement(
       modelProfile,
       inference,
       verdict: {
-        outcome: "wasm-only",
-        resolvedDevice: "wasm",
+        outcome: "needs-probe",
+        resolvedDevice: null,
         reason:
-          "Approximate system memory is too weak for a confident WebGPU fit, so babulfish will use WASM.",
+          "Session 1 memory heuristic is inconclusive. A probe could verify WebGPU compatibility.",
       },
-      runtimePlan: buildRuntimePlan(resolvedConfig, "wasm"),
+      runtimePlan: null,
     })
   }
 

@@ -22,6 +22,8 @@ export type {
   FitInference,
   ModelProfile,
   ModelProfileInput,
+  ProbeMode,
+  ProbeSummary,
   ResolvedRuntimePlan,
 } from "./engine/runtime-plan.js"
 

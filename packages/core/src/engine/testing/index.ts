@@ -7,3 +7,6 @@ export {
   __resetSharedEngine as __resetRuntimePoolForTests,
   getEngineIdentityForCore as getEngineIdentity,
 } from "../../core/engine-handle.js"
+export {
+  __resetProbeCacheForTests,
+} from "../probe-cache.js"

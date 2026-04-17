@@ -69,6 +69,7 @@ function createSnapshot(status: Snapshot["translation"]["status"]): Snapshot {
       status: "ready" as const,
       modelProfile: null,
       inference: null,
+      probe: Object.freeze({ status: "not-run" as const, kind: "adapter-smoke" as const, cache: null, note: "" }),
       verdict: Object.freeze({
         outcome: "gpu-preferred" as const,
         resolvedDevice: "webgpu" as const,

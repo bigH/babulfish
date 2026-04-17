@@ -87,6 +87,8 @@ function formatResolvedRuntime(
       return "Not assessed yet"
     case "assessing":
       return "Assessing current browser"
+    case "probing":
+      return "Probing WebGPU"
     case "ready":
     case "error":
       return resolvedDevice === null ? "Unavailable" : getDeviceLabel(resolvedDevice)

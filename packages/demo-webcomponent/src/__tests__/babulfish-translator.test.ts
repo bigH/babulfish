@@ -22,6 +22,7 @@ const DEFAULT_ENABLEMENT = {
   status: "idle",
   modelProfile: null,
   inference: null,
+  probe: { status: "not-run", kind: "adapter-smoke", cache: null, note: "" },
   verdict: {
     outcome: "unknown",
     resolvedDevice: null,
