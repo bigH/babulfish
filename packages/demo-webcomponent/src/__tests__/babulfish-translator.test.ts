@@ -44,7 +44,6 @@ const {
   state,
   createMockCore,
   mockCreateBabulfish,
-  fireSnapshotTo,
   fireSnapshotAll,
 } = vi.hoisted(() => {
   const createMockCore = () => ({
@@ -84,10 +83,6 @@ const {
     return mock
   })
 
-  // Out-of-range indices are a no-op (defensive: listener may not exist yet).
-  const fireSnapshotTo = (index: number, snapshot: Snapshot) => {
-    state.listeners[index]?.(snapshot)
-  }
   const fireSnapshotAll = (snapshot: Snapshot) => {
     for (const l of state.listeners) l(snapshot)
   }
@@ -96,7 +91,6 @@ const {
     state,
     createMockCore,
     mockCreateBabulfish,
-    fireSnapshotTo,
     fireSnapshotAll,
   }
 })

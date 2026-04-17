@@ -44,6 +44,8 @@ export function wrapGeneratorAsPipeline(
     model: fakeModel,
     tokenizer: fakeTokenizer,
     dispose,
+    // Narrow cast: we fake only the callable + dispose surface. If a future
+    // transformers.js (>=5) touches model/tokenizer/_forward, this mask rots.
   }) as unknown as Pipeline
 }
 

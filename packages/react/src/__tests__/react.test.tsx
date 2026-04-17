@@ -231,7 +231,7 @@ function createDeferred<T>() {
 type SnapshotOverrides = {
   model?: Partial<Snapshot["model"]>
   translation?: Partial<Snapshot["translation"]>
-  currentLanguage?: Snapshot["currentLanguage"]
+  currentLanguage?: string | null
   capabilities?: Partial<Snapshot["capabilities"]>
   enablement?: Partial<Snapshot["enablement"]> & {
     verdict?: Snapshot["enablement"]["verdict"]
@@ -240,11 +240,6 @@ type SnapshotOverrides = {
 
 function setMockSnapshot(overrides: SnapshotOverrides = {}) {
   setSnapshot((prev) => {
-    const hasCurrentLanguage = Object.prototype.hasOwnProperty.call(
-      overrides,
-      "currentLanguage",
-    )
-
     return Object.freeze({
       ...prev,
       model: Object.freeze({
@@ -255,9 +250,10 @@ function setMockSnapshot(overrides: SnapshotOverrides = {}) {
         ...prev.translation,
         ...(overrides.translation ?? {}),
       }) as Snapshot["translation"],
-      currentLanguage: hasCurrentLanguage
-        ? overrides.currentLanguage ?? null
-        : prev.currentLanguage,
+      currentLanguage:
+        overrides.currentLanguage !== undefined
+          ? overrides.currentLanguage
+          : prev.currentLanguage,
       capabilities: Object.freeze({
         ...prev.capabilities,
         ...(overrides.capabilities ?? {}),
