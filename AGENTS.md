@@ -108,4 +108,4 @@ When a change affects a published package or its public contract:
 
 - Start with the package README for the area you are editing.
 - Use tests and manifests to confirm behavior, not memory.
-- Plans live in [`docs/plans/`](docs/plans/). Right now the main repo-level plan is [`ui-agnostic-polish.md`](docs/plans/ui-agnostic-polish.md).
+- Plans live in [`docs/plans/`](docs/plans/).
