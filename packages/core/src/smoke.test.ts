@@ -7,6 +7,7 @@ import * as domTranslator from "./dom/translator.js"
 import * as engineBarrel from "./engine/index.js"
 import * as detect from "./engine/detect.js"
 import * as engineModel from "./engine/model.js"
+import * as runtimePlan from "./engine/runtime-plan.js"
 import * as testingBarrel from "./testing/index.js"
 import * as testingScenarios from "./testing/scenarios.js"
 import * as directDriver from "./testing/drivers/direct.js"
@@ -15,8 +16,11 @@ import * as barrel from "./index.js"
 
 const EXPECTED_ROOT_RUNTIME_EXPORTS = [
   "DEFAULT_LANGUAGES",
+  "IDLE_ENABLEMENT_STATE",
+  "NOT_RUN_PROBE_SUMMARY",
   "createBabulfish",
   "createDOMTranslator",
+  "createEnablementCompat",
   "createEngine",
   "getTranslationCapabilities",
   "isWellFormedMarkdown",
@@ -94,6 +98,9 @@ describe("smoke tests", () => {
       renderInlineMarkdownToHtml: domBarrel.renderInlineMarkdownToHtml,
       parseInlineMarkdown: domBarrel.parseInlineMarkdown,
       isWellFormedMarkdown: domBarrel.isWellFormedMarkdown,
+      IDLE_ENABLEMENT_STATE: runtimePlan.IDLE_ENABLEMENT_STATE,
+      NOT_RUN_PROBE_SUMMARY: runtimePlan.NOT_RUN_PROBE_SUMMARY,
+      createEnablementCompat: runtimePlan.createEnablementCompat,
     })
 
     expectTypeOf<engineModel.EngineConfig>().toEqualTypeOf<barrel.EngineConfig>()

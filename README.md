@@ -1,6 +1,6 @@
 # babulfish
 
-Translate live DOM in the browser. No server round-trips, no API keys, restore the original content when you are done. WebGPU-first, with WASM fallback where supported.
+Translate live DOM in the browser. No server round-trips, no API keys, restore the original content when you are done. babulfish assesses each browser's capabilities at runtime and picks the right path — WebGPU when it fits, WASM when it does not, and a clear `denied` verdict when nothing works. See [`packages/core/README.md`](packages/core/README.md) for the assessment details.
 
 This repo ships a small package set for that job. The demos prove the current contract; they are not extra published bindings.
 
@@ -48,9 +48,9 @@ export function App() {
 
 Want proof before reading API docs?
 
-- [`packages/demo`](packages/demo/README.md) shows the shipped React provider, hooks, stock UI, restore flow, and RTL.
-- [`packages/demo-vanilla`](packages/demo-vanilla/README.md) shows direct `@babulfish/core` usage with `structuredText`, preserve/skip behavior, DOM-only `outputTransform`, restore, and RTL.
-- [`packages/demo-webcomponent`](packages/demo-webcomponent/README.md) shows Shadow DOM working through private demo code, not a published web-component package.
+- [`packages/demo`](packages/demo/README.md) — full React UX: `TranslatorProvider`, stock UI, and the enablement verdict rendered live.
+- [`packages/demo-vanilla`](packages/demo-vanilla/README.md) — zero-framework `createBabulfish()` with COOP/COEP configured for `SharedArrayBuffer`; proves the WASM fallback path.
+- [`packages/demo-webcomponent`](packages/demo-webcomponent/README.md) — Shadow DOM plus a custom element; proves two isolated roots share one assessment and runtime.
 
 ## Pick your path
 

@@ -16,6 +16,7 @@ export type {
   BabulfishEngineConfig,
 } from "./core/babulfish.js"
 export type {
+  EnablementCompat,
   EnablementConfig,
   EnablementState,
   EnablementVerdict,
@@ -25,6 +26,11 @@ export type {
   ProbeMode,
   ProbeSummary,
   ResolvedRuntimePlan,
+} from "./engine/runtime-plan.js"
+export {
+  IDLE_ENABLEMENT_STATE,
+  NOT_RUN_PROBE_SUMMARY,
+  createEnablementCompat,
 } from "./engine/runtime-plan.js"
 
 export { createEngine, getTranslationCapabilities } from "./engine/index.js"

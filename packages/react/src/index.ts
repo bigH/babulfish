@@ -8,8 +8,12 @@ export { DEFAULT_LANGUAGES } from "@babulfish/core"
 
 export type {
   BabulfishConfig as TranslatorConfig,
+  EnablementState,
+  EnablementVerdict,
   Language as TranslatorLanguage,
   ModelState,
+  ProbeMode,
+  ProbeSummary,
   TranslationState,
 } from "@babulfish/core"
 export type { TranslateButtonClassNames, TranslateButtonProps } from "./translate-button.js"

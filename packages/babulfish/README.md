@@ -29,4 +29,6 @@ import "babulfish/css"
 - `TranslateDropdown`
 - `DEFAULT_LANGUAGES`
 
+`babulfish` re-exports the same runtime surface as `@babulfish/react`. `useTranslator()` returns the same `enablement`-first snapshot shape described in [`@babulfish/react`](../react/README.md).
+
 For the actual API, hook fields, provider behavior, and DOM config semantics, read [`@babulfish/react`](../react/README.md). This package exists for import compatibility, not as a separate React API.

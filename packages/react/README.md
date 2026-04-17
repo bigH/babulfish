@@ -102,6 +102,8 @@ Pre-built five-state translation button: idle, confirm, downloading, ready, tran
 
 `classNames` accepts `button`, `tooltip`, `dropdown`, `dropdownItem`, and `progressRing`.
 
+The button treats `enablement.status` of `"idle"`, `"assessing"`, or `"probing"` as assessment-pending, and hides itself once assessment is terminal and the verdict is not `gpu-preferred` or `wasm-only`.
+
 ### `<TranslateDropdown>`
 
 Language picker dropdown. It only shows the `"Original"` restore option when `onRestore` is provided.
@@ -124,6 +126,7 @@ Returns the current provider snapshot plus the core actions:
 |---|---|---|
 | `model` | `ModelState` | `{ status, progress?, error? }` |
 | `translation` | `TranslationState` | `{ status, progress? }` |
+| `enablement` | `EnablementState` | Primary truth for capability gating (`status`, `verdict`, `probe`). Re-exported from `@babulfish/core` |
 | `currentLanguage` | `string \| null` | Active target language |
 | `languages` | `ReadonlyArray<Language>` | Available target languages |
 | `capabilitiesReady` | `boolean` | Capability detection has completed |
@@ -137,6 +140,8 @@ Returns the current provider snapshot plus the core actions:
 | `restore` | `() => void` | Restore original DOM content |
 | `translate` | `(text: string, lang: string) => Promise<string>` | Raw `translateText()` helper from core |
 
+`capabilitiesReady`, `canTranslate`, `isSupported`, and `device` are narrow compat aliases derived from `enablement` via `createEnablementCompat` from `@babulfish/core`. `hasWebGPU` and `isMobile` are raw `capabilities` observations.
+
 `translate` is the raw string API. It does not apply DOM transforms and does not touch configured roots.
 
 ### `useTranslateDOM()`
@@ -148,6 +153,10 @@ Convenience hook for page-level translate/restore:
 | `translatePage` | `(lang: string) => Promise<void>` | Calls `core.translateTo(lang)` |
 | `restorePage` | `() => void` | Calls `core.restore()` |
 | `progress` | `number \| null` | Translation progress while translating, otherwise `null` |
+
+## Types re-exported from `@babulfish/core`
+
+`ModelState`, `TranslationState`, `EnablementState`, `EnablementVerdict`, `ProbeSummary`, `ProbeMode`, `Language as TranslatorLanguage`, `BabulfishConfig as TranslatorConfig`.
 
 ## Related packages
 

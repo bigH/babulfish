@@ -91,11 +91,44 @@ const mockCreateBabulfish = vi.fn(() => ({
   languages: MOCK_LANGUAGES,
 }))
 
+const { MOCK_IDLE_ENABLEMENT_STATE, MOCK_NOT_RUN_PROBE_SUMMARY } = vi.hoisted(() => {
+  const probe = Object.freeze({
+    status: "not-run" as const,
+    kind: "adapter-smoke" as const,
+    cache: null,
+    note: "",
+  })
+  const enablement = Object.freeze({
+    status: "idle" as const,
+    modelProfile: null,
+    inference: null,
+    probe,
+    verdict: Object.freeze({
+      outcome: "unknown" as const,
+      resolvedDevice: null,
+      reason: "Enablement has not been assessed yet.",
+    }),
+  })
+  return {
+    MOCK_IDLE_ENABLEMENT_STATE: enablement,
+    MOCK_NOT_RUN_PROBE_SUMMARY: probe,
+  }
+})
+
 vi.mock("@babulfish/core", () => ({
   createBabulfish: (...args: unknown[]) => mockCreateBabulfish(...args),
   get DEFAULT_LANGUAGES() {
     return MOCK_LANGUAGES
   },
+  IDLE_ENABLEMENT_STATE: MOCK_IDLE_ENABLEMENT_STATE,
+  NOT_RUN_PROBE_SUMMARY: MOCK_NOT_RUN_PROBE_SUMMARY,
+  createEnablementCompat: (state: Snapshot["enablement"]) =>
+    Object.freeze({
+      capabilitiesReady: state.status === "ready" || state.status === "error",
+      canTranslate:
+        state.verdict.outcome === "gpu-preferred" || state.verdict.outcome === "wasm-only",
+      device: state.verdict.resolvedDevice,
+    }),
 }))
 
 // ---------------------------------------------------------------------------
@@ -525,6 +558,57 @@ describe("useTranslator", () => {
     fireEvent.click(screen.getByTestId("restore"))
     expect(mockRestore).toHaveBeenCalledTimes(1)
   })
+
+  it.each([
+    {
+      outcome: "unknown",
+      status: "assessing" as const,
+      verdict: { outcome: "unknown" as const, resolvedDevice: null, reason: "computing" },
+      expected: { capabilitiesReady: "false", canTranslate: "false", device: "none" },
+    },
+    {
+      outcome: "needs-probe",
+      status: "ready" as const,
+      verdict: { outcome: "needs-probe" as const, resolvedDevice: null, reason: "probe needed" },
+      expected: { capabilitiesReady: "true", canTranslate: "false", device: "none" },
+    },
+    {
+      outcome: "denied",
+      status: "ready" as const,
+      verdict: { outcome: "denied" as const, resolvedDevice: null, reason: "denied" },
+      expected: { capabilitiesReady: "true", canTranslate: "false", device: "none" },
+    },
+    {
+      outcome: "gpu-preferred",
+      status: "ready" as const,
+      verdict: { outcome: "gpu-preferred" as const, resolvedDevice: "webgpu" as const, reason: "gpu" },
+      expected: { capabilitiesReady: "true", canTranslate: "true", device: "webgpu" },
+    },
+    {
+      outcome: "wasm-only",
+      status: "ready" as const,
+      verdict: { outcome: "wasm-only" as const, resolvedDevice: "wasm" as const, reason: "wasm" },
+      expected: { capabilitiesReady: "true", canTranslate: "true", device: "wasm" },
+    },
+  ])(
+    "derives compat fields via createEnablementCompat for $outcome",
+    ({ status, verdict, expected }) => {
+      setMockSnapshot({ enablement: { status, verdict } })
+
+      render(
+        <Wrapper config={DOM_CONFIG}>
+          <HookInspector />
+        </Wrapper>,
+      )
+
+      expect(screen.getByTestId("capabilities-ready")).toHaveTextContent(
+        expected.capabilitiesReady,
+      )
+      expect(screen.getByTestId("can-translate")).toHaveTextContent(expected.canTranslate)
+      expect(screen.getByTestId("is-supported")).toHaveTextContent(expected.canTranslate)
+      expect(screen.getByTestId("device")).toHaveTextContent(expected.device)
+    },
+  )
 })
 
 describe("TranslateButton", () => {
@@ -694,6 +778,55 @@ describe("TranslateButton", () => {
           outcome: "denied",
           resolvedDevice: null,
           reason: "mock denied",
+        },
+      },
+    })
+
+    const { container } = render(
+      <Wrapper config={DOM_CONFIG}>
+        <TranslateButton />
+      </Wrapper>,
+    )
+
+    expect(container.querySelector("button")).toBeNull()
+  })
+
+  it("stays in pending state while enablement is probing — no flash to unsupported", () => {
+    setMockSnapshot({
+      enablement: {
+        status: "probing",
+        verdict: {
+          outcome: "needs-probe",
+          resolvedDevice: null,
+          reason: "probing webgpu",
+        },
+      },
+    })
+
+    render(
+      <Wrapper config={DOM_CONFIG}>
+        <TranslateButton />
+      </Wrapper>,
+    )
+
+    const button = screen.getByRole("button")
+    fireEvent.mouseEnter(button)
+
+    expect(button).toBeInTheDocument()
+    expect(
+      screen.queryByText(/Translation is unavailable/i),
+    ).not.toBeInTheDocument()
+    expect(screen.getByText(/assess your runtime/i)).toBeInTheDocument()
+  })
+
+  it("hides once assessment completes with needs-probe and no probe was run", () => {
+    setMockSnapshot({
+      enablement: {
+        status: "ready",
+        verdict: {
+          outcome: "needs-probe",
+          resolvedDevice: null,
+          reason: "inconclusive",
         },
       },
     })

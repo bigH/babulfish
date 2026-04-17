@@ -1,4 +1,9 @@
-import type { BabulfishCore, Language, Snapshot } from "@babulfish/core"
+import {
+  IDLE_ENABLEMENT_STATE,
+  type BabulfishCore,
+  type Language,
+  type Snapshot,
+} from "@babulfish/core"
 
 const SSR_LANGUAGES = Object.freeze<Language[]>([])
 const noop = () => {}
@@ -16,22 +21,7 @@ const SSR_SNAPSHOT: Snapshot = Object.freeze({
     approxDeviceMemoryGiB: null,
     crossOriginIsolated: false,
   }),
-  enablement: Object.freeze({
-    status: "idle" as const,
-    modelProfile: null,
-    inference: null,
-    probe: Object.freeze({
-      status: "not-run" as const,
-      kind: "adapter-smoke" as const,
-      cache: null,
-      note: "",
-    }),
-    verdict: Object.freeze({
-      outcome: "unknown" as const,
-      resolvedDevice: null,
-      reason: "Enablement has not been assessed yet.",
-    }),
-  }),
+  enablement: IDLE_ENABLEMENT_STATE,
 })
 
 export const SSR_CORE: BabulfishCore = {

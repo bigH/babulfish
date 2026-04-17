@@ -1,13 +1,12 @@
+import { createEnablementCompat } from "@babulfish/core"
 import { useTranslatorContext, useTranslatorSnapshot } from "./context.js"
 
 export function useTranslator() {
   const core = useTranslatorContext()
   const snapshot = useTranslatorSnapshot(core)
-  const capabilitiesReady =
-    snapshot.enablement.status === "ready" || snapshot.enablement.status === "error"
-  const canTranslate =
-    snapshot.enablement.verdict.outcome === "gpu-preferred" ||
-    snapshot.enablement.verdict.outcome === "wasm-only"
+  const { capabilitiesReady, canTranslate, device } = createEnablementCompat(
+    snapshot.enablement,
+  )
 
   return {
     model: snapshot.model,
@@ -19,7 +18,7 @@ export function useTranslator() {
     isSupported: canTranslate,
     hasWebGPU: snapshot.capabilities.hasWebGPU,
     canTranslate,
-    device: snapshot.enablement.verdict.resolvedDevice,
+    device,
     isMobile: snapshot.capabilities.isMobile,
     languages: core.languages,
     loadModel: core.loadModel,

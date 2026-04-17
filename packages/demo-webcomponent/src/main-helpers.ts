@@ -39,8 +39,12 @@ export function appendStatusEntry(
   label.textContent = `[#${index + 1}]`
   entry.appendChild(label)
 
+  const probeText =
+    snapshot.enablement.probe.status !== "not-run"
+      ? ` probe=${snapshot.enablement.probe.status}`
+      : ""
   const text = doc.createTextNode(
-    ` model=${snapshot.model.status} translation=${snapshot.translation.status} lang=${snapshot.currentLanguage ?? "\u2014"} runtime=${snapshot.enablement.verdict.resolvedDevice ?? "none"} verdict=${snapshot.enablement.verdict.outcome}`,
+    ` model=${snapshot.model.status} translation=${snapshot.translation.status} lang=${snapshot.currentLanguage ?? "\u2014"} runtime=${snapshot.enablement.verdict.resolvedDevice ?? "none"} verdict=${snapshot.enablement.verdict.outcome}${probeText}`,
   )
   entry.appendChild(text)
 

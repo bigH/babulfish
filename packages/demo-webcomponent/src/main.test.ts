@@ -83,8 +83,64 @@ describe("demo main helpers", () => {
     expect(entries[0]?.textContent).toContain("lang=es")
     expect(entries[0]?.textContent).toContain("runtime=webgpu")
     expect(entries[0]?.textContent).toContain("verdict=gpu-preferred")
+    expect(entries[0]?.textContent).not.toContain("probe=")
     expect(entries[1]?.textContent).toBe("older")
     expect(logger.log).toHaveBeenCalledWith("[babulfish-translator #2]", snapshot)
+  })
+
+  it("includes probe status in the entry text when a probe has run", () => {
+    const eventLog = document.createElement("div")
+    eventLog.id = "event-log"
+    document.body.append(eventLog)
+    const snapshot = createSnapshot({
+      enablement: {
+        status: "ready",
+        modelProfile: null,
+        inference: null,
+        probe: { status: "passed", kind: "adapter-smoke", cache: "hit", note: "" },
+        verdict: {
+          outcome: "gpu-preferred",
+          resolvedDevice: "webgpu",
+          reason: "probe passed",
+        },
+      },
+    })
+
+    appendStatusEntry(eventLog, 0, snapshot, { log: vi.fn() })
+
+    const entry = eventLog.firstElementChild
+    expect(entry?.textContent).toContain("probe=passed")
+  })
+
+  it("writes the same verdict and probe text for two elements sharing the same snapshot", () => {
+    const eventLog = document.createElement("div")
+    eventLog.id = "event-log"
+    document.body.append(eventLog)
+    const logger = { log: vi.fn() }
+    const sharedSnapshot = createSnapshot({
+      enablement: {
+        status: "ready",
+        modelProfile: null,
+        inference: null,
+        probe: { status: "passed", kind: "adapter-smoke", cache: "hit", note: "" },
+        verdict: {
+          outcome: "gpu-preferred",
+          resolvedDevice: "webgpu",
+          reason: "shared ready",
+        },
+      },
+    })
+
+    appendStatusEntry(eventLog, 0, sharedSnapshot, logger)
+    appendStatusEntry(eventLog, 1, sharedSnapshot, logger)
+
+    const entries = Array.from(eventLog.querySelectorAll(".entry"))
+    expect(entries).toHaveLength(2)
+    for (const entry of entries) {
+      expect(entry.textContent).toContain("verdict=gpu-preferred")
+      expect(entry.textContent).toContain("runtime=webgpu")
+      expect(entry.textContent).toContain("probe=passed")
+    }
   })
 
   it("creates status log entries in the event log's owner document", () => {

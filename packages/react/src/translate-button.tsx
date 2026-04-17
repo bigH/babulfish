@@ -274,7 +274,9 @@ export function TranslateButton({
   const translationProgress =
     translation.status === "translating" ? translation.progress : null
   const assessmentPending =
-    enablement.status === "idle" || enablement.status === "assessing"
+    enablement.status === "idle" ||
+    enablement.status === "assessing" ||
+    enablement.status === "probing"
   const phase = getButtonPhase({
     confirming,
     modelStatus: model.status,

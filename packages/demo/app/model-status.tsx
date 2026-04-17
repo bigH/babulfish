@@ -219,6 +219,16 @@ export function ModelStatus() {
       label: "Verdict",
       value: enablement.verdict.reason,
     },
+    ...(enablement.probe.status !== "not-run"
+      ? [
+          {
+            label: "Probe",
+            value: enablement.probe.note
+              ? `${enablement.probe.status} — ${enablement.probe.note}`
+              : enablement.probe.status,
+          },
+        ]
+      : []),
     {
       label: "Model",
       value: formatModelStatus(model),

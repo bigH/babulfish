@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest"
+import { IDLE_ENABLEMENT_STATE, NOT_RUN_PROBE_SUMMARY } from "@babulfish/core"
 import { SSR_CORE } from "../ssr.js"
 
 describe("SSR fallback", () => {
@@ -10,6 +11,8 @@ describe("SSR fallback", () => {
     expect(snapshot.translation.status).toBe("idle")
     expect(snapshot.currentLanguage).toBeNull()
     expect(snapshot.capabilities.ready).toBe(false)
+    expect(snapshot.enablement).toBe(IDLE_ENABLEMENT_STATE)
+    expect(snapshot.enablement.probe).toBe(NOT_RUN_PROBE_SUMMARY)
     expect(snapshot.enablement.status).toBe("idle")
     expect(snapshot.enablement.verdict.outcome).toBe("unknown")
     expect(Object.isFrozen(snapshot)).toBe(true)

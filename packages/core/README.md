@@ -68,9 +68,36 @@ For the full DOM config surface, read `DOMTranslatorConfig` from `@babulfish/cor
   model: { status: "idle" | "downloading" | "ready" | "error", progress?: number, error?: unknown }
   translation: { status: "idle" | "translating", progress?: number }
   currentLanguage: string | null
-  capabilities: { ready: boolean, hasWebGPU: boolean, canTranslate: boolean, device: "webgpu" | "wasm" | null, isMobile: boolean }
+  capabilities: { ready: boolean, hasWebGPU: boolean, isMobile: boolean, approxDeviceMemoryGiB: number | null, crossOriginIsolated: boolean }
+  enablement: {
+    status: "idle" | "assessing" | "probing" | "ready" | "error"
+    modelProfile: ModelProfile | null
+    inference: FitInference | null
+    probe: { status, kind, cache, note }
+    verdict: { outcome, resolvedDevice, reason }
+  }
 }
 ```
+
+### Capabilities vs enablement
+
+`capabilities` is the raw browser-observed surface — what we can see. `enablement` is the assessment — what we decide. The two stay separate so observations never pretend to be verdicts.
+
+`enablement.verdict.outcome`:
+
+- `unknown` — not assessed yet
+- `needs-probe` — memory heuristic inconclusive; a probe could break the tie
+- `denied` — the requested runtime is not available here (e.g., WebGPU explicitly required but not present)
+- `gpu-preferred` — WebGPU path is ready to use
+- `wasm-only` — WASM path is ready to use
+
+### Probe
+
+Probes are optional. Set `EnablementConfig.probe` to `"if-needed"` or `"manual"` to enable one; default is `"off"`. A probe is a coarse backend smoke check — it requests an adapter and device, checks required feature bits, and runs a tiny fixed-cost op. It is not a fit oracle, does not measure VRAM, and does not simulate a real translation. Probe results cache per page session only.
+
+### Binding helpers
+
+Binding authors can derive narrow compat booleans from `enablement` with `createEnablementCompat(state)`, and seed neutral state from `IDLE_ENABLEMENT_STATE` and `NOT_RUN_PROBE_SUMMARY`. See [`@babulfish/react`](../react/README.md) for how the shipped binding uses them.
 
 ## DOM config
 

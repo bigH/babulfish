@@ -12,6 +12,7 @@ import {
   type DemoRuntimeSelection,
   type ResolvedDemoRuntimeSelection,
 } from "../../demo-shared/src/runtime-selection.js"
+import { enablementText } from "./enablement-text.js"
 import {
   bootstrapVanillaDemoRuntime,
   createVanillaDemoCore,
@@ -86,11 +87,6 @@ function capabilitiesText(snapshot: Snapshot): string {
     memoryText,
     capabilities.crossOriginIsolated ? "COI yes" : "COI no",
   ].join(" / ")
-}
-
-function enablementText(snapshot: Snapshot): string {
-  const { enablement } = snapshot
-  return [enablement.status, enablement.verdict.outcome].join(" / ")
 }
 
 const translatedRoots = DEMO_ROOTS.map(({ label, selector }) => ({

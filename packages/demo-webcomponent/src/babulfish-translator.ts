@@ -228,9 +228,13 @@ export class BabulfishTranslator extends HTMLElement {
     const languageText = snapshot.currentLanguage ? ` | ${snapshot.currentLanguage}` : ""
     const requestedText = ` | requested ${this.#runtimeState.selection.device}/${this.#runtimeState.selection.dtype}`
     const resolvedText = ` | resolved ${snapshot.enablement.verdict.resolvedDevice ?? "none"}`
+    const probeText =
+      snapshot.enablement.probe.status !== "not-run"
+        ? ` | probe: ${snapshot.enablement.probe.status}`
+        : ""
 
     this.#els.status.textContent =
-      `Model: ${modelText}${translationText}${languageText}${requestedText}${resolvedText}`
+      `Model: ${modelText}${translationText}${languageText}${requestedText}${resolvedText}${probeText}`
     this.#els.select.value = snapshot.currentLanguage ?? ""
 
     const modelReady = snapshot.model.status === "ready"

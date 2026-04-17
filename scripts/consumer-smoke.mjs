@@ -15,8 +15,11 @@ const EXPECTED_CORE_SNAPSHOT_KEYS = [
 ]
 const EXPECTED_CORE_RUNTIME_KEYS = [
   "DEFAULT_LANGUAGES",
+  "IDLE_ENABLEMENT_STATE",
+  "NOT_RUN_PROBE_SUMMARY",
   "createBabulfish",
   "createDOMTranslator",
+  "createEnablementCompat",
   "createEngine",
   "getTranslationCapabilities",
   "isWellFormedMarkdown",

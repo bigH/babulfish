@@ -174,6 +174,26 @@ describe("babulfish-translator", () => {
     )
   })
 
+  it("omits the probe suffix from status text when probe has not run", () => {
+    const shadow = connect()
+    const statusEl = shadow.querySelector(".status-text") as HTMLElement
+    expect(statusEl.textContent).not.toContain("| probe:")
+  })
+
+  it("appends probe status to status text when a probe has run", () => {
+    const shadow = connect()
+    const statusEl = shadow.querySelector(".status-text") as HTMLElement
+
+    state.listener?.(createSnapshot({
+      enablement: {
+        ...DEFAULT_ENABLEMENT,
+        probe: { status: "passed", kind: "adapter-smoke", cache: "hit", note: "" },
+      },
+    }))
+
+    expect(statusEl.textContent).toContain("| probe: passed")
+  })
+
   it("disables controls appropriately based on model state", () => {
     const shadow = connect()
     const select = shadow.querySelector(".language") as HTMLSelectElement

@@ -3,8 +3,11 @@ import type {
   BabulfishConfig,
   CapabilityObservation,
   EnablementState,
+  EnablementVerdict,
   Language,
   ModelState,
+  ProbeMode,
+  ProbeSummary,
   ResolvedDevice,
   TranslationState,
 } from "@babulfish/core"
@@ -59,6 +62,11 @@ describe("public React API contract", () => {
     expectTypeOf<PublicApi.ModelState>().toEqualTypeOf<ModelState>()
 
     expectTypeOf<PublicApi.TranslationState>().toEqualTypeOf<TranslationState>()
+
+    expectTypeOf<PublicApi.EnablementState>().toEqualTypeOf<EnablementState>()
+    expectTypeOf<PublicApi.EnablementVerdict>().toEqualTypeOf<EnablementVerdict>()
+    expectTypeOf<PublicApi.ProbeSummary>().toEqualTypeOf<ProbeSummary>()
+    expectTypeOf<PublicApi.ProbeMode>().toEqualTypeOf<ProbeMode>()
 
     expectTypeOf<ReturnType<typeof publicApi.useTranslator>>().toMatchTypeOf<{
       readonly model: PublicApi.ModelState
