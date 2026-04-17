@@ -20,6 +20,12 @@ const SSR_SNAPSHOT: Snapshot = Object.freeze({
     status: "idle" as const,
     modelProfile: null,
     inference: null,
+    probe: Object.freeze({
+      status: "not-run" as const,
+      kind: "adapter-smoke" as const,
+      cache: null,
+      note: "",
+    }),
     verdict: Object.freeze({
       outcome: "unknown" as const,
       resolvedDevice: null,
