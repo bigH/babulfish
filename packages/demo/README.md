@@ -10,7 +10,7 @@ This package is not published to npm. It exists to prove the current React bound
 - `useTranslator()` and `useTranslateDOM()` expose the live provider state shown in the status panel.
 - The fixed globe button is the shipped stock `<TranslateButton />`.
 - Only `[data-demo-root]` is inside `dom.roots`; the control panel stays outside the translated scope.
-- The status panel keeps requested model/device/quantization separate from the resolved runtime verdict.
+- The status panel keeps requested model/device/quantization separate from what the enablement pipeline resolves: raw capabilities, enablement status, verdict reason, resolved runtime, and the probe row when one actually ran.
 - Restore returns the root to original content, and Arabic flips that root to RTL.
 
 ## Run

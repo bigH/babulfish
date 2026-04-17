@@ -209,7 +209,7 @@ function DefaultTooltip({
         <p style={{ margin: 0 }}>
           Heads up: <strong>~2.9 GB download.</strong>{" "}
           {device === "wasm" && !hasWebGPU
-            ? "This browser will use the slower WASM fallback. "
+            ? "This browser will use the WASM fallback. "
             : ""}
           Click again to confirm.
         </p>
@@ -221,7 +221,7 @@ function DefaultTooltip({
       ) : device === "wasm" && !hasWebGPU ? (
         <p style={{ margin: 0 }}>
           WebGPU is unavailable here, so translation will run through the
-          slower WASM fallback. <strong>Still client-side.</strong>
+          WASM fallback. <strong>Still client-side.</strong>
         </p>
       ) : (
         <p style={{ margin: 0 }}>

@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs"
+import type { Options } from "tsup"
 import { defineConfig } from "tsup"
 
 type PackageExportTarget = {
@@ -51,7 +52,7 @@ const coreEntryPoints = Object.fromEntries(
 
 const coreExternalPackages = Object.keys(packageJson.peerDependencies ?? {})
 
-export default defineConfig({
+const coreTsupConfig = {
   entry: coreEntryPoints,
   clean: true,
   format: ["esm"],
@@ -60,4 +61,7 @@ export default defineConfig({
   external: coreExternalPackages,
   treeshake: true,
   outDir: "dist",
-})
+} satisfies Options
+
+export default defineConfig(coreTsupConfig)
+export { coreTsupConfig }

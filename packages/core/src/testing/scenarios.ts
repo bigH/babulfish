@@ -273,6 +273,31 @@ export const scenarios: readonly ConformanceScenario[] = [
   },
 
   {
+    id: "enablement-idle-to-ready",
+    description:
+      "loadModel() transitions enablement from idle/unknown to ready with a resolved verdict",
+    async run(driver) {
+      await withCore(driver, async (core) => {
+        assertEqual(core.snapshot.enablement.status, "idle", "enablement starts idle")
+        assertEqual(
+          core.snapshot.enablement.verdict.outcome,
+          "unknown",
+          "enablement verdict starts unknown",
+        )
+        mockedLoad.mockResolvedValue(makeFakePipeline())
+        await core.loadModel()
+        assertEqual(core.snapshot.enablement.status, "ready", "enablement reaches ready")
+        const outcome = core.snapshot.enablement.verdict.outcome
+        assert(
+          outcome === "gpu-preferred" || outcome === "wasm-only",
+          `enablement verdict resolves to gpu-preferred or wasm-only; got ${outcome}`,
+        )
+        assertEqual(core.snapshot.capabilities.ready, true, "capabilities ready after load")
+      })
+    },
+  },
+
+  {
     id: "lifecycle-engine-singleton",
     description: "Two same-key cores share one runtime after loadModel()",
     async run(driver) {

@@ -11,6 +11,7 @@ import {
   __resetEngineForTests,
   __resetProbeCacheForTests,
 } from "../../engine/testing/index.js"
+import { wrapGeneratorAsPipeline } from "../../testing/conformance-helpers.js"
 import {
   captureGlobalDescriptors,
   restoreGlobals,
@@ -21,14 +22,10 @@ const mockLoadPipeline = vi.mocked(loadPipeline)
 const originalGlobals = captureGlobalDescriptors()
 
 function createMockPipeline() {
-  const generate = vi.fn(async () => [{ generated_text: [{ role: "assistant", content: "hola" }] }])
-  return Object.assign(generate, {
-    _call: generate,
-    task: "text-generation" as const,
-    model: {} as unknown,
-    tokenizer: {} as unknown,
-    dispose: vi.fn(async () => {}),
-  })
+  const generate = vi.fn(async () => [
+    { generated_text: [{ role: "assistant", content: "hola" }] },
+  ])
+  return wrapGeneratorAsPipeline(generate as Parameters<typeof wrapGeneratorAsPipeline>[0])
 }
 
 function createMockGPU(options?: {

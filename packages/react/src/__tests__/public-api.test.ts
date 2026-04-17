@@ -22,7 +22,7 @@ const EXPECTED_RUNTIME_EXPORTS = [
   "TranslatorProvider",
   "useTranslateDOM",
   "useTranslator",
-] as const satisfies readonly (keyof PublicApi)[]
+] as const satisfies readonly (keyof typeof publicApi)[]
 
 describe("public React API contract", () => {
   it("exports exactly the documented React runtime names", () => {

@@ -38,12 +38,12 @@ function createPinnedDomConfig(
 }
 
 function captureSnapshotContract(core: BabulfishCore): SnapshotContract {
-  const descriptor = Object.getOwnPropertyDescriptor(core, "snapshot")
-  const unboundGetSnapshot = descriptor?.get
-  if (!unboundGetSnapshot) {
+  const rawDescriptor = Object.getOwnPropertyDescriptor(core, "snapshot")
+  if (!rawDescriptor?.get) {
     throw new Error("React conformance driver requires core.snapshot to be a getter")
   }
-  const getSnapshot = unboundGetSnapshot.bind(core)
+  const descriptor = rawDescriptor as PropertyDescriptor & { get: () => Snapshot }
+  const getSnapshot = descriptor.get.bind(core)
   return {
     descriptor,
     getSnapshot,

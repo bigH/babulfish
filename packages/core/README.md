@@ -58,7 +58,7 @@ For the full DOM config surface, read `DOMTranslatorConfig` from `@babulfish/cor
 | `translateText` | `(text, lang, opts?) => Promise<string>` | Translate a single string with raw engine output (no DOM side effects or DOM transforms) |
 | `restore` | `(opts?) => void` | Restore original content |
 | `abort` | `() => void` | Cancel in-flight translation |
-| `dispose` | `() => Promise<void>` | Release engine ref-count and clean up |
+| `dispose` | `() => Promise<void>` | Detach this core's subscriptions and mark it unusable; the shared runtime engine stays pooled for other cores |
 | `languages` | `ReadonlyArray<Language>` | Available target languages |
 
 ### Snapshot shape

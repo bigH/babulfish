@@ -72,7 +72,7 @@ const mockTranslateText = vi.fn<(text: string, lang: string) => Promise<string>>
 const mockRestore = vi.fn()
 const mockAbort = vi.fn()
 const mockDispose = vi.fn()
-const mockCreateBabulfish = vi.fn(() => ({
+const mockCreateBabulfish = vi.fn((..._args: unknown[]) => ({
   get snapshot() {
     return mockSnapshot
   },
@@ -250,13 +250,13 @@ function setMockSnapshot(overrides: SnapshotOverrides = {}) {
       model: Object.freeze({
         ...prev.model,
         ...(overrides.model ?? {}),
-      }),
+      }) as Snapshot["model"],
       translation: Object.freeze({
         ...prev.translation,
         ...(overrides.translation ?? {}),
-      }),
+      }) as Snapshot["translation"],
       currentLanguage: hasCurrentLanguage
-        ? overrides.currentLanguage
+        ? overrides.currentLanguage ?? null
         : prev.currentLanguage,
       capabilities: Object.freeze({
         ...prev.capabilities,
@@ -268,7 +268,7 @@ function setMockSnapshot(overrides: SnapshotOverrides = {}) {
         verdict: Object.freeze(
           overrides.enablement?.verdict ?? prev.enablement.verdict,
         ),
-      }),
+      }) as Snapshot["enablement"],
     })
   })
 }
@@ -408,6 +408,72 @@ describe("TranslatorProvider", () => {
     )
 
     expect(mockCreateBabulfish).toHaveBeenCalledTimes(1)
+  })
+
+  it("forwards identical configs to sibling providers and surfaces shared observable state", () => {
+    const config: TranslatorConfig = {
+      engine: { modelId: "acme/translator", dtype: "q4" },
+    }
+
+    render(
+      <div>
+        <TranslatorProvider config={config}>
+          <div data-testid="subtree-a">
+            <HookInspector />
+          </div>
+        </TranslatorProvider>
+        <TranslatorProvider config={config}>
+          <div data-testid="subtree-b">
+            <HookInspector />
+          </div>
+        </TranslatorProvider>
+      </div>,
+    )
+
+    // Each provider creates one core. Engine-pool dedupe under a shared
+    // runtime key is a core-level invariant proven by the contract suite
+    // (see packages/core/src/core/__tests__/contract.smoke.test.ts). The
+    // React boundary's job is to forward each provider's config verbatim.
+    expect(mockCreateBabulfish).toHaveBeenCalledTimes(2)
+    expect(mockCreateBabulfish).toHaveBeenNthCalledWith(1, config)
+    expect(mockCreateBabulfish).toHaveBeenNthCalledWith(2, config)
+
+    // Both hook subtrees observe the same snapshot-derived state.
+    const subtreeA = screen.getByTestId("subtree-a")
+    const subtreeB = screen.getByTestId("subtree-b")
+    expect(subtreeA.querySelector('[data-testid="device"]')).toHaveTextContent("webgpu")
+    expect(subtreeB.querySelector('[data-testid="device"]')).toHaveTextContent("webgpu")
+    expect(subtreeA.querySelector('[data-testid="can-translate"]')).toHaveTextContent("true")
+    expect(subtreeB.querySelector('[data-testid="can-translate"]')).toHaveTextContent("true")
+  })
+
+  it("routes distinct configs to sibling providers so their engines stay isolated", () => {
+    const configA: TranslatorConfig = {
+      engine: { modelId: "acme/translator", dtype: "q4" },
+    }
+    const configB: TranslatorConfig = {
+      engine: { modelId: "acme/translator", dtype: "fp32" },
+    }
+
+    render(
+      <div>
+        <TranslatorProvider config={configA}>
+          <span data-testid="child-a">A</span>
+        </TranslatorProvider>
+        <TranslatorProvider config={configB}>
+          <span data-testid="child-b">B</span>
+        </TranslatorProvider>
+      </div>,
+    )
+
+    // Each provider forwards its own config. Different configs resolve to
+    // different runtime keys at the core level, isolating their enablement
+    // state machines. The React boundary's job here is config routing; the
+    // core-level isolation invariant is proven in contract + runtime-pool
+    // tests.
+    expect(mockCreateBabulfish).toHaveBeenCalledTimes(2)
+    expect(mockCreateBabulfish).toHaveBeenNthCalledWith(1, configA)
+    expect(mockCreateBabulfish).toHaveBeenNthCalledWith(2, configB)
   })
 
   it("uses the shared inert SSR fallback during server render", () => {
@@ -756,7 +822,7 @@ describe("TranslateButton", () => {
     const button = screen.getByRole("button")
 
     fireEvent.mouseEnter(button)
-    expect(screen.getByText(/slower WASM fallback/i)).toBeInTheDocument()
+    expect(screen.getByText(/WASM fallback/i)).toBeInTheDocument()
 
     fireEvent.click(button)
     expect(screen.getByText(/Click again to confirm/i)).toBeInTheDocument()

@@ -9,7 +9,7 @@ describe("conformance helpers", () => {
   it("makeFakePipeline returns the requested translation", async () => {
     const pipeline = makeFakePipeline("hola")
 
-    await expect(pipeline()).resolves.toEqual([
+    await expect(pipeline("")).resolves.toEqual([
       { generated_text: [{ role: "assistant", content: "hola" }] },
     ])
     await expect(pipeline.dispose()).resolves.toBeUndefined()
@@ -18,7 +18,7 @@ describe("conformance helpers", () => {
   it("makeControllablePipeline waits for release before resolving", async () => {
     const controlled = makeControllablePipeline("hola")
     let settled = false
-    const translation = controlled.pipeline().then((value) => {
+    const translation = controlled.pipeline("").then((value) => {
       settled = true
       return value
     })

@@ -2,7 +2,7 @@
 
 import { readFileSync } from "node:fs"
 import { describe, expect, it } from "vitest"
-import tsupConfig from "../../tsup.config.ts"
+import { coreTsupConfig } from "../../tsup.config"
 
 type PackageExportTarget = {
   import: string
@@ -41,10 +41,10 @@ function expectedExportsFromEntries(entries: Record<string, string>): Record<str
 
 describe("core tsup config", () => {
   it("keeps package exports aligned with configured entrypoints and dist filenames", () => {
-    expect(readPackageExports()).toEqual(expectedExportsFromEntries(tsupConfig.entry))
+    expect(readPackageExports()).toEqual(expectedExportsFromEntries(coreTsupConfig.entry))
   })
 
   it("keeps external packages aligned with peer dependencies", () => {
-    expect(tsupConfig.external).toEqual(readPeerDependencies())
+    expect(coreTsupConfig.external).toEqual(readPeerDependencies())
   })
 })

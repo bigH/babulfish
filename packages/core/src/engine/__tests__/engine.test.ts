@@ -1,8 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
-import type {
-  PipelineOptions,
-  TextGenerationPipeline,
-} from "../pipeline-loader.js"
+import type { TextGenerationPipeline } from "../pipeline-loader.js"
+import { wrapGeneratorAsPipeline } from "../../testing/conformance-helpers.js"
 
 // ---------------------------------------------------------------------------
 // Mock pipeline-loader (the single @huggingface/transformers chokepoint)
@@ -11,26 +9,10 @@ import type {
 function createMockTextGenerationPipeline() {
   const generate = vi.fn<TextGenerationPipeline["_call"]>()
   const dispose = vi.fn(async () => {})
-  type GenerateInput = Parameters<TextGenerationPipeline["_call"]>[0]
-  type GenerateOptions = Parameters<TextGenerationPipeline["_call"]>[1]
-
-  function mockGenerator(
-    texts: GenerateInput,
-    options?: GenerateOptions,
-  ) {
-    return generate(texts, options)
-  }
-
   return {
     generate,
     dispose,
-    generator: Object.assign(mockGenerator, {
-      _call: generate,
-      task: "text-generation",
-      model: {} as TextGenerationPipeline["model"],
-      tokenizer: {} as TextGenerationPipeline["tokenizer"],
-      dispose,
-    }) satisfies TextGenerationPipeline,
+    generator: wrapGeneratorAsPipeline(generate, dispose),
   }
 }
 
@@ -69,8 +51,6 @@ function statusChanges(engine: ReturnType<typeof createEngine>) {
   engine.on("status-change", (e) => changes.push(e))
   return changes
 }
-
-type ProgressCallback = NonNullable<PipelineOptions["progress_callback"]>
 
 function captureProgressCallback() {
   return () => mockLoadPipeline.mock.lastCall?.[1]?.progress_callback
@@ -400,13 +380,17 @@ describe("event emitter", () => {
 
     getProgressCallback()?.({
       status: "progress",
+      name: "model-id",
       file: "model.bin",
+      progress: 50,
       loaded: 500,
       total: 1000,
     })
     getProgressCallback()?.({
       status: "progress",
+      name: "model-id",
       file: "tokenizer.json",
+      progress: 50,
       loaded: 100,
       total: 200,
     })

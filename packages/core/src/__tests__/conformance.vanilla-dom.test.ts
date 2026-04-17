@@ -59,6 +59,7 @@ describe("conformance — vanilla DOM driver", () => {
 
     const core = await driver.create({
       dom: {
+        roots: ["#app"],
         translateAttributes: ["aria-label"],
       },
     })

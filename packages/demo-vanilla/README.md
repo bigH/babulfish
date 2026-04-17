@@ -11,7 +11,7 @@ This package is not published to npm. It exists to prove the current DOM contrac
 - `structuredText` claims supported inline-rich DOM as one logical unit.
 - `preserve.matchers` and `shouldSkip` keep demo-specific strings exact.
 - `outputTransform` is DOM-only, while `translateText()` still returns raw engine output.
-- The status card keeps requested runtime preferences distinct from the resolved runtime verdict.
+- The status card keeps requested runtime preferences distinct from what enablement resolves: raw capabilities, the `status / outcome` line, the verdict reason, the resolved runtime, and a `probe:` suffix only once a probe has actually run.
 - Restore resets the DOM, and Arabic flips the translated roots to RTL.
 
 The Vite server sends the COOP/COEP headers needed for WebGPU `SharedArrayBuffer` support during local development.

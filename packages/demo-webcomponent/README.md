@@ -14,7 +14,7 @@ This package is not published to npm, and there is no published web-component pa
 
 ### `<babulfish-translator>`
 
-Renders a small translation UI into its own shadow root: language select, restore button, load-model button, translated content, and a status line that includes requested vs resolved runtime.
+Renders a small translation UI into its own shadow root: language select, restore button, load-model button, translated content, and a status line that keeps the requested `device`/`dtype` separate from the resolved runtime and appends a `probe:` suffix once a probe has actually run.
 
 ### Attribute
 

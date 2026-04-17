@@ -13,6 +13,7 @@ import type { Snapshot } from "../store.js"
 import { DEFAULT_LANGUAGES, type Language } from "../languages.js"
 import { __resetEngineForTests, getEngineIdentity } from "../../engine/testing/index.js"
 import { loadPipeline } from "../../engine/pipeline-loader.js"
+import { wrapGeneratorAsPipeline } from "../../testing/conformance-helpers.js"
 import {
   captureGlobalDescriptors,
   restoreGlobals,
@@ -41,19 +42,10 @@ function createMockGenerator() {
   return vi.fn(async () => [{ generated_text: createMockResult() }])
 }
 
-function createMockPipeline(generate = createMockGenerator()) {
-  const pipeline = Object.assign(generate, {
-    _call: generate,
-    task: "text-generation" as const,
-    model: {} as unknown,
-    tokenizer: {} as unknown,
-    dispose: vi.fn(async () => {}),
-  })
-  return { generate, pipeline }
-}
-
 function setupPipelineMock(generate = createMockGenerator()) {
-  const { pipeline } = createMockPipeline(generate)
+  const pipeline = wrapGeneratorAsPipeline(
+    generate as Parameters<typeof wrapGeneratorAsPipeline>[0],
+  )
   mockLoadPipeline.mockResolvedValue(pipeline)
   return { generate, pipeline }
 }
@@ -517,7 +509,7 @@ describe("custom language lists", () => {
     expect(Object.isFrozen(core.languages)).toBe(true)
     expect(Object.isFrozen(core.languages[0])).toBe(true)
 
-    configured[0].label = "Nederlands"
+    configured[0]!.label = "Nederlands"
 
     expect(core.languages[0]?.label).toBe("Dutch")
 

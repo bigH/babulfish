@@ -40,17 +40,22 @@ function createSnapshot(overrides: SnapshotOverrides = {}): Snapshot {
   }
 }
 
-const { state, createMockCore, mockCreateBabulfish } = vi.hoisted(() => {
-  const state = {
-    listener: null as SnapshotListener | null,
-    latestMock: null as any,
-  }
-
+const {
+  state,
+  createMockCore,
+  mockCreateBabulfish,
+  fireSnapshotTo,
+  fireSnapshotAll,
+} = vi.hoisted(() => {
   const createMockCore = () => ({
     snapshot: createSnapshot(),
     subscribe: vi.fn((l: SnapshotListener) => {
+      state.listeners.push(l)
       state.listener = l
-      return vi.fn()
+      return vi.fn(() => {
+        const i = state.listeners.indexOf(l)
+        if (i >= 0) state.listeners.splice(i, 1)
+      })
     }),
     loadModel: vi.fn(() => Promise.resolve()),
     translateTo: vi.fn(() => Promise.resolve()),
@@ -63,13 +68,37 @@ const { state, createMockCore, mockCreateBabulfish } = vi.hoisted(() => {
     ],
   })
 
+  type MockCore = ReturnType<typeof createMockCore>
+
+  const state = {
+    listener: null as SnapshotListener | null,
+    listeners: [] as SnapshotListener[],
+    latestMock: null as MockCore | null,
+    mocks: [] as MockCore[],
+  }
+
   const mockCreateBabulfish = vi.fn(() => {
     const mock = createMockCore()
+    state.mocks.push(mock)
     state.latestMock = mock
     return mock
   })
 
-  return { state, createMockCore, mockCreateBabulfish }
+  // Out-of-range indices are a no-op (defensive: listener may not exist yet).
+  const fireSnapshotTo = (index: number, snapshot: Snapshot) => {
+    state.listeners[index]?.(snapshot)
+  }
+  const fireSnapshotAll = (snapshot: Snapshot) => {
+    for (const l of state.listeners) l(snapshot)
+  }
+
+  return {
+    state,
+    createMockCore,
+    mockCreateBabulfish,
+    fireSnapshotTo,
+    fireSnapshotAll,
+  }
 })
 
 vi.mock("@babulfish/core", () => ({
@@ -83,6 +112,9 @@ describe("babulfish-translator", () => {
 
   beforeEach(() => {
     state.listener = null
+    state.listeners.length = 0
+    state.latestMock = null
+    state.mocks.length = 0
     mockCreateBabulfish.mockClear()
     el = document.createElement("babulfish-translator")
   })
@@ -275,5 +307,56 @@ describe("babulfish-translator", () => {
         dtype: "fp32",
       },
     })
+  })
+
+  it("two elements dispatch identical babulfish-status events from a shared snapshot", () => {
+    const els: HTMLElement[] = []
+    try {
+      const elA = document.createElement("babulfish-translator")
+      const elB = document.createElement("babulfish-translator")
+      els.push(elA, elB)
+
+      const handlerA = vi.fn()
+      const handlerB = vi.fn()
+      elA.addEventListener("babulfish-status", handlerA)
+      elB.addEventListener("babulfish-status", handlerB)
+
+      document.body.appendChild(elA)
+      document.body.appendChild(elB)
+
+      const snapshot = createSnapshot({
+        enablement: {
+          ...DEFAULT_ENABLEMENT,
+          probe: { status: "passed", kind: "adapter-smoke", cache: "hit", note: "" },
+          verdict: {
+            outcome: "gpu-preferred",
+            resolvedDevice: "webgpu",
+            reason: "GPU probe passed.",
+          },
+        },
+      })
+      fireSnapshotAll(snapshot)
+
+      expect(handlerA).toHaveBeenCalledTimes(1)
+      expect(handlerB).toHaveBeenCalledTimes(1)
+
+      const eventA = handlerA.mock.calls[0]![0] as CustomEvent<Snapshot>
+      const eventB = handlerB.mock.calls[0]![0] as CustomEvent<Snapshot>
+
+      expect(eventA.detail).toBe(snapshot)
+      expect(eventB.detail).toBe(snapshot)
+      expect(eventA.detail.enablement.verdict.outcome).toBe("gpu-preferred")
+      expect(eventB.detail.enablement.verdict.outcome).toBe(
+        eventA.detail.enablement.verdict.outcome,
+      )
+      expect(eventA.detail.enablement.probe.status).toBe("passed")
+      expect(eventB.detail.enablement.probe.status).toBe(
+        eventA.detail.enablement.probe.status,
+      )
+
+      expect(state.mocks).toHaveLength(2)
+    } finally {
+      els.forEach((el) => el.remove())
+    }
   })
 })
