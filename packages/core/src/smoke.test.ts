@@ -35,6 +35,11 @@ const EXPECTED_DOM_RUNTIME_EXPORTS = [
   "renderInlineMarkdownToHtml",
 ] as const
 
+const EXPECTED_ENGINE_RUNTIME_EXPORTS = [
+  "createEngine",
+  "getTranslationCapabilities",
+] as const
+
 type ExpectedStructuredTextConfig = {
   readonly selector: string
 }
@@ -124,9 +129,7 @@ describe("smoke tests", () => {
   })
 
   it("engine barrel re-exports the public engine surface without detection internals", () => {
-    expect(Object.keys(engineBarrel).sort()).toEqual(
-      ["createEngine", "getTranslationCapabilities"].sort(),
-    )
+    expect(Object.keys(engineBarrel).toSorted()).toEqual(EXPECTED_ENGINE_RUNTIME_EXPORTS)
 
     expectValueReExports(engineBarrel, {
       createEngine: engineModel.createEngine,
