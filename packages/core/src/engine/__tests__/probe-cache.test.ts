@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest"
 
 import {
-  createObservationFingerprint,
   createProbeCacheKey,
   getProbeCacheEntry,
   setProbeCacheEntry,
@@ -35,7 +34,7 @@ function baseCacheKeyInput(
     device: "auto",
     policyVersion: "default",
     probeVersion: "1",
-    observationFingerprint: "ready|webgpu|desktop|memory:16|no-coi",
+    observation: baseObservation(),
     ...overrides,
   }
 }
@@ -56,58 +55,24 @@ beforeEach(() => {
   __resetProbeCacheForTests()
 })
 
-describe("createObservationFingerprint", () => {
-  it("produces stable keys for identical observations", () => {
-    const obs = baseObservation()
-
-    expect(createObservationFingerprint(obs)).toBe(
-      createObservationFingerprint(obs),
-    )
-  })
-
-  it("distinguishes ready vs not-ready", () => {
-    expect(createObservationFingerprint(baseObservation({ ready: true }))).not.toBe(
-      createObservationFingerprint(baseObservation({ ready: false })),
-    )
-  })
-
-  it("distinguishes hasWebGPU", () => {
-    expect(createObservationFingerprint(baseObservation({ hasWebGPU: true }))).not.toBe(
-      createObservationFingerprint(baseObservation({ hasWebGPU: false })),
-    )
-  })
-
-  it("distinguishes isMobile", () => {
-    expect(createObservationFingerprint(baseObservation({ isMobile: true }))).not.toBe(
-      createObservationFingerprint(baseObservation({ isMobile: false })),
-    )
-  })
-
-  it("distinguishes memory values", () => {
-    const a = createObservationFingerprint(baseObservation({ approxDeviceMemoryGiB: 8 }))
-    const b = createObservationFingerprint(baseObservation({ approxDeviceMemoryGiB: 16 }))
-    const c = createObservationFingerprint(baseObservation({ approxDeviceMemoryGiB: null }))
-
-    expect(a).not.toBe(b)
-    expect(a).not.toBe(c)
-    expect(b).not.toBe(c)
-  })
-
-  it("distinguishes crossOriginIsolated", () => {
-    expect(createObservationFingerprint(baseObservation({ crossOriginIsolated: true }))).not.toBe(
-      createObservationFingerprint(baseObservation({ crossOriginIsolated: false })),
-    )
-  })
-})
-
 describe("createProbeCacheKey", () => {
-  it("includes all 8 components", () => {
+  it("produces stable keys for identical inputs", () => {
+    const input = baseCacheKeyInput()
+
+    expect(createProbeCacheKey(input)).toBe(createProbeCacheKey(input))
+  })
+
+  it("includes all configuration components", () => {
     const input = baseCacheKeyInput()
     const key = createProbeCacheKey(input)
 
-    for (const value of Object.values(input)) {
-      expect(key).toContain(value)
-    }
+    expect(key).toContain(input.modelProfileId)
+    expect(key).toContain(input.modelProfileVersion)
+    expect(key).toContain(input.modelId)
+    expect(key).toContain(input.dtype)
+    expect(key).toContain(input.device)
+    expect(key).toContain(input.policyVersion)
+    expect(key).toContain(input.probeVersion)
   })
 
   it.each([
@@ -118,10 +83,25 @@ describe("createProbeCacheKey", () => {
     ["device", { device: "webgpu" }],
     ["policyVersion", { policyVersion: "v2" }],
     ["probeVersion", { probeVersion: "2" }],
-    ["observationFingerprint", { observationFingerprint: "not-ready|no-webgpu|mobile|memory:null|no-coi" }],
   ] as const)("produces a different key when %s changes", (_label, override) => {
     const baseline = createProbeCacheKey(baseCacheKeyInput())
     const changed = createProbeCacheKey(baseCacheKeyInput(override))
+
+    expect(changed).not.toBe(baseline)
+  })
+
+  it.each([
+    ["ready", { ready: false }],
+    ["hasWebGPU", { hasWebGPU: false }],
+    ["isMobile", { isMobile: true }],
+    ["approxDeviceMemoryGiB=8", { approxDeviceMemoryGiB: 8 }],
+    ["approxDeviceMemoryGiB=null", { approxDeviceMemoryGiB: null }],
+    ["crossOriginIsolated", { crossOriginIsolated: true }],
+  ] as const)("produces a different key when observation.%s changes", (_label, override) => {
+    const baseline = createProbeCacheKey(baseCacheKeyInput())
+    const changed = createProbeCacheKey(
+      baseCacheKeyInput({ observation: baseObservation(override) }),
+    )
 
     expect(changed).not.toBe(baseline)
   })

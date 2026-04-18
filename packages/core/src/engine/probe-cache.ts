@@ -14,22 +14,13 @@ export type ProbeCacheKeyInput = {
   readonly device: string
   readonly policyVersion: string
   readonly probeVersion: string
-  readonly observationFingerprint: string
+  readonly observation: CapabilityObservation
 }
 
 const probeCache = new Map<string, ProbeOutcome>()
 
-export function createObservationFingerprint(obs: CapabilityObservation): string {
-  return [
-    obs.ready ? "ready" : "not-ready",
-    obs.hasWebGPU ? "webgpu" : "no-webgpu",
-    obs.isMobile ? "mobile" : "desktop",
-    obs.approxDeviceMemoryGiB === null ? "memory:null" : `memory:${obs.approxDeviceMemoryGiB}`,
-    obs.crossOriginIsolated ? "coi" : "no-coi",
-  ].join("|")
-}
-
 export function createProbeCacheKey(input: ProbeCacheKeyInput): string {
+  const obs = input.observation
   return [
     input.modelProfileId,
     input.modelProfileVersion,
@@ -38,7 +29,11 @@ export function createProbeCacheKey(input: ProbeCacheKeyInput): string {
     input.device,
     input.policyVersion,
     input.probeVersion,
-    input.observationFingerprint,
+    obs.ready ? "ready" : "not-ready",
+    obs.hasWebGPU ? "webgpu" : "no-webgpu",
+    obs.isMobile ? "mobile" : "desktop",
+    obs.approxDeviceMemoryGiB === null ? "memory:null" : `memory:${obs.approxDeviceMemoryGiB}`,
+    obs.crossOriginIsolated ? "coi" : "no-coi",
   ].join("|")
 }
 

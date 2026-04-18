@@ -23,7 +23,6 @@ import {
 import { runAdapterSmokeProbe, PROBE_VERSION } from "../engine/probe.js"
 import {
   createProbeCacheKey,
-  createObservationFingerprint,
   getProbeCacheEntry,
   setProbeCacheEntry,
   type ProbeOutcome,
@@ -216,7 +215,7 @@ export function createBabulfish(config?: BabulfishConfig): BabulfishCore {
       device: resolvedConfig.device,
       policyVersion: resolvedConfig.enablement.policy,
       probeVersion: PROBE_VERSION,
-      observationFingerprint: createObservationFingerprint(capabilities),
+      observation: capabilities,
     })
   }
 
