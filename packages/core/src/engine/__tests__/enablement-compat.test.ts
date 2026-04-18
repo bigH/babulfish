@@ -21,73 +21,62 @@ function stateWith(
   }
 }
 
-const UNKNOWN: EnablementVerdict = {
-  outcome: "unknown",
-  resolvedDevice: null,
-  reason: "still computing",
-}
-const NEEDS_PROBE: EnablementVerdict = {
-  outcome: "needs-probe",
-  resolvedDevice: null,
-  reason: "probe could clear this up",
-}
-const DENIED: EnablementVerdict = {
-  outcome: "denied",
-  resolvedDevice: null,
-  reason: "WebGPU requested but not available",
-}
-const GPU: EnablementVerdict = {
-  outcome: "gpu-preferred",
-  resolvedDevice: "webgpu",
-  reason: "fits on WebGPU",
-}
-const WASM: EnablementVerdict = {
-  outcome: "wasm-only",
-  resolvedDevice: "wasm",
-  reason: "no WebGPU — using WASM",
-}
+const VERDICTS = {
+  unknown: {
+    outcome: "unknown",
+    resolvedDevice: null,
+    reason: "still computing",
+  },
+  "needs-probe": {
+    outcome: "needs-probe",
+    resolvedDevice: null,
+    reason: "probe could clear this up",
+  },
+  denied: {
+    outcome: "denied",
+    resolvedDevice: null,
+    reason: "WebGPU requested but not available",
+  },
+  "gpu-preferred": {
+    outcome: "gpu-preferred",
+    resolvedDevice: "webgpu",
+    reason: "fits on WebGPU",
+  },
+  "wasm-only": {
+    outcome: "wasm-only",
+    resolvedDevice: "wasm",
+    reason: "no WebGPU — using WASM",
+  },
+} as const satisfies Record<EnablementVerdict["outcome"], EnablementVerdict>
 
 describe("createEnablementCompat", () => {
-  it("marks capabilities ready only when assessment is terminal", () => {
-    expect(createEnablementCompat(stateWith(GPU, "idle")).capabilitiesReady).toBe(false)
-    expect(createEnablementCompat(stateWith(GPU, "assessing")).capabilitiesReady).toBe(false)
-    expect(createEnablementCompat(stateWith(GPU, "probing")).capabilitiesReady).toBe(false)
-    expect(createEnablementCompat(stateWith(GPU, "ready")).capabilitiesReady).toBe(true)
-    expect(createEnablementCompat(stateWith(GPU, "error")).capabilitiesReady).toBe(true)
+  it.each<[EnablementState["status"], boolean]>([
+    ["idle", false],
+    ["assessing", false],
+    ["probing", false],
+    ["ready", true],
+    ["error", true],
+  ])("marks capabilitiesReady=%s for status=%s only when terminal", (status, expected) => {
+    expect(createEnablementCompat(stateWith(VERDICTS["gpu-preferred"], status)).capabilitiesReady)
+      .toBe(expected)
   })
 
-  it("covers unknown outcome — no translate, no device", () => {
-    const compat = createEnablementCompat(stateWith(UNKNOWN))
-    expect(compat.canTranslate).toBe(false)
-    expect(compat.device).toBeNull()
-  })
-
-  it("covers needs-probe outcome — no translate, no device", () => {
-    const compat = createEnablementCompat(stateWith(NEEDS_PROBE))
-    expect(compat.canTranslate).toBe(false)
-    expect(compat.device).toBeNull()
-  })
-
-  it("covers denied outcome — no translate, no device", () => {
-    const compat = createEnablementCompat(stateWith(DENIED))
-    expect(compat.canTranslate).toBe(false)
-    expect(compat.device).toBeNull()
-  })
-
-  it("covers gpu-preferred outcome — translate on webgpu", () => {
-    const compat = createEnablementCompat(stateWith(GPU))
-    expect(compat.canTranslate).toBe(true)
-    expect(compat.device).toBe("webgpu")
-  })
-
-  it("covers wasm-only outcome — translate on wasm", () => {
-    const compat = createEnablementCompat(stateWith(WASM))
-    expect(compat.canTranslate).toBe(true)
-    expect(compat.device).toBe("wasm")
-  })
+  it.each<[EnablementVerdict["outcome"], boolean, EnablementVerdict["resolvedDevice"]]>([
+    ["unknown", false, null],
+    ["needs-probe", false, null],
+    ["denied", false, null],
+    ["gpu-preferred", true, "webgpu"],
+    ["wasm-only", true, "wasm"],
+  ])(
+    "maps outcome=%s to canTranslate=%s and device=%s",
+    (outcome, canTranslate, device) => {
+      const compat = createEnablementCompat(stateWith(VERDICTS[outcome]))
+      expect(compat.canTranslate).toBe(canTranslate)
+      expect(compat.device).toBe(device)
+    },
+  )
 
   it("returns a frozen compat so consumers cannot mutate it", () => {
-    const compat = createEnablementCompat(IDLE_ENABLEMENT_STATE)
-    expect(Object.isFrozen(compat)).toBe(true)
+    expect(Object.isFrozen(createEnablementCompat(IDLE_ENABLEMENT_STATE))).toBe(true)
   })
 })
