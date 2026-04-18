@@ -54,13 +54,12 @@ function segmentToHtml(segment: InlineSegment): string {
   }
 }
 
-function parseInlineMarkdownSegments(source: string): InlineSegment[] {
+export function parseInlineMarkdown(source: string): InlineSegment[] {
   const segments: InlineSegment[] = []
   let cursor = 0
-  let marker: InlineMarker | null
 
   while (cursor < source.length) {
-    marker = findMarkerAt(source, cursor)
+    const marker = findMarkerAt(source, cursor)
     if (!marker) {
       pushText(segments, source[cursor]!)
       cursor++
@@ -85,12 +84,15 @@ function parseInlineMarkdownSegments(source: string): InlineSegment[] {
   return segments
 }
 
-function isWellFormedMarkdownText(text: string): boolean {
+export function renderInlineMarkdownToHtml(source: string): string {
+  return parseInlineMarkdown(source).map(segmentToHtml).join("")
+}
+
+export function isWellFormedMarkdown(text: string): boolean {
   let cursor = 0
-  let marker: InlineMarker | null
 
   while (cursor < text.length) {
-    marker = findMarkerAt(text, cursor)
+    const marker = findMarkerAt(text, cursor)
     if (!marker) {
       cursor++
       continue
@@ -104,18 +106,6 @@ function isWellFormedMarkdownText(text: string): boolean {
   }
 
   return true
-}
-
-export function parseInlineMarkdown(source: string): InlineSegment[] {
-  return parseInlineMarkdownSegments(source)
-}
-
-export function renderInlineMarkdownToHtml(source: string): string {
-  return parseInlineMarkdown(source).map(segmentToHtml).join("")
-}
-
-export function isWellFormedMarkdown(text: string): boolean {
-  return isWellFormedMarkdownText(text)
 }
 
 export function stripInlineMarkdownMarkers(source: string): string {
