@@ -8,18 +8,9 @@ import {
 } from "../../__tests__/globals.test-utils.js"
 
 const originalGlobals = captureGlobalDescriptors()
-const originalCrossOriginIsolated = Object.getOwnPropertyDescriptor(
-  globalThis,
-  "crossOriginIsolated",
-)
 
 afterEach(() => {
   restoreGlobals(originalGlobals)
-  if (originalCrossOriginIsolated) {
-    Object.defineProperty(globalThis, "crossOriginIsolated", originalCrossOriginIsolated)
-  } else {
-    Reflect.deleteProperty(globalThis, "crossOriginIsolated")
-  }
 })
 
 describe("device resolution", () => {
@@ -46,10 +37,7 @@ describe("getTranslationCapabilities", () => {
   it("captures approximate device memory and cross-origin isolation when available", () => {
     setGlobal("window", { innerWidth: 1280 })
     setGlobal("navigator", { maxTouchPoints: 0, deviceMemory: 16 })
-    Object.defineProperty(globalThis, "crossOriginIsolated", {
-      value: true,
-      configurable: true,
-    })
+    setGlobal("crossOriginIsolated", true)
 
     expect(getBrowserEnvironmentSnapshot()).toEqual({
       hasWebGPU: false,
