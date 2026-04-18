@@ -2,7 +2,6 @@ import { createBabulfish, type BabulfishCore, type Snapshot } from "@babulfish/c
 
 import {
   resolveDemoRuntimeSelection,
-  toEngineSelection,
   type ResolvedDemoRuntimeSelection,
 } from "../../demo-shared/src/runtime-selection.js"
 
@@ -164,7 +163,7 @@ export class BabulfishTranslator extends HTMLElement {
     this.#teardownCore()
     this.#runtimeState = this.#readRuntimeState()
     this.#core = createBabulfish({
-      engine: toEngineSelection(this.#runtimeState.selection),
+      engine: this.#runtimeState.selection,
       dom: { root: shadow, roots: [".content"] },
     })
 

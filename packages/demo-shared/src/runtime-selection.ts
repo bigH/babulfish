@@ -154,16 +154,6 @@ export function createDemoRuntimeSelectionKey(selection: DemoRuntimeSelection): 
   return [selection.modelId, selection.dtype, selection.device].join("|")
 }
 
-export function toEngineSelection(
-  selection: DemoRuntimeSelection,
-): Pick<DemoRuntimeSelection, "device" | "modelId" | "dtype"> {
-  return {
-    device: selection.device,
-    modelId: selection.modelId,
-    dtype: selection.dtype,
-  }
-}
-
 export function resolveDemoRuntimeSelection(
   input: DemoRuntimeSelectionInput,
 ): ResolvedDemoRuntimeSelection {

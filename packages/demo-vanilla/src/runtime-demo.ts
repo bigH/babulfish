@@ -2,7 +2,6 @@ import { createBabulfish, type BabulfishConfig, type BabulfishCore } from "@babu
 
 import {
   resolveDemoRuntimeSelectionFromSearchParams,
-  toEngineSelection,
   type DemoRuntimeSelection,
   type ResolvedDemoRuntimeSelection,
 } from "../../demo-shared/src/runtime-selection.js"
@@ -32,7 +31,7 @@ const DEMO_DOM_CONFIG = {
 
 export function createVanillaDemoCore(selection: DemoRuntimeSelection): BabulfishCore {
   return createBabulfish({
-    engine: toEngineSelection(selection),
+    engine: selection,
     dom: DEMO_DOM_CONFIG,
   })
 }

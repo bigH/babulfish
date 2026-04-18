@@ -8,7 +8,6 @@ import {
   mergeDemoRuntimeSearchParams,
   createDemoRuntimeSelectionKey,
   mergeDemoRuntimeSelection,
-  toEngineSelection,
   type DemoRuntimeSelection,
   type ResolvedDemoRuntimeSelection,
 } from "../../demo-shared/src/runtime-selection.js"
@@ -48,7 +47,7 @@ export function DemoTranslatorShell({
   }, [initialRuntimeState])
 
   const providerConfig = {
-    engine: toEngineSelection(runtimeState.selection),
+    engine: runtimeState.selection,
     dom: DEMO_DOM_CONFIG,
   }
 
