@@ -1,28 +1,27 @@
 /** @experimental */
 
-import { createElement } from "react"
+import { createElement, useSyncExternalStore } from "react"
 import { render, act } from "@testing-library/react"
-import { useSyncExternalStore } from "react"
 import { TranslatorProvider } from "../provider.js"
 import { useTranslatorContext } from "../context.js"
 import { SSR_CORE } from "../ssr.js"
 import type { BabulfishConfig, BabulfishCore, Snapshot } from "@babulfish/core"
 import type { ConformanceDriver } from "@babulfish/core/testing"
 
-type BridgeState = {
-  core: BabulfishCore | null
-  contract: SnapshotContract | null
+type SnapshotDescriptor = PropertyDescriptor & { get: () => Snapshot }
+
+type Capture = {
+  core: BabulfishCore
+  descriptor: SnapshotDescriptor
+  getSnapshot: () => Snapshot
+  snapshot: Snapshot
 }
+
+type BridgeSlot = { capture: Capture | null }
 
 type DriverRegistration = {
   readonly unmount: () => void
   readonly restoreSnapshot: () => void
-}
-
-type SnapshotContract = {
-  descriptor: PropertyDescriptor & { get: () => Snapshot }
-  getSnapshot: () => Snapshot
-  snapshot: Snapshot | null
 }
 
 function createPinnedDomConfig(
@@ -37,42 +36,24 @@ function createPinnedDomConfig(
   }
 }
 
-function captureSnapshotContract(core: BabulfishCore): SnapshotContract {
+function captureCore(core: BabulfishCore): Capture {
   const rawDescriptor = Object.getOwnPropertyDescriptor(core, "snapshot")
   if (!rawDescriptor?.get) {
     throw new Error("React conformance driver requires core.snapshot to be a getter")
   }
-  const descriptor = rawDescriptor as PropertyDescriptor & { get: () => Snapshot }
+  const descriptor = rawDescriptor as SnapshotDescriptor
   const getSnapshot = descriptor.get.bind(core)
-  return {
-    descriptor,
-    getSnapshot,
-    snapshot: null,
-  }
+  return { core, descriptor, getSnapshot, snapshot: getSnapshot() }
 }
 
-function assertBridgeCaptured(
-  bridge: BridgeState,
-): asserts bridge is {
-  core: BabulfishCore
-  contract: SnapshotContract & { snapshot: Snapshot }
-} {
-  if (!bridge.core || !bridge.contract?.snapshot) {
-    throw new Error("React conformance driver failed to capture the provider core snapshot")
-  }
-}
-
-function SnapshotBridge({ bridge }: { bridge: BridgeState }): null {
+function SnapshotBridge({ slot }: { slot: BridgeSlot }): null {
   const core = useTranslatorContext()
-
-  bridge.contract ??= captureSnapshotContract(core)
-  const { getSnapshot } = bridge.contract
-
-  const snapshot = useSyncExternalStore(core.subscribe, getSnapshot, getSnapshot)
-
-  bridge.core = core
-  bridge.contract.snapshot = snapshot
-
+  const capture = (slot.capture ??= captureCore(core))
+  capture.snapshot = useSyncExternalStore(
+    core.subscribe,
+    capture.getSnapshot,
+    capture.getSnapshot,
+  )
   return null
 }
 
@@ -91,34 +72,32 @@ export function ReactConformanceDriver(): ConformanceDriver {
     async create(config?: BabulfishConfig) {
       if (typeof window === "undefined") return SSR_CORE
 
-      const bridge: BridgeState = {
-        core: null,
-        contract: null,
-      }
-      const domRoot = document
-
+      const slot: BridgeSlot = { capture: null }
       const mergedConfig: BabulfishConfig = {
         ...config,
-        dom: createPinnedDomConfig(domRoot, config?.dom),
+        dom: createPinnedDomConfig(document, config?.dom),
       }
 
       const { unmount } = await act(async () =>
         render(
           createElement(TranslatorProvider, {
             config: mergedConfig,
-            children: createElement(SnapshotBridge, { bridge }),
+            children: createElement(SnapshotBridge, { slot }),
           }),
         ),
       )
 
-      assertBridgeCaptured(bridge)
-      const { core, contract } = bridge
+      if (!slot.capture) {
+        throw new Error("React conformance driver failed to capture the provider core snapshot")
+      }
+      const capture = slot.capture
+      const { core, descriptor } = capture
 
       const restoreSnapshot = () =>
-        Object.defineProperty(core, "snapshot", contract.descriptor)
+        Object.defineProperty(core, "snapshot", descriptor)
 
       Object.defineProperty(core, "snapshot", {
-        get: () => contract.snapshot,
+        get: () => capture.snapshot,
         configurable: true,
         enumerable: true,
       })
