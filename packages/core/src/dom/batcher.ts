@@ -1,28 +1,23 @@
 // Text node batching — groups nodes into translation-sized batches,
-// splitting whenever the parent element changes.
+// splitting when a batch would exceed the char limit or cross a parent boundary.
 
 import type { TaggedTextNode } from "./walker.js"
 
 export const DEFAULT_BATCH_CHAR_LIMIT = 500
 
-function normalizeCharLimit(charLimit: number): number {
+function assertValidCharLimit(charLimit: number): void {
   if (!Number.isFinite(charLimit) || charLimit < 1) {
     throw new RangeError(
       `buildBatches: charLimit must be a positive finite number, got ${charLimit}`,
     )
   }
-  return charLimit
-}
-
-function crossesParentBoundary(a: Text, b: Text): boolean {
-  return a.parentElement !== b.parentElement
 }
 
 export function buildBatches(
   nodes: readonly TaggedTextNode[],
   charLimit: number,
 ): TaggedTextNode[][] {
-  const limit = normalizeCharLimit(charLimit)
+  assertValidCharLimit(charLimit)
   if (nodes.length === 0) return []
 
   const first = nodes[0]!
@@ -33,10 +28,10 @@ export function buildBatches(
   for (let i = 1; i < nodes.length; i++) {
     const prev = nodes[i - 1]!
     const curr = nodes[i]!
-    const wouldExceed = length + curr.text.length > limit
-    const boundary = crossesParentBoundary(prev.node, curr.node)
+    const wouldExceed = length + curr.text.length > charLimit
+    const crossesParent = prev.node.parentElement !== curr.node.parentElement
 
-    if (wouldExceed || boundary) {
+    if (wouldExceed || crossesParent) {
       batches.push(batch)
       batch = [curr]
       length = curr.text.length
@@ -46,7 +41,7 @@ export function buildBatches(
     }
   }
 
-  if (batch.length > 0) batches.push(batch)
+  batches.push(batch)
   return batches
 }
 
