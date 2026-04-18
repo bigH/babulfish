@@ -87,6 +87,29 @@ function formatResolvedRuntime(
   }
 }
 
+type TranslatorCapabilities = ReturnType<typeof useTranslator>["capabilities"]
+
+function formatYesNo(label: string, value: boolean): string {
+  return `${label}: ${value ? "yes" : "no"}`
+}
+
+function formatCapabilitiesText(
+  capabilities: TranslatorCapabilities,
+  ready: boolean,
+): string {
+  if (!ready) return CHECKING_LABEL
+  const memory =
+    capabilities.approxDeviceMemoryGiB === null
+      ? "memory: unknown"
+      : `memory: ~${capabilities.approxDeviceMemoryGiB} GiB`
+  return [
+    formatYesNo("webgpu", capabilities.hasWebGPU),
+    formatYesNo("mobile", capabilities.isMobile),
+    memory,
+    formatYesNo("coi", capabilities.crossOriginIsolated),
+  ].join(" / ")
+}
+
 function formatModelStatus(model: ModelState): string {
   switch (model.status) {
     case "idle":
@@ -138,16 +161,7 @@ export function ModelStatus() {
   const runtimeBusy = model.status === "downloading" || translating
   const canTranslatePage = modelReady && !translating
   const canRestorePage = modelReady && currentLanguage !== null && !translating
-  const capabilitiesText = !capabilitiesReady
-    ? CHECKING_LABEL
-    : [
-        capabilities.hasWebGPU ? "webgpu: yes" : "webgpu: no",
-        capabilities.isMobile ? "mobile: yes" : "mobile: no",
-        capabilities.approxDeviceMemoryGiB === null
-          ? "memory: unknown"
-          : `memory: ~${capabilities.approxDeviceMemoryGiB} GiB`,
-        capabilities.crossOriginIsolated ? "coi: yes" : "coi: no",
-      ].join(" / ")
+  const capabilitiesText = formatCapabilitiesText(capabilities, capabilitiesReady)
 
   const actionButtons: ReadonlyArray<ActionButton> = [
     {
