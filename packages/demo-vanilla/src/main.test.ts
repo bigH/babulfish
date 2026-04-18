@@ -2,47 +2,50 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
-type MockCore = {
-  readonly snapshot: {
-    readonly model: { readonly status: "idle" }
-    readonly translation: { readonly status: "idle" }
-    readonly currentLanguage: null
-    readonly capabilities: {
-      readonly ready: true
-      readonly hasWebGPU: boolean
-      readonly isMobile: boolean
-      readonly approxDeviceMemoryGiB: number
-      readonly crossOriginIsolated: boolean
-    }
-    readonly enablement: {
-      readonly status: "ready"
-      readonly modelProfile: null
-      readonly inference: null
-      readonly probe: {
-        readonly status: "not-run"
-        readonly kind: "adapter-smoke"
-        readonly cache: null
-        readonly note: string
-      }
-      readonly verdict: {
-        readonly outcome: "gpu-preferred" | "wasm-only"
-        readonly resolvedDevice: "webgpu" | "wasm"
-        readonly reason: string
-      }
-    }
+function createMockCore() {
+  return {
+    snapshot: {
+      model: { status: "idle" as const },
+      translation: { status: "idle" as const },
+      currentLanguage: null,
+      capabilities: {
+        ready: true as const,
+        hasWebGPU: true,
+        isMobile: false,
+        approxDeviceMemoryGiB: 16,
+        crossOriginIsolated: true,
+      },
+      enablement: {
+        status: "ready" as const,
+        modelProfile: null,
+        inference: null,
+        probe: { status: "not-run" as const, kind: "adapter-smoke" as const, cache: null, note: "" },
+        verdict: {
+          outcome: "wasm-only" as const,
+          resolvedDevice: "wasm" as const,
+          reason: "mock ready",
+        },
+      },
+    },
+    subscribe: vi.fn(() => vi.fn()),
+    loadModel: vi.fn(() => Promise.resolve()),
+    translateTo: vi.fn(() => Promise.resolve()),
+    translateText: vi.fn(() => Promise.resolve("translated")),
+    restore: vi.fn(),
+    abort: vi.fn(),
+    dispose: vi.fn(() => Promise.resolve()),
+    languages: [{ code: "es", label: "Spanish" }],
   }
-  readonly subscribe: ReturnType<typeof vi.fn>
-  readonly loadModel: ReturnType<typeof vi.fn>
-  readonly translateTo: ReturnType<typeof vi.fn>
-  readonly translateText: ReturnType<typeof vi.fn>
-  readonly restore: ReturnType<typeof vi.fn>
-  readonly abort: ReturnType<typeof vi.fn>
-  readonly dispose: ReturnType<typeof vi.fn>
-  readonly languages: readonly { readonly code: string; readonly label: string }[]
 }
 
+type MockCore = ReturnType<typeof createMockCore>
+
 const createdCores: MockCore[] = []
-const mockCreateBabulfish = vi.fn<(config?: unknown) => MockCore>()
+const mockCreateBabulfish = vi.fn((_config?: unknown): MockCore => {
+  const core = createMockCore()
+  createdCores.push(core)
+  return core
+})
 
 vi.mock("@babulfish/core", () => ({
   createBabulfish: (config?: unknown) => mockCreateBabulfish(config),
@@ -81,56 +84,11 @@ function setDom(): void {
   `
 }
 
-function createMockCore(config?: {
-  readonly engine?: { readonly device?: "auto" | "wasm" | "webgpu" }
-}): MockCore {
-  const resolvedDevice = config?.engine?.device === "webgpu" ? "webgpu" : "wasm"
-  const core: MockCore = {
-    snapshot: {
-      model: { status: "idle" as const },
-      translation: { status: "idle" as const },
-      currentLanguage: null,
-      capabilities: {
-        ready: true as const,
-        hasWebGPU: true,
-        isMobile: false,
-        approxDeviceMemoryGiB: 16,
-        crossOriginIsolated: true,
-      },
-      enablement: {
-        status: "ready" as const,
-        modelProfile: null,
-        inference: null,
-        probe: { status: "not-run" as const, kind: "adapter-smoke" as const, cache: null, note: "" },
-        verdict: {
-          outcome: resolvedDevice === "webgpu" ? "gpu-preferred" as const : "wasm-only" as const,
-          resolvedDevice: resolvedDevice as "webgpu" | "wasm",
-          reason: "mock ready",
-        },
-      },
-    },
-    subscribe: vi.fn(() => vi.fn()),
-    loadModel: vi.fn(() => Promise.resolve()),
-    translateTo: vi.fn(() => Promise.resolve()),
-    translateText: vi.fn(() => Promise.resolve("translated")),
-    restore: vi.fn(),
-    abort: vi.fn(),
-    dispose: vi.fn(() => Promise.resolve()),
-    languages: [{ code: "es", label: "Spanish" }],
-  }
-
-  createdCores.push(core)
-  return core
-}
-
 describe("demo-vanilla main", () => {
   beforeEach(() => {
     vi.resetModules()
     createdCores.length = 0
-    mockCreateBabulfish.mockReset()
-    mockCreateBabulfish.mockImplementation((config) =>
-      createMockCore(config as { readonly engine?: { readonly device?: "auto" | "wasm" | "webgpu" } }),
-    )
+    mockCreateBabulfish.mockClear()
     setDom()
   })
 
