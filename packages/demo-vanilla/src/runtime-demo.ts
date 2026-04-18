@@ -1,10 +1,6 @@
 import { createBabulfish, type BabulfishConfig, type BabulfishCore } from "@babulfish/core"
 
-import {
-  resolveDemoRuntimeSelectionFromSearchParams,
-  type DemoRuntimeSelection,
-  type ResolvedDemoRuntimeSelection,
-} from "../../demo-shared/src/runtime-selection.js"
+import type { DemoRuntimeSelection } from "../../demo-shared/src/runtime-selection.js"
 
 export const STRUCTURED_SOURCE = [
   "Structured text keeps inline emphasis, links, and line breaks",
@@ -34,16 +30,4 @@ export function createVanillaDemoCore(selection: DemoRuntimeSelection): Babulfis
     engine: selection,
     dom: DEMO_DOM_CONFIG,
   })
-}
-
-export function bootstrapVanillaDemoRuntime(searchParams: URLSearchParams): {
-  readonly runtimeState: ResolvedDemoRuntimeSelection
-  readonly core: BabulfishCore
-} {
-  const runtimeState = resolveDemoRuntimeSelectionFromSearchParams(searchParams)
-
-  return {
-    runtimeState,
-    core: createVanillaDemoCore(runtimeState.selection),
-  }
 }

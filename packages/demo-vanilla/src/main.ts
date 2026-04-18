@@ -6,6 +6,7 @@ import {
   getDeviceLabel,
   mergeDemoRuntimeSelection,
   mergeDemoRuntimeSearchParams,
+  resolveDemoRuntimeSelectionFromSearchParams,
   DEMO_MODEL_PRESETS,
   DEVICE_OPTIONS,
   DTYPE_OPTIONS,
@@ -14,7 +15,6 @@ import {
 } from "../../demo-shared/src/runtime-selection.js"
 import { enablementText } from "./enablement-text.js"
 import {
-  bootstrapVanillaDemoRuntime,
   createVanillaDemoCore,
   DEMO_ROOTS,
   STRUCTURED_SOURCE,
@@ -124,10 +124,8 @@ const statusDirection = requireElement("status-direction", HTMLElement)
 const translateTextBtn = requireElement("translate-text", HTMLButtonElement)
 const statusRawText = requireElement("status-raw-text", HTMLOutputElement)
 
-const initialDemoRuntime = bootstrapVanillaDemoRuntime(searchParams)
-
-let runtimeState = initialDemoRuntime.runtimeState
-let core = initialDemoRuntime.core
+let runtimeState = resolveDemoRuntimeSelectionFromSearchParams(searchParams)
+let core = createVanillaDemoCore(runtimeState.selection)
 let unsubscribe = core.subscribe(render)
 
 for (const option of DEVICE_OPTIONS) {
