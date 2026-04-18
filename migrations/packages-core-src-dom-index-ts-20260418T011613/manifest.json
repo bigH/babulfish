@@ -1,0 +1,41 @@
+{
+  "awaiting_human_review": true,
+  "created_at": "2026-04-18T01:16:13.253-07:00",
+  "current_phase": 0,
+  "last_touch": "2026-04-18T01:32:09.328-07:00",
+  "name": "packages-core-src-dom-index-ts-20260418T011613",
+  "phases": [
+    {
+      "done": false,
+      "file": "phase-1-structured-text.md",
+      "name": "structured-text",
+      "ready_when": "phase 1 prerequisites met"
+    },
+    {
+      "done": false,
+      "file": "phase-2-claims-and-phases.md",
+      "name": "claims-and-phases",
+      "ready_when": "phase 2 prerequisites met"
+    },
+    {
+      "done": false,
+      "file": "phase-3-linked-rich-attrs.md",
+      "name": "linked-rich-attrs",
+      "ready_when": "phase 3 prerequisites met"
+    },
+    {
+      "done": false,
+      "file": "phase-4-flatten-barrel.md",
+      "name": "flatten-barrel",
+      "ready_when": "phase 4 prerequisites met"
+    },
+    {
+      "done": false,
+      "file": "phase-5-trim-and-validate.md",
+      "name": "trim-and-validate",
+      "ready_when": "phase 5 prerequisites met"
+    }
+  ],
+  "status": "ready",
+  "wake_up_on": null
+}
