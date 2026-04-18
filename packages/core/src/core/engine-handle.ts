@@ -9,11 +9,7 @@ export type EngineHandle = {
   readonly key: string
 }
 
-const coreEngineIdentity = Symbol("core-engine-identity")
-
-type EngineIdentityCarrier = {
-  readonly [coreEngineIdentity]?: symbol
-}
+const coreEngineIdentity = new WeakMap<object, symbol>()
 
 const runtimePool = new Map<string, EngineHandle>()
 
@@ -41,16 +37,11 @@ export function acquireEngine(plan: ResolvedRuntimePlan): EngineHandle {
 }
 
 export function tagCoreWithEngineIdentity(core: object, id: symbol): void {
-  Object.defineProperty(core as EngineIdentityCarrier, coreEngineIdentity, {
-    value: id,
-    enumerable: false,
-    writable: false,
-    configurable: false,
-  })
+  coreEngineIdentity.set(core, id)
 }
 
 export function getEngineIdentityForCore(core: object): symbol | undefined {
-  return (core as EngineIdentityCarrier)[coreEngineIdentity]
+  return coreEngineIdentity.get(core)
 }
 
 export function __resetSharedEngine(): void {
