@@ -186,25 +186,17 @@ const assessmentCache = new Map<string, Promise<EnablementAssessment>>()
 
 function createUnknownProfile(
   config: NormalizedRuntimePreferenceConfig,
-  modelProfile: ModelProfileInput | "auto" | undefined,
+  override?: ModelProfileInput,
 ): ModelProfile {
   return Object.freeze({
-    id:
-      modelProfile !== "auto" && modelProfile?.id
-        ? modelProfile.id
-        : `custom:${config.modelId}:${config.dtype}`,
-    version:
-      modelProfile !== "auto" && modelProfile?.version
-        ? modelProfile.version
-        : "user-config",
+    id: override?.id ?? `custom:${config.modelId}:${config.dtype}`,
+    version: override?.version ?? "user-config",
     modelId: config.modelId,
     dtype: config.dtype,
-    estimatedWorkingSetGiB:
-      modelProfile !== "auto" ? modelProfile?.estimatedWorkingSetGiB ?? null : null,
+    estimatedWorkingSetGiB: override?.estimatedWorkingSetGiB ?? null,
     note:
-      modelProfile !== "auto" && modelProfile?.note
-        ? modelProfile.note
-        : "No shipped profile matched this model config, so Session 1 uses an unknown memory estimate.",
+      override?.note ??
+      "No shipped profile matched this model config, so Session 1 uses an unknown memory estimate.",
   })
 }
 
@@ -273,7 +265,7 @@ export function resolveModelProfile(config?: RuntimePreferenceConfig): ModelProf
       profile.modelId === resolvedConfig.modelId && profile.dtype === resolvedConfig.dtype,
   )
 
-  return builtin ?? createUnknownProfile(resolvedConfig, requestedProfile)
+  return builtin ?? createUnknownProfile(resolvedConfig)
 }
 
 export function inferModelFit(
