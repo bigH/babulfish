@@ -123,6 +123,8 @@ export class BabulfishTranslator extends HTMLElement {
     }
 
     this.#mountCore(shadow)
+
+    if (needsInitialRender) this.#populateLanguages()
   }
 
   disconnectedCallback(): void {
@@ -166,15 +168,6 @@ export class BabulfishTranslator extends HTMLElement {
       dom: { root: shadow, roots: [".content"] },
     })
 
-    if (this.#els && this.#els.select.options.length === 1) {
-      for (const lang of this.#core.languages) {
-        const opt = document.createElement("option")
-        opt.value = lang.code
-        opt.textContent = lang.label
-        this.#els.select.appendChild(opt)
-      }
-    }
-
     this.#unsubscribe = this.#core.subscribe((snapshot) => {
       this.dispatchEvent(
         new CustomEvent("babulfish-status", {
@@ -187,6 +180,16 @@ export class BabulfishTranslator extends HTMLElement {
     })
 
     this.#render(this.#core.snapshot)
+  }
+
+  #populateLanguages(): void {
+    if (!this.#els || !this.#core) return
+    for (const lang of this.#core.languages) {
+      const opt = document.createElement("option")
+      opt.value = lang.code
+      opt.textContent = lang.label
+      this.#els.select.appendChild(opt)
+    }
   }
 
   #teardownCore(): void {
