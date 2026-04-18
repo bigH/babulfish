@@ -5,19 +5,19 @@ import {
   defaultShouldSkip,
 } from "../walker.js"
 
-describe("collectTextNodes", () => {
+describe("buildSkipTags", () => {
   it("normalizes extra skip tags to uppercase", () => {
     const tags = buildSkipTags(["custom-skip", "Code"])
     expect(tags.has("CUSTOM-SKIP")).toBe(true)
     expect(tags.has("CODE")).toBe(true)
   })
 
-  it("returns an isolated default skip-tag set", () => {
-    const first = buildSkipTags()
-    const second = buildSkipTags()
-    expect(second).not.toBe(first)
+  it("returns a fresh set on each call so callers cannot mutate defaults", () => {
+    expect(buildSkipTags()).not.toBe(buildSkipTags())
   })
+})
 
+describe("collectTextNodes", () => {
   it("skips text nodes inside configured selectors", () => {
     const root = document.createElement("div")
     const normal = document.createElement("p")
