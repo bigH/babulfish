@@ -6,8 +6,13 @@ import { describe, expect, it } from "vitest"
 
 import viteConfig from "../vite.config"
 
-const packageDir = path.dirname(fileURLToPath(import.meta.url))
-const coreSrc = path.resolve(packageDir, "..", "..", "core", "src")
+const coreSrc = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../core/src")
+
+const expectedAliases = {
+  "@babulfish/core": path.resolve(coreSrc, "index.ts"),
+  "@babulfish/core/engine": path.resolve(coreSrc, "engine", "index.ts"),
+  "@babulfish/core/dom": path.resolve(coreSrc, "dom", "index.ts"),
+}
 
 const expectedHeaders = {
   "Cross-Origin-Opener-Policy": "same-origin",
@@ -16,11 +21,7 @@ const expectedHeaders = {
 
 describe("demo-webcomponent vite config", () => {
   it("keeps source aliases pointed at core source entrypoints", () => {
-    expect(viteConfig.resolve?.alias).toMatchObject({
-      "@babulfish/core": path.resolve(coreSrc, "index.ts"),
-      "@babulfish/core/engine": path.resolve(coreSrc, "engine", "index.ts"),
-      "@babulfish/core/dom": path.resolve(coreSrc, "dom", "index.ts"),
-    })
+    expect(viteConfig.resolve?.alias).toMatchObject(expectedAliases)
   })
 
   it("applies the same cross-origin isolation headers to dev and preview", () => {
