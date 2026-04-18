@@ -444,10 +444,7 @@ export function createBabulfish(config?: BabulfishConfig): BabulfishCore {
     })
   }
 
-  let domTranslator: DOMTranslator | null = null
-  if (config?.dom) {
-    domTranslator = buildDomTranslator()
-  }
+  const domTranslator: DOMTranslator | null = buildDomTranslator()
 
   function getDomTranslator(rootOverride?: ParentNode | Document): DOMTranslator | null {
     if (!config?.dom) return null

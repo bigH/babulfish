@@ -4,7 +4,6 @@ export {
 } from "../runtime-plan.js"
 export {
   __resetSharedEngine as __resetEngineForTests,
-  __resetSharedEngine as __resetRuntimePoolForTests,
   getEngineIdentityForCore as getEngineIdentity,
 } from "../../core/engine-handle.js"
 export {
