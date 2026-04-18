@@ -3,6 +3,8 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 
 import {
   appendStatusEntry,
+  formatRequestedDType,
+  formatRequestedDevice,
   observeHostDocument,
   requireButton,
   requireEventLog,
@@ -197,6 +199,26 @@ describe("demo main helpers", () => {
 
     expect(first.getAttribute("target-lang")).toBe("ar")
     expect(second.getAttribute("target-lang")).toBe("ar")
+  })
+
+  it("formats a missing requested device as the preset default label", () => {
+    expect(formatRequestedDevice(null, "auto")).toBe("Auto (preset default)")
+    expect(formatRequestedDevice(null, "wasm")).toBe("WASM (preset default)")
+  })
+
+  it("formats a known requested device with label and raw value", () => {
+    expect(formatRequestedDevice("webgpu", "auto")).toBe("WebGPU (webgpu)")
+    expect(formatRequestedDevice("wasm", "auto")).toBe("WASM (wasm)")
+  })
+
+  it("returns the raw requested device when it is not a known option", () => {
+    expect(formatRequestedDevice("cuda", "auto")).toBe("cuda")
+  })
+
+  it("formats requested dtype analogously to device", () => {
+    expect(formatRequestedDType(null, "q4")).toBe("Q4 (preset default)")
+    expect(formatRequestedDType("fp16", "q4")).toBe("FP16 (fp16)")
+    expect(formatRequestedDType("int2", "q4")).toBe("int2")
   })
 
   it("delegates restore() for every translator host element", () => {

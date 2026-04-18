@@ -1,7 +1,39 @@
 import type { Snapshot } from "@babulfish/core"
 
+import {
+  DEVICE_OPTIONS,
+  DTYPE_OPTIONS,
+  getDTypeLabel,
+  getDeviceLabel,
+  type DemoRuntimeSelection,
+} from "../../demo-shared/src/runtime-selection.js"
+
 export type TranslatorHostElement = HTMLElement & {
   restore(): void
+}
+
+function formatRequestedRuntimeValue(
+  requested: string | null,
+  options: readonly { readonly value: string; readonly label: string }[],
+  presetDefaultLabel: string,
+): string {
+  if (!requested) return `${presetDefaultLabel} (preset default)`
+  const match = options.find((opt) => opt.value === requested)
+  return match ? `${match.label} (${requested})` : requested
+}
+
+export function formatRequestedDevice(
+  requested: string | null,
+  presetDefault: DemoRuntimeSelection["device"],
+): string {
+  return formatRequestedRuntimeValue(requested, DEVICE_OPTIONS, getDeviceLabel(presetDefault))
+}
+
+export function formatRequestedDType(
+  requested: string | null,
+  presetDefault: DemoRuntimeSelection["dtype"],
+): string {
+  return formatRequestedRuntimeValue(requested, DTYPE_OPTIONS, getDTypeLabel(presetDefault))
 }
 
 export function requireButton(doc: Document, id: string): HTMLButtonElement {

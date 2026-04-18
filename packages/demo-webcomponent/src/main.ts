@@ -3,6 +3,8 @@ import type { Snapshot } from "@babulfish/core"
 
 import {
   appendStatusEntry,
+  formatRequestedDType,
+  formatRequestedDevice,
   observeHostDocument,
   requireButton,
   requireEventLog,
@@ -73,26 +75,6 @@ const restoreButton = requireButton(document, "host-restore")
 let runtimeState = readRuntimeState()
 const latestSnapshots = new Map<number, Snapshot>()
 
-function formatRequestedDevice(requested: string | null): string {
-  if (!requested) {
-    return `${getDeviceLabel(runtimeState.preset.defaultDevice)} (preset default)`
-  }
-
-  return requested === "auto" || requested === "wasm" || requested === "webgpu"
-    ? `${getDeviceLabel(requested)} (${requested})`
-    : requested
-}
-
-function formatRequestedDType(requested: string | null): string {
-  if (!requested) {
-    return `${getDTypeLabel(runtimeState.preset.defaultDType)} (preset default)`
-  }
-
-  return requested === "q4" || requested === "q8" || requested === "fp16" || requested === "fp32"
-    ? `${getDTypeLabel(requested)} (${requested})`
-    : requested
-}
-
 for (const option of DEVICE_OPTIONS) {
   const el = document.createElement("option")
   el.value = option.value
@@ -161,7 +143,7 @@ function renderRuntimeStatus(): void {
   })
 
   runtimeStatus.textContent = [
-    `Requested: ${runtimeState.requested.modelId ?? `${runtimeState.preset.modelId} (preset default)`} / ${formatRequestedDType(runtimeState.requested.dtype)} / ${formatRequestedDevice(runtimeState.requested.device)}.`,
+    `Requested: ${runtimeState.requested.modelId ?? `${runtimeState.preset.modelId} (preset default)`} / ${formatRequestedDType(runtimeState.requested.dtype, runtimeState.preset.defaultDType)} / ${formatRequestedDevice(runtimeState.requested.device, runtimeState.preset.defaultDevice)}.`,
     `Effective: ${runtimeState.selection.modelId} / ${runtimeState.selection.dtype} / ${runtimeState.selection.device}.`,
     `Resolved: ${resolved.join(" | ")}.`,
   ].join(" ")
