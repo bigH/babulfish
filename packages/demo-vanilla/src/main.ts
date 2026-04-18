@@ -1,4 +1,4 @@
-import type { BabulfishCore, Snapshot } from "@babulfish/core"
+import type { Snapshot } from "@babulfish/core"
 import "@babulfish/styles/css"
 
 import {

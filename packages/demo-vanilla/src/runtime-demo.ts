@@ -12,14 +12,12 @@ export const STRUCTURED_SOURCE = [
   "while code stays opaque.",
 ].join("\n")
 
-export const STRUCTURED_DOM_SUFFIX = " [dom-structured]"
-
 export const DEMO_ROOTS = [
   { label: "copy", selector: "[data-demo-copy]" },
   { label: "aside", selector: "[data-demo-aside]" },
 ] as const
 
-export const DEMO_DOM_CONFIG = {
+const DEMO_DOM_CONFIG = {
   roots: DEMO_ROOTS.map(({ selector }) => selector),
   structuredText: { selector: "[data-structured]" },
   preserve: {
@@ -28,43 +26,25 @@ export const DEMO_DOM_CONFIG = {
   shouldSkip: (text, defaultSkip) => defaultSkip(text) || text.startsWith("SKU-"),
   outputTransform: (translated, context) =>
     context.kind === "structuredText"
-      ? `${translated}${STRUCTURED_DOM_SUFFIX}`
+      ? `${translated} [dom-structured]`
       : translated,
 } satisfies NonNullable<BabulfishConfig["dom"]>
 
-export type DemoCoreFactory = (config: BabulfishConfig) => BabulfishCore
-
-export function createRuntimeStateFromSearchParams(
-  searchParams: URLSearchParams,
-): ResolvedDemoRuntimeSelection {
-  return resolveDemoRuntimeSelectionFromSearchParams(searchParams)
-}
-
-export function createVanillaDemoCore(
-  selection: DemoRuntimeSelection,
-  createCore: DemoCoreFactory = createBabulfish,
-): BabulfishCore {
-  return createCore({
+export function createVanillaDemoCore(selection: DemoRuntimeSelection): BabulfishCore {
+  return createBabulfish({
     engine: toEngineSelection(selection),
     dom: DEMO_DOM_CONFIG,
   })
 }
 
-export function bootstrapVanillaDemoRuntime(
-  searchParams: URLSearchParams,
-  createCore: DemoCoreFactory = createBabulfish,
-): {
+export function bootstrapVanillaDemoRuntime(searchParams: URLSearchParams): {
   readonly runtimeState: ResolvedDemoRuntimeSelection
   readonly core: BabulfishCore
 } {
-  const runtimeState = createRuntimeStateFromSearchParams(searchParams)
+  const runtimeState = resolveDemoRuntimeSelectionFromSearchParams(searchParams)
 
   return {
     runtimeState,
-    core: createVanillaDemoCore(runtimeState.selection, createCore),
+    core: createVanillaDemoCore(runtimeState.selection),
   }
-}
-
-export function getLoadModeLabel(autoload: boolean): string {
-  return autoload ? "Autoload" : "Manual load"
 }
