@@ -1,13 +1,9 @@
 export type Language = { readonly label: string; readonly code: string }
 
-function freezeLanguage(language: Language): Language {
-  return Object.freeze({ ...language })
-}
-
 export function createReadonlyLanguageList(
   languages: readonly Language[],
 ): ReadonlyArray<Language> {
-  return Object.freeze(languages.map(freezeLanguage))
+  return Object.freeze(languages.map((language) => Object.freeze({ ...language })))
 }
 
 export const DEFAULT_LANGUAGES: ReadonlyArray<Language> = createReadonlyLanguageList([
