@@ -928,39 +928,27 @@ export function createDOMTranslator(config: DOMTranslatorConfig): DOMTranslator 
         config.hooks?.onProgress?.(done, total)
       }
 
-      // If phases configured, partition work; otherwise treat as single phase
-      if (config.phases && config.phases.length > 0) {
-        const phaseRoots = config.phases.map((sel) =>
-          Array.from(scope.querySelectorAll(sel)),
-        )
-        const phaseCount = config.phases.length + 1
-        const phases: PhaseWork[] = Array.from({ length: phaseCount }, () => ({
-          visible: [],
-          attrs: [],
-        }))
+      const phaseSelectors = config.phases ?? []
+      const phaseRoots = phaseSelectors.map((sel) =>
+        Array.from(scope.querySelectorAll(sel)),
+      )
+      const phases: PhaseWork[] = Array.from(
+        { length: phaseSelectors.length + 1 },
+        () => ({ visible: [], attrs: [] }),
+      )
 
-        for (const work of allVisible) {
-          phases[assignPhase(work.anchor, phaseRoots)]!.visible.push(work)
-        }
-        for (const attr of allAttrs) {
-          phases[assignPhase(attr.el, phaseRoots)]!.attrs.push(attr)
-        }
+      for (const work of allVisible) {
+        phases[assignPhase(work.anchor, phaseRoots)]!.visible.push(work)
+      }
+      for (const attr of allAttrs) {
+        phases[assignPhase(attr.el, phaseRoots)]!.attrs.push(attr)
+      }
 
-        // Linked elements first (like section titles)
-        await translateLinked(linkedGroups, targetLang, signal, progress)
+      // Linked elements first (like section titles)
+      await translateLinked(linkedGroups, targetLang, signal, progress)
 
-        for (const phase of phases) {
-          await translatePhaseWork(phase, targetLang, signal, progress)
-        }
-      } else {
-        // No phases: linked first, then everything in one pass
-        await translateLinked(linkedGroups, targetLang, signal, progress)
-
-        const singlePhase: PhaseWork = {
-          visible: allVisible,
-          attrs: allAttrs,
-        }
-        await translatePhaseWork(singlePhase, targetLang, signal, progress)
+      for (const phase of phases) {
+        await translatePhaseWork(phase, targetLang, signal, progress)
       }
     } finally {
       translating = false
