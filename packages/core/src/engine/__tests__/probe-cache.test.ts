@@ -83,25 +83,15 @@ describe("createProbeCacheKey", () => {
     ["device", { device: "webgpu" }],
     ["policyVersion", { policyVersion: "v2" }],
     ["probeVersion", { probeVersion: "2" }],
+    ["observation.ready", { observation: baseObservation({ ready: false }) }],
+    ["observation.hasWebGPU", { observation: baseObservation({ hasWebGPU: false }) }],
+    ["observation.isMobile", { observation: baseObservation({ isMobile: true }) }],
+    ["observation.approxDeviceMemoryGiB=8", { observation: baseObservation({ approxDeviceMemoryGiB: 8 }) }],
+    ["observation.approxDeviceMemoryGiB=null", { observation: baseObservation({ approxDeviceMemoryGiB: null }) }],
+    ["observation.crossOriginIsolated", { observation: baseObservation({ crossOriginIsolated: true }) }],
   ] as const)("produces a different key when %s changes", (_label, override) => {
     const baseline = createProbeCacheKey(baseCacheKeyInput())
     const changed = createProbeCacheKey(baseCacheKeyInput(override))
-
-    expect(changed).not.toBe(baseline)
-  })
-
-  it.each([
-    ["ready", { ready: false }],
-    ["hasWebGPU", { hasWebGPU: false }],
-    ["isMobile", { isMobile: true }],
-    ["approxDeviceMemoryGiB=8", { approxDeviceMemoryGiB: 8 }],
-    ["approxDeviceMemoryGiB=null", { approxDeviceMemoryGiB: null }],
-    ["crossOriginIsolated", { crossOriginIsolated: true }],
-  ] as const)("produces a different key when observation.%s changes", (_label, override) => {
-    const baseline = createProbeCacheKey(baseCacheKeyInput())
-    const changed = createProbeCacheKey(
-      baseCacheKeyInput({ observation: baseObservation(override) }),
-    )
 
     expect(changed).not.toBe(baseline)
   })
@@ -119,8 +109,8 @@ describe("probe cache get/set", () => {
     expect(getProbeCacheEntry(key)).toEqual(passedOutcome)
   })
 
-  it("deduplicates on same key", () => {
-    const key = "dedup-key"
+  it("overwrites on same key", () => {
+    const key = "overwrite-key"
     setProbeCacheEntry(key, passedOutcome)
     setProbeCacheEntry(key, failedOutcome)
 
