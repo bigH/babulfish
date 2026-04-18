@@ -38,23 +38,14 @@ function createMockResult(
   ]
 }
 
-function createMockGenerator() {
-  return vi.fn(async () => [{ generated_text: createMockResult() }])
-}
+type Generator = Parameters<typeof wrapGeneratorAsPipeline>[0]
 
-function setupPipelineMock(generate = createMockGenerator()) {
-  const pipeline = wrapGeneratorAsPipeline(
-    generate as Parameters<typeof wrapGeneratorAsPipeline>[0],
-  )
+function setupPipelineMock(
+  generate = vi.fn(async () => [{ generated_text: createMockResult() }]),
+) {
+  const pipeline = wrapGeneratorAsPipeline(generate as unknown as Generator)
   mockLoadPipeline.mockResolvedValue(pipeline)
   return { generate, pipeline }
-}
-
-function setupFailingPipelineMock(error: string): void {
-  const generate = vi.fn(async () => {
-    throw new Error(error)
-  })
-  setupPipelineMock(generate)
 }
 
 function snapshots(core: ReturnType<typeof createBabulfish>) {
@@ -366,7 +357,9 @@ describe("4.3 — cancellation", () => {
   })
 
   it("translateTo failure resets translation status to idle", async () => {
-    setupFailingPipelineMock("translation failed")
+    setupPipelineMock(vi.fn(async () => {
+      throw new Error("translation failed")
+    }))
 
     const root = createAppRoot()
 
