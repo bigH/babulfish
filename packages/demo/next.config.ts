@@ -4,30 +4,12 @@ import { fileURLToPath } from "node:url"
 import type { NextConfig } from "next"
 
 const demoDir = path.dirname(fileURLToPath(import.meta.url))
-const demoSourcePackages = {
-  core: {
-    packageName: "@babulfish/core",
-    srcDir: path.resolve(demoDir, "../core/src"),
-  },
-  react: {
-    packageName: "@babulfish/react",
-    srcDir: path.resolve(demoDir, "../react/src"),
-  },
-} as const
-const transpilePackages = Object.values(demoSourcePackages).map(
-  ({ packageName }) => packageName,
-)
+const coreSrcDir = path.resolve(demoDir, "../core/src")
+const reactSrcDir = path.resolve(demoDir, "../react/src")
 const demoSourceAliases = {
-  ...Object.fromEntries(
-    Object.values(demoSourcePackages).map(({ packageName, srcDir }) => [
-      `${packageName}$`,
-      path.join(srcDir, "index.ts"),
-    ]),
-  ),
-  "@babulfish/core/engine$": path.join(
-    demoSourcePackages.core.srcDir,
-    "engine/index.ts",
-  ),
+  "@babulfish/core$": path.join(coreSrcDir, "index.ts"),
+  "@babulfish/core/engine$": path.join(coreSrcDir, "engine/index.ts"),
+  "@babulfish/react$": path.join(reactSrcDir, "index.ts"),
 } satisfies Record<string, string>
 
 const config: NextConfig = {
@@ -53,16 +35,15 @@ const config: NextConfig = {
       },
     ]
   },
-  transpilePackages,
+  transpilePackages: ["@babulfish/core", "@babulfish/react"],
   webpack: (webpackConfig) => {
     webpackConfig.resolve ??= {}
-    webpackConfig.resolve.alias ??= {}
     webpackConfig.resolve.extensionAlias = {
       ...(webpackConfig.resolve.extensionAlias ?? {}),
       ".js": [".ts", ".tsx", ".js"],
     }
     webpackConfig.resolve.alias = {
-      ...webpackConfig.resolve.alias,
+      ...(webpackConfig.resolve.alias ?? {}),
       ...demoSourceAliases,
     }
 
