@@ -13,7 +13,22 @@ afterEach(() => {
   restoreGlobals(originalGlobals)
 })
 
-describe("device resolution", () => {
+describe("getBrowserEnvironmentSnapshot", () => {
+  it("captures approximate device memory and cross-origin isolation when available", () => {
+    setGlobal("window", { innerWidth: 1280 })
+    setGlobal("navigator", { maxTouchPoints: 0, deviceMemory: 16 })
+    setGlobal("crossOriginIsolated", true)
+
+    expect(getBrowserEnvironmentSnapshot()).toEqual({
+      hasWebGPU: false,
+      isMobile: false,
+      approxDeviceMemoryGiB: 16,
+      crossOriginIsolated: true,
+    })
+  })
+})
+
+describe("getTranslationCapabilities", () => {
   it("keeps explicit webgpu preference in the capability snapshot", () => {
     expect(getTranslationCapabilities("webgpu").device).toBe("webgpu")
   })
@@ -30,21 +45,6 @@ describe("device resolution", () => {
   it("uses webgpu in auto mode when WebGPU is available", () => {
     setGlobal("navigator", { gpu: {} })
     expect(getTranslationCapabilities("auto").device).toBe("webgpu")
-  })
-})
-
-describe("getTranslationCapabilities", () => {
-  it("captures approximate device memory and cross-origin isolation when available", () => {
-    setGlobal("window", { innerWidth: 1280 })
-    setGlobal("navigator", { maxTouchPoints: 0, deviceMemory: 16 })
-    setGlobal("crossOriginIsolated", true)
-
-    expect(getBrowserEnvironmentSnapshot()).toEqual({
-      hasWebGPU: false,
-      isMobile: false,
-      approxDeviceMemoryGiB: 16,
-      crossOriginIsolated: true,
-    })
   })
 
   it("reports desktop WASM fallback when WebGPU is unavailable", () => {
