@@ -5,10 +5,8 @@ import {
   type Snapshot,
 } from "@babulfish/core"
 
-const SSR_LANGUAGES = Object.freeze<Language[]>([])
 const noop = () => {}
 const resolveVoid = (): Promise<void> => Promise.resolve()
-const resolveEmptyString = (): Promise<string> => Promise.resolve("")
 
 const SSR_SNAPSHOT: Snapshot = Object.freeze({
   model: Object.freeze({ status: "idle" as const }),
@@ -25,15 +23,13 @@ const SSR_SNAPSHOT: Snapshot = Object.freeze({
 })
 
 export const SSR_CORE: BabulfishCore = {
-  get snapshot() {
-    return SSR_SNAPSHOT
-  },
+  snapshot: SSR_SNAPSHOT,
   subscribe: () => noop,
   loadModel: resolveVoid,
   translateTo: resolveVoid,
-  translateText: resolveEmptyString,
+  translateText: () => Promise.resolve(""),
   restore: noop,
   abort: noop,
   dispose: resolveVoid,
-  languages: SSR_LANGUAGES,
+  languages: Object.freeze<Language[]>([]),
 }
