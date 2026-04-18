@@ -268,24 +268,6 @@ function assignPhase(node: Node, phaseRoots: Element[][]): number {
   return phaseRoots.length
 }
 
-function notifyStart(
-  target: Text | Element,
-  hook?: (element: Element) => void,
-): void {
-  if (!hook) return
-  const el = target instanceof Element ? target : target.parentElement
-  if (el) hook(el)
-}
-
-function notifyEnd(
-  target: Text | Element,
-  hook?: (element: Element) => void,
-): void {
-  if (!hook) return
-  const el = target instanceof Element ? target : target.parentElement
-  if (el) hook(el)
-}
-
 // ---------------------------------------------------------------------------
 // Factory
 // ---------------------------------------------------------------------------
@@ -439,7 +421,7 @@ export function createDOMTranslator(config: DOMTranslatorConfig): DOMTranslator 
       }
 
       for (const { el } of writableTargets) {
-        notifyStart(el, config.hooks?.onTranslateStart)
+        config.hooks?.onTranslateStart?.(el)
       }
 
       const translated = await config.translate(sourceText, targetLang)
@@ -457,7 +439,7 @@ export function createDOMTranslator(config: DOMTranslatorConfig): DOMTranslator 
           originalLinkedSources.get(key) ?? textNode.textContent ?? "",
         )
         textNode.textContent = transformed
-        notifyEnd(el, config.hooks?.onTranslateEnd)
+        config.hooks?.onTranslateEnd?.(el)
       }
 
       onUnit()
@@ -793,7 +775,7 @@ export function createDOMTranslator(config: DOMTranslatorConfig): DOMTranslator 
       originalRichElements.set(el, el.innerHTML) // eslint-disable-line no-unsanitized/property
     }
 
-    notifyStart(el, config.hooks?.onTranslateStart)
+    config.hooks?.onTranslateStart?.(el)
 
     const translated = await translatePreservingMatches(source, targetLang, signal)
     if (translated == null) return
@@ -813,7 +795,7 @@ export function createDOMTranslator(config: DOMTranslatorConfig): DOMTranslator 
       el.textContent = stripInlineMarkdownMarkers(transformed)
     }
 
-    notifyEnd(el, config.hooks?.onTranslateEnd)
+    config.hooks?.onTranslateEnd?.(el)
   }
 
   async function translateStructuredUnit(
@@ -821,7 +803,7 @@ export function createDOMTranslator(config: DOMTranslatorConfig): DOMTranslator 
     targetLang: string,
     signal: AbortSignal,
   ): Promise<void> {
-    notifyStart(unit.root, config.hooks?.onTranslateStart)
+    config.hooks?.onTranslateStart?.(unit.root)
 
     const translated = await translatePreservingMatches(
       unit.serialized,
@@ -841,7 +823,7 @@ export function createDOMTranslator(config: DOMTranslatorConfig): DOMTranslator 
       for (const { node, slotId } of unit.textSlots) {
         node.textContent = exactCommit.values.get(slotId) ?? ""
       }
-      notifyEnd(unit.root, config.hooks?.onTranslateEnd)
+      config.hooks?.onTranslateEnd?.(unit.root)
       return
     }
 
@@ -862,7 +844,7 @@ export function createDOMTranslator(config: DOMTranslatorConfig): DOMTranslator 
     const fallbackTargets = collectStructuredFallbackTargets(unit.root)
     applyTranslation(fallbackTargets, transformedFallback)
 
-    notifyEnd(unit.root, config.hooks?.onTranslateEnd)
+    config.hooks?.onTranslateEnd?.(unit.root)
   }
 
   // -------------------------------------------------------------------------
@@ -998,7 +980,7 @@ export function createDOMTranslator(config: DOMTranslatorConfig): DOMTranslator 
       } else if (work.kind === "structuredText") {
         await translateStructuredUnit(work.unit, targetLang, signal)
       } else {
-        notifyStart(work.parent, config.hooks?.onTranslateStart)
+        config.hooks?.onTranslateStart?.(work.parent)
 
         const chunk = work.batch.map((t) => t.text).join("\n")
         const result = await config.translate(chunk, targetLang)
@@ -1011,7 +993,7 @@ export function createDOMTranslator(config: DOMTranslatorConfig): DOMTranslator 
 
         applyTranslation(work.batch, transformed)
 
-        notifyEnd(work.parent, config.hooks?.onTranslateEnd)
+        config.hooks?.onTranslateEnd?.(work.parent)
       }
 
       if (signal.aborted) return
