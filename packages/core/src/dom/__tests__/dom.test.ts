@@ -97,10 +97,10 @@ function setUpRichSpan(
 function setUpRichTextMain(
   mdSource: string,
   staticHtml: string,
-): { main: HTMLElement; span: HTMLSpanElement } {
+): HTMLSpanElement {
   const span = setUpRichSpan(mdSource, staticHtml)
-  const main = setUpMain([span])
-  return { main, span }
+  setUpMain([span])
+  return span
 }
 
 function setUpHtmlMain(html: string): HTMLElement {
@@ -115,7 +115,7 @@ function setUpHtmlMain(html: string): HTMLElement {
 function setUpLinkedMain(
   key: string,
   [firstText, secondText]: readonly [string, string],
-): { main: HTMLElement; first: HTMLSpanElement; second: HTMLSpanElement } {
+): readonly [HTMLSpanElement, HTMLSpanElement] {
   const first = createElement("span", {
     text: firstText,
     attrs: { "data-section-title": key },
@@ -124,8 +124,8 @@ function setUpLinkedMain(
     text: secondText,
     attrs: { "data-section-title": key },
   })
-  const main = setUpMain([first, second])
-  return { main, first, second }
+  setUpMain([first, second])
+  return [first, second]
 }
 
 function textContents(root: Element): string[] {
@@ -581,7 +581,7 @@ describe("DOM translator", () => {
   // 15. Rich text (markdown) translation
   // -----------------------------------------------------------------------
   it("translates rich text elements as full markdown strings", async () => {
-    const { span } = setUpRichTextMain(
+    const span = setUpRichTextMain(
       "hello **world**",
       "hello <strong>world</strong>",
     )
@@ -618,7 +618,7 @@ describe("DOM translator", () => {
   // 17. Dropped markers: plain text fallback
   // -----------------------------------------------------------------------
   it("renders plain text when model drops all markers", async () => {
-    const { span } = setUpRichTextMain(
+    const span = setUpRichTextMain(
       "hello **world**",
       "hello <strong>world</strong>",
     )
@@ -636,7 +636,7 @@ describe("DOM translator", () => {
   // 18. Merged bold spans preserved
   // -----------------------------------------------------------------------
   it("preserves bold when model merges multiple spans into one", async () => {
-    const { span } = setUpRichTextMain(
+    const span = setUpRichTextMain(
       "build **scalable** and **reliable** systems",
       "build <strong>scalable</strong> and <strong>reliable</strong> systems",
     )
@@ -656,7 +656,7 @@ describe("DOM translator", () => {
   // 19. Unclosed markers: plain text fallback
   // -----------------------------------------------------------------------
   it("falls back to plain text when translated markdown has unclosed markers", async () => {
-    const { span } = setUpRichTextMain(
+    const span = setUpRichTextMain(
       "hello **world**",
       "hello <strong>world</strong>",
     )
@@ -671,7 +671,7 @@ describe("DOM translator", () => {
   })
 
   it("falls back to plain text when translated markdown has an unclosed italic marker", async () => {
-    const { span } = setUpRichTextMain(
+    const span = setUpRichTextMain(
       "hello *world*",
       "hello <em>world</em>",
     )
@@ -689,7 +689,7 @@ describe("DOM translator", () => {
   // 20. Preserve matchers (string)
   // -----------------------------------------------------------------------
   it("replaces preserved strings with placeholders in rich text", async () => {
-    const { span } = setUpRichTextMain(
+    const span = setUpRichTextMain(
       "Working at **Chime** on infrastructure",
       "Working at <strong>Chime</strong> on infrastructure",
     )
@@ -1763,7 +1763,7 @@ describe("DOM translator", () => {
   // NEW: Preserve matchers — RegExp
   // -----------------------------------------------------------------------
   it("supports RegExp preserve matchers", async () => {
-    const { span } = setUpRichTextMain(
+    const span = setUpRichTextMain(
       "Version **v2.1.0** is out",
       "Version <strong>v2.1.0</strong> is out",
     )
@@ -1786,7 +1786,7 @@ describe("DOM translator", () => {
   // NEW: Preserve matchers — function
   // -----------------------------------------------------------------------
   it("supports function preserve matchers", async () => {
-    const { span } = setUpRichTextMain(
+    const span = setUpRichTextMain(
       "Contact **support@co.com** for help",
       "Contact <strong>support@co.com</strong> for help",
     )
@@ -1811,7 +1811,7 @@ describe("DOM translator", () => {
   })
 
   it("applies outputTransform to richText after placeholder restoration and preserves fallback behavior", async () => {
-    const { span } = setUpRichTextMain(
+    const span = setUpRichTextMain(
       "Working at **Chime** on infrastructure",
       "Working at <strong>Chime</strong> on infrastructure",
     )
@@ -1845,7 +1845,7 @@ describe("DOM translator", () => {
   })
 
   it("passes transformed markdown to custom richText validate before render", async () => {
-    const { span } = setUpRichTextMain(
+    const span = setUpRichTextMain(
       "hello **world**",
       "hello <strong>world</strong>",
     )
@@ -1877,7 +1877,7 @@ describe("DOM translator", () => {
   })
 
   it("skips custom richText render and strips markers when validate rejects transformed markdown", async () => {
-    const { span } = setUpRichTextMain(
+    const span = setUpRichTextMain(
       "hello **world**",
       "hello <strong>world</strong>",
     )
@@ -1910,7 +1910,7 @@ describe("DOM translator", () => {
   // NEW: LinkedBy config
   // -----------------------------------------------------------------------
   it("translates linked elements once per key", async () => {
-    const { first: a, second: b } = setUpLinkedMain("intro", [
+    const [a, b] = setUpLinkedMain("intro", [
       "Introduction",
       "Introduction",
     ])
@@ -1932,7 +1932,7 @@ describe("DOM translator", () => {
   })
 
   it("applies outputTransform once per linked logical unit and fans out the transformed write", async () => {
-    const { first: a, second: b } = setUpLinkedMain("intro", [
+    const [a, b] = setUpLinkedMain("intro", [
       "Introduction",
       "Introduction",
     ])
@@ -1988,7 +1988,7 @@ describe("DOM translator", () => {
   })
 
   it("restores linked groups after translate -> translate -> restore", async () => {
-    const { first: a, second: b } = setUpLinkedMain("intro", [
+    const [a, b] = setUpLinkedMain("intro", [
       "Introduction",
       "Introduction",
     ])
@@ -2017,7 +2017,7 @@ describe("DOM translator", () => {
   })
 
   it("treats the current linked text as a new source after restore and DOM mutation", async () => {
-    const { first: a, second: b } = setUpLinkedMain("intro", [
+    const [a, b] = setUpLinkedMain("intro", [
       "Introduction",
       "Introduction",
     ])
@@ -2047,7 +2047,7 @@ describe("DOM translator", () => {
   })
 
   it("restores remounted linked nodes from the keyed original source", async () => {
-    const { first: a, second: b } = setUpLinkedMain("intro", [
+    const [a, b] = setUpLinkedMain("intro", [
       "Introduction",
       "Introduction",
     ])
