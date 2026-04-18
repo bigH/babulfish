@@ -1,6 +1,6 @@
 import type { Capabilities } from "./capabilities.js"
 import { SSR_CAPABILITIES } from "./capabilities.js"
-import { createIdleEnablementState, type EnablementState } from "../engine/runtime-plan.js"
+import { IDLE_ENABLEMENT_STATE, type EnablementState } from "../engine/runtime-plan.js"
 
 export type ModelState =
   | { readonly status: "idle" }
@@ -47,7 +47,7 @@ function createInitialSnapshot(
       translation: { status: "idle" as const },
       currentLanguage: null,
       capabilities,
-      enablement: createIdleEnablementState(),
+      enablement: IDLE_ENABLEMENT_STATE,
     },
     capabilities,
   )

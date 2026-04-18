@@ -168,7 +168,7 @@ export const NOT_RUN_PROBE_SUMMARY: ProbeSummary = Object.freeze({
   note: "",
 })
 
-export const UNKNOWN_ENABLEMENT_VERDICT: EnablementVerdict = Object.freeze({
+const UNKNOWN_ENABLEMENT_VERDICT: EnablementVerdict = Object.freeze({
   outcome: "unknown",
   resolvedDevice: null,
   reason: "Enablement has not been assessed yet.",
@@ -219,10 +219,6 @@ function buildRuntimePlan(
     sourceLanguage: config.sourceLanguage,
     maxNewTokens: config.maxNewTokens,
   })
-}
-
-export function createIdleEnablementState(): EnablementState {
-  return IDLE_ENABLEMENT_STATE
 }
 
 export function createRuntimePlanKey(plan: ResolvedRuntimePlan): string {

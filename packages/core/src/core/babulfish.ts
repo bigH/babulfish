@@ -12,8 +12,8 @@ import {
 } from "./languages.js"
 import { detectCapabilities } from "./capabilities.js"
 import {
-  createIdleEnablementState,
   getOrCreateEnablementAssessment,
+  IDLE_ENABLEMENT_STATE,
   resolveRuntimePreferences,
   NOT_RUN_PROBE_SUMMARY,
   type EnablementAssessment,
@@ -414,7 +414,7 @@ export function createBabulfish(config?: BabulfishConfig): BabulfishCore {
           store.set((prev) => ({
             ...prev,
             enablement: {
-              ...createIdleEnablementState(),
+              ...IDLE_ENABLEMENT_STATE,
               status: "error",
               verdict: {
                 outcome: "unknown",

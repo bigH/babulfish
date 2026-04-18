@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest"
 
 import { SSR_CAPABILITIES } from "../capabilities.js"
 import { createStore } from "../store.js"
-import { createIdleEnablementState } from "../../engine/runtime-plan.js"
+import { IDLE_ENABLEMENT_STATE } from "../../engine/runtime-plan.js"
 
 describe("createStore", () => {
   it("starts with a frozen idle snapshot", () => {
@@ -13,7 +13,7 @@ describe("createStore", () => {
       translation: { status: "idle" },
       currentLanguage: null,
       capabilities: store.get().capabilities,
-      enablement: createIdleEnablementState(),
+      enablement: IDLE_ENABLEMENT_STATE,
     })
     expect(store.get().capabilities).toBe(SSR_CAPABILITIES)
     expect(Object.isFrozen(store.get())).toBe(true)
