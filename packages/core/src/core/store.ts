@@ -24,33 +24,13 @@ function freezeValue<T extends object>(value: T): T {
   return Object.isFrozen(value) ? value : Object.freeze(value)
 }
 
-function normalizeSnapshot(snapshot: Snapshot, capabilities: Capabilities): Snapshot {
-  if (snapshot.capabilities !== capabilities) {
-    throw new Error("Store capabilities are immutable")
-  }
-
+function freezeSnapshot(snapshot: Snapshot): Snapshot {
   return Object.freeze({
     ...snapshot,
     model: freezeValue(snapshot.model),
     translation: freezeValue(snapshot.translation),
-    capabilities,
     enablement: freezeValue(snapshot.enablement),
   })
-}
-
-function createInitialSnapshot(
-  capabilities: Capabilities = SSR_CAPABILITIES,
-): Snapshot {
-  return normalizeSnapshot(
-    {
-      model: { status: "idle" as const },
-      translation: { status: "idle" as const },
-      currentLanguage: null,
-      capabilities,
-      enablement: IDLE_ENABLEMENT_STATE,
-    },
-    capabilities,
-  )
 }
 
 export type Store = {
@@ -62,7 +42,13 @@ export type Store = {
 
 export function createStore(initialCapabilities: Capabilities = SSR_CAPABILITIES): Store {
   const capabilities = freezeValue(initialCapabilities)
-  let current = createInitialSnapshot(capabilities)
+  let current = freezeSnapshot({
+    model: { status: "idle" },
+    translation: { status: "idle" },
+    currentLanguage: null,
+    capabilities,
+    enablement: IDLE_ENABLEMENT_STATE,
+  })
   const listeners = new Set<(snapshot: Snapshot) => void>()
   let disposed = false
 
@@ -74,7 +60,10 @@ export function createStore(initialCapabilities: Capabilities = SSR_CAPABILITIES
       if (disposed) return
       const next = updater(current)
       if (next === current) return
-      current = normalizeSnapshot(next, capabilities)
+      if (next.capabilities !== capabilities) {
+        throw new Error("Store capabilities are immutable")
+      }
+      current = freezeSnapshot(next)
       for (const listener of listeners) {
         listener(current)
       }
