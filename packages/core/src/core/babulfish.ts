@@ -93,6 +93,7 @@ const INITIAL_TRANSLATION_STATE: TranslationState = Object.freeze({
 
 export function createBabulfish(config?: BabulfishConfig): BabulfishCore {
   const capabilities = detectCapabilities()
+  const resolvedConfig = resolveRuntimePreferences(config?.engine)
   const store = createStore(capabilities)
   const progress = createProgressController()
   const languages = config?.languages
@@ -206,7 +207,6 @@ export function createBabulfish(config?: BabulfishConfig): BabulfishCore {
   }
 
   function buildProbeCacheKey(modelProfile: ModelProfile | null): string {
-    const resolvedConfig = resolveRuntimePreferences(config?.engine)
     return createProbeCacheKey({
       modelProfileId: modelProfile?.id ?? "",
       modelProfileVersion: modelProfile?.version ?? "",
@@ -219,74 +219,75 @@ export function createBabulfish(config?: BabulfishConfig): BabulfishCore {
     })
   }
 
+  function runtimePlanForDevice(device: "webgpu" | "wasm"): ResolvedRuntimePlan {
+    return Object.freeze({
+      modelId: resolvedConfig.modelId,
+      dtype: resolvedConfig.dtype,
+      resolvedDevice: device,
+      sourceLanguage: resolvedConfig.sourceLanguage,
+      maxNewTokens: resolvedConfig.maxNewTokens,
+    })
+  }
+
+  function verdictForProbeOutcome(outcome: ProbeOutcome): {
+    verdict: EnablementAssessment["verdict"]
+    runtimePlan: ResolvedRuntimePlan | null
+  } {
+    if (outcome.passed) {
+      return {
+        verdict: {
+          outcome: "gpu-preferred",
+          resolvedDevice: "webgpu",
+          reason: `Probe verified WebGPU adapter. ${outcome.note}`,
+        },
+        runtimePlan: runtimePlanForDevice("webgpu"),
+      }
+    }
+    if (resolvedConfig.device === "webgpu") {
+      return {
+        verdict: {
+          outcome: "denied",
+          resolvedDevice: null,
+          reason: `WebGPU was explicitly requested, but the probe failed. ${outcome.note}`,
+        },
+        runtimePlan: null,
+      }
+    }
+    return {
+      verdict: {
+        outcome: "wasm-only",
+        resolvedDevice: "wasm",
+        reason: `Probe could not verify WebGPU. Falling back to WASM. ${outcome.note}`,
+      },
+      runtimePlan: runtimePlanForDevice("wasm"),
+    }
+  }
+
   function finalizeProbeOutcome(
     initialAssessment: EnablementAssessment,
     outcome: ProbeOutcome,
     cacheStatus: "hit" | "miss",
   ): EnablementAssessment {
-    const resolvedConfig = resolveRuntimePreferences(config?.engine)
-    const probeSummary: ProbeSummary = {
-      status: outcome.passed ? "passed" : "failed",
-      kind: "adapter-smoke",
-      cache: cacheStatus,
-      note: outcome.note,
-    }
-
-    let terminalAssessment: EnablementAssessment
-
-    if (outcome.passed) {
-      terminalAssessment = Object.freeze({
-        modelProfile: initialAssessment.modelProfile,
-        inference: initialAssessment.inference,
-        verdict: {
-          outcome: "gpu-preferred" as const,
-          resolvedDevice: "webgpu" as const,
-          reason: `Probe verified WebGPU adapter. ${outcome.note}`,
-        },
-        runtimePlan: Object.freeze({
-          modelId: resolvedConfig.modelId,
-          dtype: resolvedConfig.dtype,
-          resolvedDevice: "webgpu" as const,
-          sourceLanguage: resolvedConfig.sourceLanguage,
-          maxNewTokens: resolvedConfig.maxNewTokens,
-        }),
-      })
-    } else if (resolvedConfig.device === "webgpu") {
-      terminalAssessment = Object.freeze({
-        modelProfile: initialAssessment.modelProfile,
-        inference: initialAssessment.inference,
-        verdict: {
-          outcome: "denied" as const,
-          resolvedDevice: null,
-          reason: `WebGPU was explicitly requested, but the probe failed. ${outcome.note}`,
-        },
-        runtimePlan: null,
-      })
-    } else {
-      terminalAssessment = Object.freeze({
-        modelProfile: initialAssessment.modelProfile,
-        inference: initialAssessment.inference,
-        verdict: {
-          outcome: "wasm-only" as const,
-          resolvedDevice: "wasm" as const,
-          reason: `Probe could not verify WebGPU. Falling back to WASM. ${outcome.note}`,
-        },
-        runtimePlan: Object.freeze({
-          modelId: resolvedConfig.modelId,
-          dtype: resolvedConfig.dtype,
-          resolvedDevice: "wasm" as const,
-          sourceLanguage: resolvedConfig.sourceLanguage,
-          maxNewTokens: resolvedConfig.maxNewTokens,
-        }),
-      })
-    }
+    const { verdict, runtimePlan } = verdictForProbeOutcome(outcome)
+    const terminalAssessment: EnablementAssessment = Object.freeze({
+      modelProfile: initialAssessment.modelProfile,
+      inference: initialAssessment.inference,
+      verdict,
+      runtimePlan,
+    })
 
     if (!disposed) {
       assessment = terminalAssessment
+      const probeSummary: ProbeSummary = {
+        status: outcome.passed ? "passed" : "failed",
+        kind: "adapter-smoke",
+        cache: cacheStatus,
+        note: outcome.note,
+      }
       store.set((prev) => ({
         ...prev,
         enablement: {
-          status: "ready" as const,
+          status: "ready",
           modelProfile: terminalAssessment.modelProfile,
           inference: terminalAssessment.inference,
           probe: probeSummary,
@@ -388,10 +389,10 @@ export function createBabulfish(config?: BabulfishConfig): BabulfishCore {
       .then(async (result) => {
         if (disposed) return result
 
-        const resolvedConfig = resolveRuntimePreferences(config?.engine)
-        const probeMode = resolvedConfig.enablement.probe
-
-        if (result.verdict.outcome === "needs-probe" && probeMode === "if-needed") {
+        if (
+          result.verdict.outcome === "needs-probe" &&
+          resolvedConfig.enablement.probe === "if-needed"
+        ) {
           return runProbeFlow(result)
         }
 
