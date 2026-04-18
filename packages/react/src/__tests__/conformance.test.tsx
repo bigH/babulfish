@@ -9,21 +9,11 @@ import { scenarios, scenariosForDriver } from "@babulfish/core/testing"
 import { __resetEngineForTests } from "@babulfish/core/engine/testing"
 import { ReactConformanceDriver } from "../testing/react-driver.js"
 
-const applicable = scenariosForDriver(ReactConformanceDriver())
+const driver = ReactConformanceDriver()
+const applicable = scenariosForDriver(driver)
 
 function resetDOM(): void {
   document.body.innerHTML = '<div id="app"><p>Hello world</p></div>' // eslint-disable-line no-unsanitized/property -- hardcoded test fixture
-}
-
-async function runScenario(scenario: (typeof applicable)[number]): Promise<void> {
-  const driver = ReactConformanceDriver()
-
-  try {
-    await scenario.run(driver)
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err)
-    throw new Error(`[driver="${driver.id}"] [scenario="${scenario.id}"] ${msg}`)
-  }
 }
 
 beforeEach(() => {
@@ -34,7 +24,7 @@ beforeEach(() => {
 
 describe("conformance — react driver", () => {
   it("is explicitly DOM-capable", () => {
-    expect(ReactConformanceDriver().supportsDOM).toBe(true)
+    expect(driver.supportsDOM).toBe(true)
   })
 
   it("runs the full shared scenario suite", () => {
@@ -42,6 +32,6 @@ describe("conformance — react driver", () => {
   })
 
   it.each(applicable)("$id — $description", async (scenario) => {
-    await runScenario(scenario)
+    await scenario.run(driver)
   })
 })
