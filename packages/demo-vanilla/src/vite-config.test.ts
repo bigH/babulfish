@@ -23,9 +23,8 @@ describe("demo-vanilla vite config", () => {
     })
   })
 
-  it("applies the same cross-origin isolation headers to dev and preview", () => {
-    expect(viteConfig.server?.headers).toEqual(viteConfig.preview?.headers)
+  it("applies the cross-origin isolation headers to dev and preview", () => {
     expect(viteConfig.server?.headers).toMatchObject(expectedHeaders)
-    expect(viteConfig.server?.headers).not.toBe(viteConfig.preview?.headers)
+    expect(viteConfig.preview?.headers).toMatchObject(expectedHeaders)
   })
 })

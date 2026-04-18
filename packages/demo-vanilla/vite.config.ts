@@ -5,10 +5,10 @@ import { defineConfig } from "vite"
 const packageDir = path.dirname(fileURLToPath(import.meta.url))
 const coreSrc = path.resolve(packageDir, "../core/src")
 const coreEntry = (...segments: string[]) => path.join(coreSrc, ...segments)
-const crossOriginIsolationHeaders = Object.freeze({
+const crossOriginIsolationHeaders = {
   "Cross-Origin-Opener-Policy": "same-origin",
   "Cross-Origin-Embedder-Policy": "require-corp",
-})
+}
 
 export default defineConfig({
   resolve: {
@@ -18,10 +18,6 @@ export default defineConfig({
       "@babulfish/core/dom": coreEntry("dom", "index.ts"),
     },
   },
-  server: {
-    headers: { ...crossOriginIsolationHeaders },
-  },
-  preview: {
-    headers: { ...crossOriginIsolationHeaders },
-  },
+  server: { headers: crossOriginIsolationHeaders },
+  preview: { headers: crossOriginIsolationHeaders },
 })
