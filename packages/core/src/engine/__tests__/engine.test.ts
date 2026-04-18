@@ -6,22 +6,13 @@ import { wrapGeneratorAsPipeline } from "../../testing/conformance-helpers.js"
 // Mock pipeline-loader (the single @huggingface/transformers chokepoint)
 // ---------------------------------------------------------------------------
 
-function createMockTextGenerationPipeline() {
-  const generate = vi.fn<TextGenerationPipeline["_call"]>()
-  const dispose = vi.fn(async () => {})
-  return {
-    generate,
-    dispose,
-    generator: wrapGeneratorAsPipeline(generate, dispose),
-  }
-}
+const mockGenerate = vi.fn<TextGenerationPipeline["_call"]>()
+const mockDispose = vi.fn(async () => {})
+const mockGenerator = wrapGeneratorAsPipeline(mockGenerate, mockDispose)
 
 function resolveMockPipeline(): Promise<TextGenerationPipeline> {
   return Promise.resolve(mockGenerator)
 }
-
-const { generate: mockGenerate, dispose: mockDispose, generator: mockGenerator } =
-  createMockTextGenerationPipeline()
 
 vi.mock("../pipeline-loader.js", () => ({
   loadPipeline: vi.fn(resolveMockPipeline),
@@ -52,8 +43,8 @@ function statusChanges(engine: ReturnType<typeof createEngine>) {
   return changes
 }
 
-function captureProgressCallback() {
-  return () => mockLoadPipeline.mock.lastCall?.[1]?.progress_callback
+function lastProgressCallback() {
+  return mockLoadPipeline.mock.lastCall?.[1]?.progress_callback
 }
 
 function createDeferred<T>() {
@@ -371,14 +362,13 @@ describe("event emitter", () => {
   })
 
   it("emits progress events during download", async () => {
-    const getProgressCallback = captureProgressCallback()
     const engine = createEngine()
     const progressEvents: Array<{ loaded: number; total: number }> = []
     engine.on("progress", (e) => progressEvents.push(e))
 
     await engine.load()
 
-    getProgressCallback()?.({
+    lastProgressCallback()?.({
       status: "progress",
       name: "model-id",
       file: "model.bin",
@@ -386,7 +376,7 @@ describe("event emitter", () => {
       loaded: 500,
       total: 1000,
     })
-    getProgressCallback()?.({
+    lastProgressCallback()?.({
       status: "progress",
       name: "model-id",
       file: "tokenizer.json",
@@ -409,14 +399,13 @@ describe("event emitter", () => {
   })
 
   it("prefers aggregate progress_total events over duplicate per-file progress", async () => {
-    const getProgressCallback = captureProgressCallback()
     const engine = createEngine()
     const progressEvents: Array<{ loaded: number; total: number; name?: string }> = []
     engine.on("progress", (e) => progressEvents.push(e))
 
     await engine.load()
 
-    getProgressCallback()?.({
+    lastProgressCallback()?.({
       status: "progress_total",
       name: "model-id",
       progress: 50,
@@ -427,7 +416,7 @@ describe("event emitter", () => {
         "tokenizer.json": { loaded: 100, total: 200 },
       },
     })
-    getProgressCallback()?.({
+    lastProgressCallback()?.({
       status: "progress",
       name: "model-id",
       file: "tokenizer.json",
@@ -446,15 +435,14 @@ describe("event emitter", () => {
   })
 
   it("ignores non-progress status events", async () => {
-    const getProgressCallback = captureProgressCallback()
     const engine = createEngine()
     const progressEvents: unknown[] = []
     engine.on("progress", (e) => progressEvents.push(e))
 
     await engine.load()
 
-    getProgressCallback()?.({ status: "initiate", file: "model.bin", name: "m" })
-    getProgressCallback()?.({ status: "done", file: "model.bin", name: "m" })
+    lastProgressCallback()?.({ status: "initiate", file: "model.bin", name: "m" })
+    lastProgressCallback()?.({ status: "done", file: "model.bin", name: "m" })
 
     expect(progressEvents).toHaveLength(0)
   })
