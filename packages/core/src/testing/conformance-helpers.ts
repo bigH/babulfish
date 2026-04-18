@@ -14,9 +14,6 @@ type PipelineCall = Pipeline["_call"]
 type PipelineModel = Pipeline["model"]
 type PipelineTokenizer = Pipeline["tokenizer"]
 
-/** Kept as an alias so existing consumers that reference this name still work. */
-export type ConformancePipeline = Pipeline
-
 function makeGeneratedText(translation: string) {
   return [
     { generated_text: [{ role: "assistant", content: translation }] },
@@ -35,17 +32,14 @@ export function wrapGeneratorAsPipeline(
   const fakeModel = {} as PipelineModel
   const fakeTokenizer = {} as PipelineTokenizer
   const callable = (...args: Parameters<PipelineCall>) => generate(...args)
-  // Justified cast: TextGenerationPipeline is a class with many internals
-  // that tests never touch. The callable + dispose + model/tokenizer stubs
-  // cover the surface we actually exercise.
+  // TextGenerationPipeline is a class with internals tests never exercise;
+  // we fake only the callable + dispose + model/tokenizer stubs.
   return Object.assign(callable, {
     _call: generate,
     task: "text-generation" as const,
     model: fakeModel,
     tokenizer: fakeTokenizer,
     dispose,
-    // Narrow cast: we fake only the callable + dispose surface. If a future
-    // transformers.js (>=5) touches model/tokenizer/_forward, this mask rots.
   }) as unknown as Pipeline
 }
 

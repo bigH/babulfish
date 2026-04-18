@@ -13,27 +13,24 @@ import type {
 import {
   makeControllablePipeline,
   makeFakePipeline,
-  type ConformancePipeline,
 } from "./conformance-helpers.js"
 
 // ---------------------------------------------------------------------------
 // Mock access — test file MUST vi.mock("../engine/pipeline-loader.js") first
 // ---------------------------------------------------------------------------
 
-type MockLoadPipelineResult =
-  | Awaited<ReturnType<typeof loadPipeline>>
-  | ConformancePipeline
+type LoadPipelineResult = Awaited<ReturnType<typeof loadPipeline>>
 
 type MockedLoadPipeline = {
-  (model: string, opts?: PipelineOptions): Promise<MockLoadPipelineResult>
+  (model: string, opts?: PipelineOptions): Promise<LoadPipelineResult>
   mock: { calls: Array<[string, PipelineOptions?]> }
   mockImplementation(
     fn: (
       model: string,
       opts?: PipelineOptions,
-    ) => MockLoadPipelineResult | Promise<MockLoadPipelineResult>,
+    ) => LoadPipelineResult | Promise<LoadPipelineResult>,
   ): void
-  mockResolvedValue(value: MockLoadPipelineResult): void
+  mockResolvedValue(value: LoadPipelineResult): void
 }
 
 const mockedLoad = loadPipeline as unknown as MockedLoadPipeline
