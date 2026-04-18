@@ -126,7 +126,7 @@ export class BabulfishTranslator extends HTMLElement {
   }
 
   disconnectedCallback(): void {
-    this.#teardownCore({ restore: true })
+    this.#teardownCore()
     this.#els = null
   }
 
@@ -159,7 +159,7 @@ export class BabulfishTranslator extends HTMLElement {
   }
 
   #mountCore(shadow: ShadowRoot): void {
-    this.#teardownCore({ restore: true })
+    this.#teardownCore()
     this.#runtimeState = this.#readRuntimeState()
     this.#core = createBabulfish({
       engine: toEngineSelection(this.#runtimeState.selection),
@@ -189,15 +189,13 @@ export class BabulfishTranslator extends HTMLElement {
     this.#render(this.#core.snapshot)
   }
 
-  #teardownCore({ restore }: { readonly restore: boolean }): void {
+  #teardownCore(): void {
     this.#unsubscribe?.()
     this.#unsubscribe = null
 
     if (!this.#core) return
     this.#core.abort()
-    if (restore) {
-      this.#core.restore()
-    }
+    this.#core.restore()
     void this.#core.dispose().catch(() => {})
     this.#core = null
   }
