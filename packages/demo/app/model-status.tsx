@@ -58,14 +58,6 @@ function formatPercent(progress: number): string {
   return `${Math.round(progress * 100)}%`
 }
 
-function formatCapabilityStatus(
-  capabilitiesReady: boolean,
-  value: string,
-): string {
-  if (!capabilitiesReady) return CHECKING_LABEL
-  return value
-}
-
 function formatSelectedDevice(device: DemoRuntimeSelection["device"]): string {
   return `${getDeviceLabel(device)} (${device})`
 }
