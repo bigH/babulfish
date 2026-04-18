@@ -18,7 +18,6 @@ import {
 } from "../../demo-shared/src/runtime-selection.js"
 import { useRuntimeSelectionContext } from "./runtime-selection-context"
 
-const CHECKING_LABEL = "Checking"
 const DEMO_ROOT_SELECTOR = "[data-demo-root]"
 
 type StatusRow = {
@@ -58,18 +57,6 @@ function formatPercent(progress: number): string {
   return `${Math.round(progress * 100)}%`
 }
 
-function formatSelectedDevice(device: DemoRuntimeSelection["device"]): string {
-  return `${getDeviceLabel(device)} (${device})`
-}
-
-function formatSelectedDType(dtype: DemoRuntimeSelection["dtype"]): string {
-  return `${getDTypeLabel(dtype)} (${dtype})`
-}
-
-function formatSelectedModel(label: string, modelId: string): string {
-  return `${label} (${modelId})`
-}
-
 function formatResolvedRuntime(
   enablementStatus: ReturnType<typeof useTranslator>["enablement"]["status"],
   resolvedDevice: DemoRuntimeSelection["device"] | null,
@@ -87,17 +74,15 @@ function formatResolvedRuntime(
   }
 }
 
-type TranslatorCapabilities = ReturnType<typeof useTranslator>["capabilities"]
-
 function formatYesNo(label: string, value: boolean): string {
   return `${label}: ${value ? "yes" : "no"}`
 }
 
 function formatCapabilitiesText(
-  capabilities: TranslatorCapabilities,
+  capabilities: ReturnType<typeof useTranslator>["capabilities"],
   ready: boolean,
 ): string {
-  if (!ready) return CHECKING_LABEL
+  if (!ready) return "Checking"
   const memory =
     capabilities.approxDeviceMemoryGiB === null
       ? "memory: unknown"
@@ -196,18 +181,15 @@ export function ModelStatus() {
   const rows: ReadonlyArray<StatusRow> = [
     {
       label: "Selected Device",
-      value: formatSelectedDevice(runtimeState.selection.device),
+      value: `${getDeviceLabel(runtimeState.selection.device)} (${runtimeState.selection.device})`,
     },
     {
       label: "Selected Model",
-      value: formatSelectedModel(
-        runtimeState.preset.label,
-        runtimeState.selection.modelId,
-      ),
+      value: `${runtimeState.preset.label} (${runtimeState.selection.modelId})`,
     },
     {
       label: "Selected Quantization",
-      value: formatSelectedDType(runtimeState.selection.dtype),
+      value: `${getDTypeLabel(runtimeState.selection.dtype)} (${runtimeState.selection.dtype})`,
     },
     {
       label: "Capabilities",
