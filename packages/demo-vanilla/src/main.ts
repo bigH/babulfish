@@ -100,34 +100,6 @@ function formatDirections(): string {
     .join(" / ")
 }
 
-function formatRequestedDevice(requested: string | null, fallback: DemoRuntimeSelection["device"]): string {
-  if (!requested) {
-    return getDeviceLabel(fallback)
-  }
-
-  return requested === "auto" || requested === "wasm" || requested === "webgpu"
-    ? getDeviceLabel(requested)
-    : requested
-}
-
-function formatRequestedDType(requested: string | null, fallback: DemoRuntimeSelection["dtype"]): string {
-  if (!requested) {
-    return getDTypeLabel(fallback)
-  }
-
-  return requested === "q4" || requested === "q8" || requested === "fp16" || requested === "fp32"
-    ? getDTypeLabel(requested)
-    : requested
-}
-
-function formatRequestedModel(modelId: string | null, fallbackModelId: string): string {
-  if (!modelId) {
-    return fallbackModelId
-  }
-
-  return modelId
-}
-
 const runtimeDevice = requireElement("runtime-device", HTMLSelectElement)
 const runtimeModel = requireElement("runtime-model", HTMLSelectElement)
 const runtimeDType = requireElement("runtime-dtype", HTMLSelectElement)
@@ -266,17 +238,13 @@ function resetRawTextProof(): void {
 }
 
 function render(snapshot: Snapshot): void {
-  statusRequestedDevice.textContent = formatRequestedDevice(
-    runtimeState.requested.device,
-    runtimeState.preset.defaultDevice,
+  statusRequestedDevice.textContent = getDeviceLabel(
+    (runtimeState.requested.device ?? runtimeState.preset.defaultDevice) as DemoRuntimeSelection["device"],
   )
-  statusRequestedModel.textContent = formatRequestedModel(
-    runtimeState.requested.modelId,
-    runtimeState.preset.modelId,
-  )
-  statusRequestedDType.textContent = formatRequestedDType(
-    runtimeState.requested.dtype,
-    runtimeState.preset.defaultDType,
+  statusRequestedModel.textContent =
+    runtimeState.requested.modelId ?? runtimeState.preset.modelId
+  statusRequestedDType.textContent = getDTypeLabel(
+    (runtimeState.requested.dtype ?? runtimeState.preset.defaultDType) as DemoRuntimeSelection["dtype"],
   )
   statusCapabilities.textContent = capabilitiesText(snapshot)
   statusEnablement.textContent = enablementText(snapshot)
