@@ -3,15 +3,14 @@ import { describe, expect, it } from "vitest"
 
 const css = readFileSync(new URL("../babulfish.css", import.meta.url), "utf8")
 
-const ROOT_CONTRACT = {
-  "--babulfish-accent": "var(--accent, #3b82f6)",
-  "--babulfish-error": "rgb(239 68 68)",
-  "--babulfish-border": "var(--border, #e5e7eb)",
-  "--babulfish-surface": "var(--surface, #fff)",
-  "--babulfish-muted": "#9ca3af",
-} as const
-
-const SELECTOR_CONTRACT = {
+const DECLARATION_CONTRACT = {
+  ":root": {
+    "--babulfish-accent": "var(--accent, #3b82f6)",
+    "--babulfish-error": "rgb(239 68 68)",
+    "--babulfish-border": "var(--border, #e5e7eb)",
+    "--babulfish-surface": "var(--surface, #fff)",
+    "--babulfish-muted": "#9ca3af",
+  },
   ".babulfish-pulse": {
     animation: "babulfish-pulse 0.75s ease-in-out infinite",
   },
@@ -40,46 +39,32 @@ function escapeForRegex(value: string) {
 }
 
 function getBlock(selector: string) {
-  const blockMatcher = new RegExp(
-    `${escapeForRegex(selector)}\\s*\\{([\\s\\S]*?)\\}`,
-  )
-  const match = css.match(blockMatcher)
-
-  expect(match, `Expected CSS block for ${selector}`).toBeTruthy()
-
-  return match?.[1] ?? ""
-}
-
-function expectDeclaration(
-  block: string,
-  property: string,
-  value: string,
-) {
-  const declarationMatcher = new RegExp(
-    `${escapeForRegex(property)}\\s*:\\s*${escapeForRegex(value)};`,
+  const match = css.match(
+    new RegExp(`${escapeForRegex(selector)}\\s*\\{([\\s\\S]*?)\\}`),
   )
 
-  expect(block).toMatch(declarationMatcher)
+  if (!match) {
+    throw new Error(`Expected CSS block for ${selector}`)
+  }
+
+  return match[1]
 }
 
 describe("@babulfish/styles CSS contract", () => {
-  it("defines the documented root custom properties", () => {
-    const rootBlock = getBlock(":root")
-
-    for (const [property, value] of Object.entries(ROOT_CONTRACT)) {
-      expectDeclaration(rootBlock, property, value)
-    }
-  })
-
-  it("ships the documented selector contract", () => {
-    for (const [selector, declarations] of Object.entries(SELECTOR_CONTRACT)) {
+  it.each(Object.entries(DECLARATION_CONTRACT))(
+    "ships the documented declarations for %s",
+    (selector, declarations) => {
       const block = getBlock(selector)
 
       for (const [property, value] of Object.entries(declarations)) {
-        expectDeclaration(block, property, value)
+        expect(block).toMatch(
+          new RegExp(
+            `${escapeForRegex(property)}\\s*:\\s*${escapeForRegex(value)};`,
+          ),
+        )
       }
-    }
-  })
+    },
+  )
 
   it.each(KEYFRAMES)("ships @keyframes %s", (keyframeName) => {
     expect(css).toContain(`@keyframes ${keyframeName}`)
