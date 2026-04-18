@@ -19,6 +19,18 @@ describe("resolveModelProfile", () => {
     })
   })
 
+  it("falls back to an unknown profile when auto mode finds no shipped match", () => {
+    expect(resolveModelProfile({ modelId: "acme/translator" })).toEqual({
+      id: "custom:acme/translator:q4",
+      version: "user-config",
+      modelId: "acme/translator",
+      dtype: "q4",
+      estimatedWorkingSetGiB: null,
+      note:
+        "No shipped profile matched this model config, so Session 1 uses an unknown memory estimate.",
+    })
+  })
+
   it("builds a custom profile override against the requested model config", () => {
     expect(
       resolveModelProfile({
