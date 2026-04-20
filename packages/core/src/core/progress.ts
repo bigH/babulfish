@@ -10,24 +10,24 @@ type ProgressController = {
 }
 
 export function createProgressController(): ProgressController {
-  let currentController: AbortController | null = null
-  let currentRun: ProgressRun | null = null
+  let activeController: AbortController | null = null
+  let currentGeneration = 0
 
   function abortCurrentWith(message: string): void {
-    currentController?.abort(new DOMException(message, "AbortError"))
-    currentController = null
+    activeController?.abort(new DOMException(message, "AbortError"))
+    activeController = null
   }
 
   return {
     startRun() {
       abortCurrentWith("Superseded by new translation")
       const controller = new AbortController()
+      const generation = ++currentGeneration
       const run: ProgressRun = {
         signal: controller.signal,
-        isCurrent: () => currentRun === run,
+        isCurrent: () => currentGeneration === generation,
       }
-      currentController = controller
-      currentRun = run
+      activeController = controller
       return run
     },
     abortCurrent() {

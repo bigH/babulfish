@@ -31,6 +31,17 @@ describe("createProgressController", () => {
     expect(run.isCurrent()).toBe(true)
   })
 
+  it("marks an aborted run as stale once a newer run starts", () => {
+    const progress = createProgressController()
+
+    const firstRun = progress.startRun()
+    progress.abortCurrent()
+    const secondRun = progress.startRun()
+
+    expect(firstRun.isCurrent()).toBe(false)
+    expect(secondRun.isCurrent()).toBe(true)
+  })
+
   it("aborts the active run on dispose", () => {
     const progress = createProgressController()
 
