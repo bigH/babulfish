@@ -2,32 +2,17 @@
 
 import { readFileSync } from "node:fs"
 import { describe, expect, it } from "vitest"
+import { buildEntryPointsFromPackageExports, type CorePackageJson } from "../../tsup-package-contract"
 import { coreTsupConfig } from "../../tsup.config"
 
-type PackageExportTarget = {
-  import: string
-  types: string
-}
-
-type PackageJson = {
-  exports: Record<string, PackageExportTarget>
-  peerDependencies?: Record<string, string>
-}
-
-function readPackageJson(): PackageJson {
+function readPackageJson(): CorePackageJson {
   const packageJsonUrl = new URL("../../package.json", import.meta.url)
-  return JSON.parse(readFileSync(packageJsonUrl, "utf8")) as PackageJson
+  return JSON.parse(readFileSync(packageJsonUrl, "utf8")) as CorePackageJson
 }
 
-function readPackageExports(): Record<string, PackageExportTarget> {
-  return readPackageJson().exports
-}
-
-function readPeerDependencies(): string[] {
-  return Object.keys(readPackageJson().peerDependencies ?? {})
-}
-
-function expectedExportsFromEntries(entries: Record<string, string>): Record<string, PackageExportTarget> {
+function expectedExportsFromEntries(
+  entries: Record<string, string>,
+): CorePackageJson["exports"] {
   return Object.fromEntries(
     Object.keys(entries).map((entryKey) => [
       entryKey === "index" ? "." : `./${entryKey}`,
@@ -40,11 +25,33 @@ function expectedExportsFromEntries(entries: Record<string, string>): Record<str
 }
 
 describe("core tsup config", () => {
+  it("derives entrypoints from package export subpaths using the package contract", () => {
+    expect(
+      buildEntryPointsFromPackageExports({
+        ".": {
+          import: "./dist/index.js",
+          types: "./dist/index.d.ts",
+        },
+        "./engine/testing": {
+          import: "./dist/engine/testing.js",
+          types: "./dist/engine/testing.d.ts",
+        },
+      }),
+    ).toEqual({
+      index: "src/index.ts",
+      "engine/testing": "src/engine/testing/index.ts",
+    })
+  })
+
   it("keeps package exports aligned with configured entrypoints and dist filenames", () => {
-    expect(readPackageExports()).toEqual(expectedExportsFromEntries(coreTsupConfig.entry))
+    const packageJson = readPackageJson()
+
+    expect(packageJson.exports).toEqual(expectedExportsFromEntries(coreTsupConfig.entry))
   })
 
   it("keeps external packages aligned with peer dependencies", () => {
-    expect(coreTsupConfig.external).toEqual(readPeerDependencies())
+    const packageJson = readPackageJson()
+
+    expect(coreTsupConfig.external).toEqual(Object.keys(packageJson.peerDependencies ?? {}))
   })
 })
