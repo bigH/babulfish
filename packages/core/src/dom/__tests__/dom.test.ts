@@ -161,6 +161,8 @@ const STRUCTURED_TEXT_CONFIG: DOMTranslatorConfig["structuredText"] = {
   selector: ".structured",
 }
 
+const TEST_PRESERVE_TOKEN_PREFIX = "\u27EAbf-preserve:"
+const TEST_PRESERVE_TOKEN_SUFFIX = "\u27EB"
 const TEST_STRUCTURED_TOKEN_PREFIX = "\u27EAbf-st:"
 const TEST_STRUCTURED_TOKEN_SUFFIX = "\u27EB"
 
@@ -175,6 +177,33 @@ function replaceAllVisibleText(
     result = result.replaceAll(source, translated)
   }
   return result
+}
+
+function collectPreserveTokens(input: string): string[] {
+  const tokens: string[] = []
+  let cursor = 0
+
+  while (true) {
+    const start = input.indexOf(TEST_PRESERVE_TOKEN_PREFIX, cursor)
+    if (start < 0) return tokens
+
+    const end = input.indexOf(
+      TEST_PRESERVE_TOKEN_SUFFIX,
+      start + TEST_PRESERVE_TOKEN_PREFIX.length,
+    )
+    if (end < 0) {
+      throw new Error("Malformed preserve token output in test fixture")
+    }
+
+    tokens.push(input.slice(start, end + TEST_PRESERVE_TOKEN_SUFFIX.length))
+    cursor = end + TEST_PRESERVE_TOKEN_SUFFIX.length
+  }
+}
+
+function expectSinglePreserveToken(input: string): string {
+  const tokens = collectPreserveTokens(input)
+  expect(tokens).toHaveLength(1)
+  return tokens[0]!
 }
 
 function collectStructuredTokens(input: string): string[] {
@@ -695,9 +724,9 @@ describe("DOM translator", () => {
     )
 
     translate.mockImplementation(async (text: string) => {
-      expect(text).toContain("\u27EA0\u27EB")
+      const token = expectSinglePreserveToken(text)
       expect(text).not.toContain("Chime")
-      return "Trabajando en **\u27EA0\u27EB** en infraestructura"
+      return `Trabajando en **${token}** en infraestructura`
     })
 
     const t = makeTranslator(translate, {
@@ -988,7 +1017,7 @@ describe("DOM translator", () => {
     const paragraph = main.querySelector("p")!
 
     translate.mockImplementation(async (text: string) => {
-      expect(text).toContain("\u27EA0\u27EB")
+      expectSinglePreserveToken(text)
       expect(text).not.toContain("v2.1.0")
 
       return replaceAllVisibleText(text, {
@@ -1085,7 +1114,7 @@ describe("DOM translator", () => {
     let callCount = 0
     translate.mockImplementation(async (text: string) => {
       callCount++
-      expect(text).toContain("\u27EA0\u27EB")
+      const token = expectSinglePreserveToken(text)
       expect(text).not.toContain("v2.1.0")
 
       if (callCount === 1) {
@@ -1094,7 +1123,7 @@ describe("DOM translator", () => {
         })
       }
 
-      return "Version \u27EA0\u27EB ya disponible"
+      return `Version ${token} ya disponible`
     })
 
     const t = makeTranslator(translate, {
@@ -1770,7 +1799,7 @@ describe("DOM translator", () => {
 
     translate.mockImplementation(async (text: string) => {
       expect(text).not.toMatch(/v\d+\.\d+\.\d+/)
-      return `Version **\u27EA0\u27EB** esta disponible`
+      return `Version **${expectSinglePreserveToken(text)}** esta disponible`
     })
 
     const t = makeTranslator(translate, {
@@ -1798,7 +1827,7 @@ describe("DOM translator", () => {
 
     translate.mockImplementation(async (text: string) => {
       expect(text).not.toContain("support@co.com")
-      return `Contacta **\u27EA0\u27EB** para ayuda`
+      return `Contacta **${expectSinglePreserveToken(text)}** para ayuda`
     })
 
     const t = makeTranslator(translate, {
@@ -1827,9 +1856,9 @@ describe("DOM translator", () => {
     })
 
     translate.mockImplementation(async (text: string) => {
-      expect(text).toContain("\u27EA0\u27EB")
+      const token = expectSinglePreserveToken(text)
       expect(text).not.toContain("Chime")
-      return "Trabajando en **\u27EA0\u27EB** en infraestructura"
+      return `Trabajando en **${token}** en infraestructura`
     })
 
     const t = makeTranslator(translate, {

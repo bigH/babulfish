@@ -1,15 +1,31 @@
 // Placeholder substitution for preserved strings during translation.
 // Matchers identify strings that must survive translation unchanged
-// (e.g. brand names). They are replaced with numbered placeholders
+// (e.g. brand names). They are replaced with internal placeholders
 // before translation and restored afterward.
 
 export type PreserveMatcher = string | RegExp | ((text: string) => string[])
+export type PreserveSlot = {
+  readonly token: string
+  readonly value: string
+}
 
-const PLACEHOLDER_OPEN = "\u27EA"
-const PLACEHOLDER_CLOSE = "\u27EB"
+const PLACEHOLDER_PREFIX = "\u27EAbf-preserve:"
+const PLACEHOLDER_SUFFIX = "\u27EB"
 
-const placeholder = (index: number): string =>
-  `${PLACEHOLDER_OPEN}${index}${PLACEHOLDER_CLOSE}`
+const placeholder = (key: string, index: number): string =>
+  `${PLACEHOLDER_PREFIX}${key}:${index}${PLACEHOLDER_SUFFIX}`
+
+function createPlaceholderKey(source: string): string {
+  let nextKey = 0
+  while (source.includes(`${PLACEHOLDER_PREFIX}${nextKey}:`)) {
+    nextKey++
+  }
+  return String(nextKey)
+}
+
+function isPlaceholderToken(value: string): boolean {
+  return value.startsWith(PLACEHOLDER_PREFIX) && value.endsWith(PLACEHOLDER_SUFFIX)
+}
 
 /** Collect all strings matched by a single matcher. */
 function matchAll(matcher: PreserveMatcher, text: string): string[] {
@@ -30,7 +46,7 @@ function matchAll(matcher: PreserveMatcher, text: string): string[] {
 function collectUniqueNonEmptyMatches(matches: Iterable<string>): string[] {
   const values = new Set<string>()
   for (const match of matches) {
-    if (match.length > 0) values.add(match)
+    if (match.length > 0 && !isPlaceholderToken(match)) values.add(match)
   }
   return [...values]
 }
@@ -38,16 +54,20 @@ function collectUniqueNonEmptyMatches(matches: Iterable<string>): string[] {
 export function insertPlaceholders(
   source: string,
   matchers: readonly PreserveMatcher[],
-): { masked: string; slots: string[] } {
-  const slots: string[] = []
+): { masked: string; slots: PreserveSlot[] } {
+  const slots: PreserveSlot[] = []
+  const placeholderKey = createPlaceholderKey(source)
   let masked = source
 
   for (const matcher of matchers) {
     for (const word of matchAll(matcher, masked)) {
-      const tag = placeholder(slots.length)
-      const nextMasked = masked.replaceAll(word, tag)
+      const slot = {
+        token: placeholder(placeholderKey, slots.length),
+        value: word,
+      }
+      const nextMasked = masked.replaceAll(word, slot.token)
       if (nextMasked === masked) continue
-      slots.push(word)
+      slots.push(slot)
       masked = nextMasked
     }
   }
@@ -57,11 +77,11 @@ export function insertPlaceholders(
 
 export function restorePlaceholders(
   translated: string,
-  slots: readonly string[],
+  slots: readonly PreserveSlot[],
 ): string {
   let result = translated
-  for (let i = 0; i < slots.length; i++) {
-    result = result.replaceAll(placeholder(i), slots[i]!)
+  for (const slot of slots) {
+    result = result.replaceAll(slot.token, slot.value)
   }
   return result
 }
