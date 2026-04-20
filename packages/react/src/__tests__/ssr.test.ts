@@ -5,8 +5,12 @@ import { SSR_CORE } from "../ssr.js"
 describe("SSR fallback", () => {
   it("exposes a shared immutable idle snapshot", () => {
     const snapshot = SSR_CORE.snapshot
+    const descriptor = Object.getOwnPropertyDescriptor(SSR_CORE, "snapshot")
 
     expect(SSR_CORE.snapshot).toBe(snapshot)
+    expect(descriptor?.get).toBeTypeOf("function")
+    expect(descriptor?.set).toBeUndefined()
+    expect(descriptor?.value).toBeUndefined()
     expect(snapshot.model.status).toBe("idle")
     expect(snapshot.translation.status).toBe("idle")
     expect(snapshot.currentLanguage).toBeNull()
