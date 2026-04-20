@@ -1,12 +1,9 @@
-import type { ResolvedRuntimePlan } from "../engine/runtime-plan.js"
-import type { Translator } from "../engine/model.js"
 import { createEngine } from "../engine/model.js"
-import { createRuntimePlanKey } from "../engine/runtime-plan.js"
+import { createRuntimePlanKey, type ResolvedRuntimePlan } from "../engine/runtime-plan.js"
 
-export type EngineHandle = {
-  readonly engine: Translator
+type EngineHandle = {
+  readonly engine: ReturnType<typeof createEngine>
   readonly id: symbol
-  readonly key: string
 }
 
 const coreEngineIdentity = new WeakMap<object, symbol>()
@@ -29,7 +26,6 @@ export function acquireEngine(plan: ResolvedRuntimePlan): EngineHandle {
       maxNewTokens: plan.maxNewTokens,
     }),
     id: Symbol("engine"),
-    key,
   } satisfies EngineHandle
 
   runtimePool.set(key, handle)

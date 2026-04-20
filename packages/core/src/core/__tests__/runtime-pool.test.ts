@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 
 import type { ResolvedRuntimePlan } from "../../engine/runtime-plan.js"
 import { acquireEngine, __resetEngineForTests } from "../engine-handle.js"
@@ -26,7 +26,6 @@ describe("runtime pool", () => {
 
     expect(a).toBe(b)
     expect(a.id).toBe(b.id)
-    expect(a.key).toBe("acme/translator|q4|wasm|en|128")
   })
 
   it("isolates different max token and source language plans", () => {
@@ -37,5 +36,14 @@ describe("runtime pool", () => {
     expect(second.id).not.toBe(first.id)
     expect(third.id).not.toBe(first.id)
     expect(third.id).not.toBe(second.id)
+  })
+
+  it("disposes pooled engines when the reset helper clears the pool", () => {
+    const handle = acquireEngine(plan())
+    const dispose = vi.spyOn(handle.engine, "dispose")
+
+    __resetEngineForTests()
+
+    expect(dispose).toHaveBeenCalledTimes(1)
   })
 })
