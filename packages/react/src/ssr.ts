@@ -7,6 +7,7 @@ import {
 
 const noop = () => {}
 const resolveVoid = (): Promise<void> => Promise.resolve()
+const resolveEmptyString = (): Promise<string> => Promise.resolve("")
 const SSR_LANGUAGES = Object.freeze<Language[]>([])
 
 const SSR_SNAPSHOT: Snapshot = Object.freeze({
@@ -23,16 +24,14 @@ const SSR_SNAPSHOT: Snapshot = Object.freeze({
   enablement: IDLE_ENABLEMENT_STATE,
 })
 
-export const SSR_CORE: BabulfishCore = {
-  get snapshot() {
-    return SSR_SNAPSHOT
-  },
+export const SSR_CORE: BabulfishCore = Object.freeze({
+  snapshot: SSR_SNAPSHOT,
   subscribe: () => noop,
   loadModel: resolveVoid,
   translateTo: resolveVoid,
-  translateText: () => Promise.resolve(""),
+  translateText: resolveEmptyString,
   restore: noop,
   abort: noop,
   dispose: resolveVoid,
   languages: SSR_LANGUAGES,
-}
+})
