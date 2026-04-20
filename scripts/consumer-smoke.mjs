@@ -42,6 +42,15 @@ const EXPECTED_REACT_RUNTIME_KEYS = [
 ]
 const CSS_BRIDGE_IMPORT = '@import "@babulfish/styles/css";'
 
+function normalizeCssBridge(source) {
+  return source
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .join("\n")
+}
+
 function registerCleanup(target) {
   cleanupTargets.add(target)
   return target
@@ -70,7 +79,10 @@ function runNode(code, cwd) {
 }
 
 function assertCssBridge(specifier, source) {
-  assert(source.includes(CSS_BRIDGE_IMPORT), `${specifier} should bridge to @babulfish/styles/css`)
+  assert(
+    normalizeCssBridge(source) === CSS_BRIDGE_IMPORT,
+    `${specifier} should be a pure bridge to @babulfish/styles/css`,
+  )
 }
 
 function packPackage(packageName, packDir) {
@@ -183,8 +195,13 @@ function assert(condition, message) {
   if (!condition) throw new Error(message)
 }
 
+${normalizeCssBridge.toString()}
+
 function assertCssBridge(specifier, source) {
-  assert(source.includes(cssBridgeImport), specifier + " should bridge to @babulfish/styles/css")
+  assert(
+    normalizeCssBridge(source) === cssBridgeImport,
+    specifier + " should be a pure bridge to @babulfish/styles/css",
+  )
 }
 
 const coreModule = await import("@babulfish/core")
