@@ -13,6 +13,11 @@ const MARKERS = [
 
 type InlineMarker = (typeof MARKERS)[number]
 
+type MarkdownScan = {
+  readonly segments: InlineSegment[]
+  readonly isWellFormed: boolean
+}
+
 function findMarkerAt(source: string, cursor: number): InlineMarker | null {
   for (const marker of MARKERS) {
     if (source.startsWith(marker.pattern, cursor)) return marker
@@ -54,9 +59,10 @@ function segmentToHtml(segment: InlineSegment): string {
   }
 }
 
-export function parseInlineMarkdown(source: string): InlineSegment[] {
+function scanInlineMarkdown(source: string): MarkdownScan {
   const segments: InlineSegment[] = []
   let cursor = 0
+  let isWellFormed = true
 
   while (cursor < source.length) {
     const marker = findMarkerAt(source, cursor)
@@ -69,6 +75,7 @@ export function parseInlineMarkdown(source: string): InlineSegment[] {
     const contentStart = cursor + marker.pattern.length
     const close = source.indexOf(marker.pattern, contentStart)
     if (close === -1) {
+      isWellFormed = false
       pushText(segments, marker.pattern)
       cursor = contentStart
       continue
@@ -81,7 +88,11 @@ export function parseInlineMarkdown(source: string): InlineSegment[] {
     cursor = close + marker.pattern.length
   }
 
-  return segments
+  return { segments, isWellFormed }
+}
+
+export function parseInlineMarkdown(source: string): InlineSegment[] {
+  return scanInlineMarkdown(source).segments
 }
 
 export function renderInlineMarkdownToHtml(source: string): string {
@@ -89,23 +100,7 @@ export function renderInlineMarkdownToHtml(source: string): string {
 }
 
 export function isWellFormedMarkdown(text: string): boolean {
-  let cursor = 0
-
-  while (cursor < text.length) {
-    const marker = findMarkerAt(text, cursor)
-    if (!marker) {
-      cursor++
-      continue
-    }
-
-    const close = text.indexOf(marker.pattern, cursor + marker.pattern.length)
-    if (close === -1) {
-      return false
-    }
-    cursor = close + marker.pattern.length
-  }
-
-  return true
+  return scanInlineMarkdown(text).isWellFormed
 }
 
 export function stripInlineMarkdownMarkers(source: string): string {
