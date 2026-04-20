@@ -1,12 +1,33 @@
 import { describe, expect, expectTypeOf, it } from "vitest"
+import type {
+  BabulfishConfig,
+  BabulfishCore,
+  BabulfishEngineConfig,
+  TranslateOptions,
+} from "./core/babulfish.js"
+import type { Capabilities, CapabilityObservation } from "./core/capabilities.js"
 import { createBabulfish } from "./core/babulfish.js"
 import { DEFAULT_LANGUAGES } from "./core/languages.js"
+import type { Language } from "./core/languages.js"
+import type { ModelState, Snapshot, TranslationState } from "./core/store.js"
 import * as domBarrel from "./dom/index.js"
 import * as markdown from "./dom/markdown.js"
 import * as domTranslator from "./dom/translator.js"
 import * as engineBarrel from "./engine/index.js"
 import * as detect from "./engine/detect.js"
 import * as engineModel from "./engine/model.js"
+import type {
+  EnablementCompat,
+  EnablementConfig,
+  EnablementState,
+  EnablementVerdict,
+  FitInference,
+  ModelProfile,
+  ModelProfileInput,
+  ProbeMode,
+  ProbeSummary,
+  ResolvedRuntimePlan,
+} from "./engine/runtime-plan.js"
 import * as runtimePlan from "./engine/runtime-plan.js"
 import * as testingBarrel from "./testing/index.js"
 import * as testingScenarios from "./testing/scenarios.js"
@@ -112,9 +133,29 @@ describe("smoke tests", () => {
     expectTypeOf<engineModel.Translator>().toEqualTypeOf<barrel.Translator>()
     expectTypeOf<engineModel.TranslatorEvents>().toEqualTypeOf<barrel.TranslatorEvents>()
     expectTypeOf<engineModel.TranslatorStatus>().toEqualTypeOf<barrel.TranslatorStatus>()
+    expectTypeOf<BabulfishCore>().toEqualTypeOf<barrel.BabulfishCore>()
+    expectTypeOf<BabulfishConfig>().toEqualTypeOf<barrel.BabulfishConfig>()
+    expectTypeOf<BabulfishEngineConfig>().toEqualTypeOf<barrel.BabulfishEngineConfig>()
+    expectTypeOf<TranslateOptions>().toEqualTypeOf<barrel.TranslateOptions>()
+    expectTypeOf<Capabilities>().toEqualTypeOf<barrel.Capabilities>()
+    expectTypeOf<CapabilityObservation>().toEqualTypeOf<barrel.CapabilityObservation>()
+    expectTypeOf<Language>().toEqualTypeOf<barrel.Language>()
+    expectTypeOf<Snapshot>().toEqualTypeOf<barrel.Snapshot>()
+    expectTypeOf<ModelState>().toEqualTypeOf<barrel.ModelState>()
+    expectTypeOf<TranslationState>().toEqualTypeOf<barrel.TranslationState>()
     expectTypeOf<detect.DevicePreference>().toEqualTypeOf<barrel.DevicePreference>()
     expectTypeOf<detect.ResolvedDevice>().toEqualTypeOf<barrel.ResolvedDevice>()
     expectTypeOf<detect.TranslationCapabilities>().toEqualTypeOf<barrel.TranslationCapabilities>()
+    expectTypeOf<EnablementCompat>().toEqualTypeOf<barrel.EnablementCompat>()
+    expectTypeOf<EnablementConfig>().toEqualTypeOf<barrel.EnablementConfig>()
+    expectTypeOf<EnablementState>().toEqualTypeOf<barrel.EnablementState>()
+    expectTypeOf<EnablementVerdict>().toEqualTypeOf<barrel.EnablementVerdict>()
+    expectTypeOf<FitInference>().toEqualTypeOf<barrel.FitInference>()
+    expectTypeOf<ModelProfile>().toEqualTypeOf<barrel.ModelProfile>()
+    expectTypeOf<ModelProfileInput>().toEqualTypeOf<barrel.ModelProfileInput>()
+    expectTypeOf<ProbeMode>().toEqualTypeOf<barrel.ProbeMode>()
+    expectTypeOf<ProbeSummary>().toEqualTypeOf<barrel.ProbeSummary>()
+    expectTypeOf<ResolvedRuntimePlan>().toEqualTypeOf<barrel.ResolvedRuntimePlan>()
     expectTypeOf<domTranslator.DOMTranslatorConfig>().toEqualTypeOf<barrel.DOMTranslatorConfig>()
     expectTypeOf<domTranslator.DOMTranslator>().toEqualTypeOf<barrel.DOMTranslator>()
     expectTypeOf<domTranslator.RichTextConfig>().toEqualTypeOf<barrel.RichTextConfig>()
