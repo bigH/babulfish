@@ -52,6 +52,27 @@ describe("resolveModelProfile", () => {
       note: "Maintained by the app.",
     })
   })
+
+  it("treats omitted runtime fields the same as explicit defaults", () => {
+    expect(
+      resolveModelProfile({
+        modelId: "acme/translator",
+      }),
+    ).toEqual(
+      resolveModelProfile({
+        modelId: "acme/translator",
+        dtype: "q4",
+        device: "auto",
+        maxNewTokens: 512,
+        sourceLanguage: "en",
+        enablement: {
+          policy: "default",
+          modelProfile: "auto",
+          probe: "off",
+        },
+      }),
+    )
+  })
 })
 
 describe("resolveRuntimePreferences", () => {

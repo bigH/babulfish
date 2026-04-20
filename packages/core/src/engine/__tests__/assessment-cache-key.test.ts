@@ -39,6 +39,28 @@ describe("createAssessmentCacheKey", () => {
     )
   })
 
+  it("treats omitted runtime fields the same as explicit defaults", () => {
+    const observation = baseObservation()
+
+    expect(createAssessmentCacheKey(undefined, observation)).toBe(
+      createAssessmentCacheKey(
+        {
+          modelId: "onnx-community/translategemma-text-4b-it-ONNX",
+          dtype: "q4",
+          device: "auto",
+          sourceLanguage: "en",
+          maxNewTokens: 512,
+          enablement: {
+            policy: "default",
+            modelProfile: "auto",
+            probe: "off",
+          },
+        },
+        observation,
+      ),
+    )
+  })
+
   it("diverges when modelId changes", () => {
     const observation = baseObservation()
     const first = createAssessmentCacheKey(baseConfig({ modelId: "acme/a" }), observation)

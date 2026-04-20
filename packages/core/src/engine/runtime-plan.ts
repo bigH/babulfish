@@ -58,6 +58,8 @@ type NormalizedRuntimePreferenceConfig = {
   readonly enablement: Required<EnablementConfig>
 }
 
+type ResolvedModelProfileConfig = NormalizedRuntimePreferenceConfig["enablement"]["modelProfile"]
+
 export type FitInference = {
   readonly outcome: "likely-fit" | "likely-no-fit" | "unknown"
   readonly basis: "system-memory-heuristic"
@@ -198,6 +200,35 @@ function createUnknownProfile(
       override?.note ??
       "No shipped profile matched this model config, so Session 1 uses an unknown memory estimate.",
   })
+}
+
+function resolveModelProfileFromConfig(
+  config: NormalizedRuntimePreferenceConfig,
+): ModelProfile {
+  const requestedProfile = config.enablement.modelProfile
+
+  if (requestedProfile !== "auto") {
+    return createUnknownProfile(config, requestedProfile)
+  }
+
+  const builtin = BUILTIN_MODEL_PROFILES.find(
+    (profile) => profile.modelId === config.modelId && profile.dtype === config.dtype,
+  )
+
+  return builtin ?? createUnknownProfile(config)
+}
+
+function createModelProfileCacheKey(modelProfile: ResolvedModelProfileConfig): string {
+  return modelProfile === "auto"
+    ? "auto"
+    : [
+        modelProfile.id ?? "",
+        modelProfile.version ?? "",
+        modelProfile.estimatedWorkingSetGiB === null
+          ? "null"
+          : String(modelProfile.estimatedWorkingSetGiB),
+        modelProfile.note ?? "",
+      ].join("|")
 }
 
 function buildRuntimePlan(
@@ -342,19 +373,7 @@ export function resolveRuntimePreferences(
 }
 
 export function resolveModelProfile(config?: RuntimePreferenceConfig): ModelProfile {
-  const resolvedConfig = resolveRuntimePreferences(config)
-  const requestedProfile = resolvedConfig.enablement.modelProfile
-
-  if (requestedProfile !== "auto") {
-    return createUnknownProfile(resolvedConfig, requestedProfile)
-  }
-
-  const builtin = BUILTIN_MODEL_PROFILES.find(
-    (profile) =>
-      profile.modelId === resolvedConfig.modelId && profile.dtype === resolvedConfig.dtype,
-  )
-
-  return builtin ?? createUnknownProfile(resolvedConfig)
+  return resolveModelProfileFromConfig(resolveRuntimePreferences(config))
 }
 
 export function inferModelFit(
@@ -418,7 +437,7 @@ export function assessRuntimeEnablement(
   observation: CapabilityObservation,
 ): EnablementAssessment {
   const resolvedConfig = resolveRuntimePreferences(config)
-  const modelProfile = resolveModelProfile(resolvedConfig)
+  const modelProfile = resolveModelProfileFromConfig(resolvedConfig)
   const inference =
     resolvedConfig.device === "wasm" || !observation.hasWebGPU
       ? null
@@ -438,18 +457,7 @@ export function createAssessmentCacheKey(
   observation: CapabilityObservation,
 ): string {
   const resolvedConfig = resolveRuntimePreferences(config)
-  const modelProfile = resolvedConfig.enablement.modelProfile
-  const modelProfileKey =
-    modelProfile === "auto"
-      ? "auto"
-      : [
-          modelProfile.id ?? "",
-          modelProfile.version ?? "",
-          modelProfile.estimatedWorkingSetGiB === null
-            ? "null"
-            : String(modelProfile.estimatedWorkingSetGiB),
-          modelProfile.note ?? "",
-        ].join("|")
+  const modelProfileKey = createModelProfileCacheKey(resolvedConfig.enablement.modelProfile)
 
   return [
     resolvedConfig.modelId,
