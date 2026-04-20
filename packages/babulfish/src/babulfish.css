@@ -1,1 +1,2 @@
+/* Keep this file local so the published "./css" export stays a CSS asset. */
 @import "@babulfish/styles/css";

@@ -40,6 +40,7 @@ const EXPECTED_REACT_RUNTIME_KEYS = [
   "useTranslateDOM",
   "useTranslator",
 ]
+const CSS_BRIDGE_IMPORT = '@import "@babulfish/styles/css";'
 
 function registerCleanup(target) {
   cleanupTargets.add(target)
@@ -66,6 +67,10 @@ function assert(condition, message) {
 
 function runNode(code, cwd) {
   return run("node", ["--input-type=module", "-e", code], cwd)
+}
+
+function assertCssBridge(specifier, source) {
+  assert(source.includes(CSS_BRIDGE_IMPORT), `${specifier} should bridge to @babulfish/styles/css`)
 }
 
 function packPackage(packageName, packDir) {
@@ -168,6 +173,7 @@ import { readFileSync } from "node:fs"
 const expectedCoreSnapshotKeys = ${JSON.stringify(EXPECTED_CORE_SNAPSHOT_KEYS)}
 const expectedCoreKeys = ${JSON.stringify(EXPECTED_CORE_RUNTIME_KEYS)}
 const expectedCoreDomKeys = ${JSON.stringify(EXPECTED_CORE_DOM_RUNTIME_KEYS)}
+const cssBridgeImport = ${JSON.stringify(CSS_BRIDGE_IMPORT)}
 
 function ok(message) {
   console.log(message)
@@ -175,6 +181,10 @@ function ok(message) {
 
 function assert(condition, message) {
   if (!condition) throw new Error(message)
+}
+
+function assertCssBridge(specifier, source) {
+  assert(source.includes(cssBridgeImport), specifier + " should bridge to @babulfish/styles/css")
 }
 
 const coreModule = await import("@babulfish/core")
@@ -238,14 +248,8 @@ const metaCss = import.meta.resolve("babulfish/css")
 assert(stylesCss.endsWith(".css"), "@babulfish/styles/css should resolve to a css file")
 assert(reactCss.endsWith(".css"), "@babulfish/react/css should resolve to a css file")
 assert(metaCss.endsWith(".css"), "babulfish/css should resolve to a css file")
-assert(
-  readFileSync(new URL(reactCss), "utf8").includes('@import "@babulfish/styles/css";'),
-  "@babulfish/react/css should bridge to @babulfish/styles/css",
-)
-assert(
-  readFileSync(new URL(metaCss), "utf8").includes('@import "@babulfish/styles/css";'),
-  "babulfish/css should bridge to @babulfish/styles/css",
-)
+assertCssBridge("@babulfish/react/css", readFileSync(new URL(reactCss), "utf8"))
+assertCssBridge("babulfish/css", readFileSync(new URL(metaCss), "utf8"))
 const stylesSource = readFileSync(new URL(stylesCss), "utf8")
 for (const marker of [
   "--babulfish-accent",
