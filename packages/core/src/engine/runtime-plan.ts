@@ -213,6 +213,95 @@ function buildRuntimePlan(
   })
 }
 
+function createEnablementAssessment(
+  config: NormalizedRuntimePreferenceConfig,
+  modelProfile: ModelProfile,
+  inference: FitInference | null,
+  verdict: EnablementVerdict,
+): EnablementAssessment {
+  return Object.freeze({
+    modelProfile,
+    inference,
+    verdict,
+    runtimePlan:
+      verdict.resolvedDevice === null ? null : buildRuntimePlan(config, verdict.resolvedDevice),
+  })
+}
+
+function resolveEnablementVerdict(
+  config: NormalizedRuntimePreferenceConfig,
+  observation: CapabilityObservation,
+  inference: FitInference | null,
+): EnablementVerdict {
+  if (!observation.ready) {
+    return {
+      outcome: "unknown",
+      resolvedDevice: null,
+      reason: "Capability observations are not ready yet.",
+    }
+  }
+
+  if (config.device === "wasm") {
+    return {
+      outcome: "wasm-only",
+      resolvedDevice: "wasm",
+      reason: "WASM was explicitly requested.",
+    }
+  }
+
+  if (!observation.hasWebGPU) {
+    return config.device === "webgpu"
+      ? {
+          outcome: "denied",
+          resolvedDevice: null,
+          reason: "WebGPU was explicitly requested, but this browser does not expose WebGPU.",
+        }
+      : {
+          outcome: "wasm-only",
+          resolvedDevice: "wasm",
+          reason: "WebGPU is unavailable here, so babulfish will use WASM.",
+        }
+  }
+
+  if (!inference || inference.outcome === "unknown") {
+    return config.device === "webgpu"
+      ? {
+          outcome: "needs-probe",
+          resolvedDevice: null,
+          reason:
+            "WebGPU was explicitly requested but the memory heuristic is inconclusive. A probe could verify compatibility.",
+        }
+      : {
+          outcome: "needs-probe",
+          resolvedDevice: null,
+          reason:
+            "Session 1 memory heuristic is inconclusive. A probe could verify WebGPU compatibility.",
+        }
+  }
+
+  if (inference.outcome === "likely-fit") {
+    return {
+      outcome: "gpu-preferred",
+      resolvedDevice: "webgpu",
+      reason: inference.note,
+    }
+  }
+
+  return config.device === "webgpu"
+    ? {
+        outcome: "denied",
+        resolvedDevice: null,
+        reason:
+          "WebGPU was explicitly requested, but the Session 1 memory heuristic says this model is unlikely to fit.",
+      }
+    : {
+        outcome: "wasm-only",
+        resolvedDevice: "wasm",
+        reason:
+          "The Session 1 memory heuristic says WebGPU is unlikely to fit, so babulfish will use WASM.",
+      }
+}
+
 export function createRuntimePlanKey(plan: ResolvedRuntimePlan): string {
   return [
     plan.modelId,
@@ -334,125 +423,14 @@ export function assessRuntimeEnablement(
     resolvedConfig.device === "wasm" || !observation.hasWebGPU
       ? null
       : inferModelFit(observation, modelProfile)
+  const verdict = resolveEnablementVerdict(resolvedConfig, observation, inference)
 
-  if (!observation.ready) {
-    return Object.freeze({
-      modelProfile,
-      inference,
-      verdict: {
-        outcome: "unknown",
-        resolvedDevice: null,
-        reason: "Capability observations are not ready yet.",
-      },
-      runtimePlan: null,
-    })
-  }
-
-  if (resolvedConfig.device === "wasm") {
-    return Object.freeze({
-      modelProfile,
-      inference: null,
-      verdict: {
-        outcome: "wasm-only",
-        resolvedDevice: "wasm",
-        reason: "WASM was explicitly requested.",
-      },
-      runtimePlan: buildRuntimePlan(resolvedConfig, "wasm"),
-    })
-  }
-
-  if (!observation.hasWebGPU) {
-    if (resolvedConfig.device === "webgpu") {
-      return Object.freeze({
-        modelProfile,
-        inference,
-        verdict: {
-          outcome: "denied",
-          resolvedDevice: null,
-          reason: "WebGPU was explicitly requested, but this browser does not expose WebGPU.",
-        },
-        runtimePlan: null,
-      })
-    }
-
-    return Object.freeze({
-      modelProfile,
-      inference: null,
-      verdict: {
-        outcome: "wasm-only",
-        resolvedDevice: "wasm",
-        reason: "WebGPU is unavailable here, so babulfish will use WASM.",
-      },
-      runtimePlan: buildRuntimePlan(resolvedConfig, "wasm"),
-    })
-  }
-
-  if (!inference || inference.outcome === "unknown") {
-    if (resolvedConfig.device === "webgpu") {
-      return Object.freeze({
-        modelProfile,
-        inference,
-        verdict: {
-          outcome: "needs-probe",
-          resolvedDevice: null,
-          reason:
-            "WebGPU was explicitly requested but the memory heuristic is inconclusive. A probe could verify compatibility.",
-        },
-        runtimePlan: null,
-      })
-    }
-
-    return Object.freeze({
-      modelProfile,
-      inference,
-      verdict: {
-        outcome: "needs-probe",
-        resolvedDevice: null,
-        reason:
-          "Session 1 memory heuristic is inconclusive. A probe could verify WebGPU compatibility.",
-      },
-      runtimePlan: null,
-    })
-  }
-
-  if (inference.outcome === "likely-fit") {
-    return Object.freeze({
-      modelProfile,
-      inference,
-      verdict: {
-        outcome: "gpu-preferred",
-        resolvedDevice: "webgpu",
-        reason: inference.note,
-      },
-      runtimePlan: buildRuntimePlan(resolvedConfig, "webgpu"),
-    })
-  }
-
-  if (resolvedConfig.device === "webgpu") {
-    return Object.freeze({
-      modelProfile,
-      inference,
-      verdict: {
-        outcome: "denied",
-        resolvedDevice: null,
-        reason:
-          "WebGPU was explicitly requested, but the Session 1 memory heuristic says this model is unlikely to fit.",
-      },
-      runtimePlan: null,
-    })
-  }
-
-  return Object.freeze({
+  return createEnablementAssessment(
+    resolvedConfig,
     modelProfile,
     inference,
-    verdict: {
-      outcome: "wasm-only",
-      resolvedDevice: "wasm",
-      reason:
-        "The Session 1 memory heuristic says WebGPU is unlikely to fit, so babulfish will use WASM.",
-    },
-    runtimePlan: buildRuntimePlan(resolvedConfig, "wasm"),
-  })
+    verdict,
+  )
 }
 
 export function createAssessmentCacheKey(

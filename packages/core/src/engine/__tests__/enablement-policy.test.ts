@@ -54,6 +54,25 @@ describe("inferModelFit", () => {
 })
 
 describe("assessRuntimeEnablement", () => {
+  it.each([
+    ["auto before any heuristic branch", undefined, browserObservation({ ready: false })],
+    ["explicit wasm", { device: "wasm" } as const, browserObservation({ ready: false })],
+    [
+      "explicit webgpu even when the browser also lacks WebGPU",
+      { device: "webgpu" } as const,
+      browserObservation({ ready: false, hasWebGPU: false }),
+    ],
+  ])("keeps readiness precedence for %s", (_label, config, observation) => {
+    const assessment = assessRuntimeEnablement(config, observation)
+
+    expect(assessment.verdict).toEqual({
+      outcome: "unknown",
+      resolvedDevice: null,
+      reason: "Capability observations are not ready yet.",
+    })
+    expect(assessment.runtimePlan).toBeNull()
+  })
+
   it("uses WASM when auto mode lacks WebGPU", () => {
     const assessment = assessRuntimeEnablement(undefined, browserObservation({ hasWebGPU: false }))
 
@@ -71,6 +90,25 @@ describe("assessRuntimeEnablement", () => {
     expect(assessment.verdict.outcome).toBe("gpu-preferred")
     expect(assessment.runtimePlan?.resolvedDevice).toBe("webgpu")
     expect(assessment.inference?.basis).toBe("system-memory-heuristic")
+  })
+
+  it("builds the full runtime plan from the resolved config", () => {
+    const assessment = assessRuntimeEnablement(
+      {
+        dtype: "q8",
+        maxNewTokens: 256,
+        sourceLanguage: "fr",
+      },
+      browserObservation({ approxDeviceMemoryGiB: 32 }),
+    )
+
+    expect(assessment.runtimePlan).toEqual({
+      modelId: "onnx-community/translategemma-text-4b-it-ONNX",
+      dtype: "q8",
+      resolvedDevice: "webgpu",
+      sourceLanguage: "fr",
+      maxNewTokens: 256,
+    })
   })
 
   it("falls back to WASM when auto mode lacks enough headroom", () => {
