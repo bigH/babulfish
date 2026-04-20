@@ -17,6 +17,8 @@ describe("createStore", () => {
     })
     expect(store.get().capabilities).toBe(SSR_CAPABILITIES)
     expect(Object.isFrozen(store.get())).toBe(true)
+    expect(Object.isFrozen(store.get().enablement.probe)).toBe(true)
+    expect(Object.isFrozen(store.get().enablement.verdict)).toBe(true)
   })
 
   it("starts with provided capabilities and freezes them", () => {
@@ -44,16 +46,13 @@ describe("createStore", () => {
     expect(listener).not.toHaveBeenCalled()
   })
 
-  it("does not re-freeze snapshots on no-op updates", () => {
+  it("preserves snapshot identity on no-op updates", () => {
     const store = createStore()
-    const freeze = vi.spyOn(Object, "freeze")
+    const before = store.get()
 
     store.set((snapshot) => snapshot)
 
-    expect(freeze).not.toHaveBeenCalled()
-    expect(store.get()).toBe(store.get())
-
-    freeze.mockRestore()
+    expect(store.get()).toBe(before)
   })
 
   it("freezes snapshot slices for updated state", () => {
@@ -64,6 +63,22 @@ describe("createStore", () => {
       ...snapshot,
       translation: { status: "translating", progress: 0.5 },
       currentLanguage: "es",
+      enablement: {
+        status: "ready",
+        modelProfile: null,
+        inference: null,
+        probe: {
+          status: "passed",
+          kind: "adapter-smoke",
+          cache: "miss",
+          note: "probe completed",
+        },
+        verdict: {
+          outcome: "wasm-only",
+          resolvedDevice: "wasm",
+          reason: "WebGPU unavailable",
+        },
+      },
     }))
 
     const snapshot = store.get()
@@ -72,6 +87,8 @@ describe("createStore", () => {
     expect(Object.isFrozen(snapshot.translation)).toBe(true)
     expect(Object.isFrozen(snapshot.capabilities)).toBe(true)
     expect(Object.isFrozen(snapshot.enablement)).toBe(true)
+    expect(Object.isFrozen(snapshot.enablement.probe)).toBe(true)
+    expect(Object.isFrozen(snapshot.enablement.verdict)).toBe(true)
     expect(snapshot.capabilities).toBe(capabilities)
   })
 

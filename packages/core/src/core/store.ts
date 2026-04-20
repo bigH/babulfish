@@ -24,12 +24,28 @@ function freezeValue<T extends object>(value: T): T {
   return Object.isFrozen(value) ? value : Object.freeze(value)
 }
 
+function freezeEnablementState(enablement: EnablementState): EnablementState {
+  if (
+    Object.isFrozen(enablement) &&
+    Object.isFrozen(enablement.probe) &&
+    Object.isFrozen(enablement.verdict)
+  ) {
+    return enablement
+  }
+
+  return Object.freeze({
+    ...enablement,
+    probe: freezeValue(enablement.probe),
+    verdict: freezeValue(enablement.verdict),
+  })
+}
+
 function freezeSnapshot(snapshot: Snapshot): Snapshot {
   return Object.freeze({
     ...snapshot,
     model: freezeValue(snapshot.model),
     translation: freezeValue(snapshot.translation),
-    enablement: freezeValue(snapshot.enablement),
+    enablement: freezeEnablementState(snapshot.enablement),
   })
 }
 
