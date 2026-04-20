@@ -1,7 +1,3 @@
-// DOM translation orchestrator.
-// Creates a DOMTranslator instance that collects text nodes, batches them,
-// sends them through the injected translate function, and applies results.
-
 import type { TaggedTextNode } from "./walker.js"
 import type { PreserveMatcher } from "./preserve.js"
 import {
@@ -18,10 +14,11 @@ import {
 } from "./batcher.js"
 import { insertPlaceholders, restorePlaceholders } from "./preserve.js"
 import { isWellFormedMarkdown, stripInlineMarkdownMarkers } from "./markdown.js"
-
-// ---------------------------------------------------------------------------
-// Config types
-// ---------------------------------------------------------------------------
+import {
+  extractStructuredTextValues as extractStructuredCommitPlan,
+  type StructuredTextUnit,
+  tryExtractStructuredUnit as extractStructuredUnit,
+} from "./structured-text.js"
 
 export type RichTextConfig = {
   readonly selector: string
@@ -84,10 +81,6 @@ export type DOMTranslator = {
   readonly currentLang: string | null
 }
 
-// ---------------------------------------------------------------------------
-// Internal types
-// ---------------------------------------------------------------------------
-
 type TranslatableAttr = {
   readonly el: Element
   readonly attr: string
@@ -131,71 +124,13 @@ type PhaseWork = {
   attrs: TranslatableAttr[]
 }
 
-type StructuredTokenKind =
-  | "text-open"
-  | "text-close"
-  | "element-open"
-  | "element-close"
-  | "br"
-  | "code"
-
-type StructuredTokenDescriptor = {
-  readonly token: string
-  readonly kind: StructuredTokenKind
-  readonly slotId: number
-}
-
-type StructuredTextSlot = {
-  readonly node: Text
-  readonly slotId: number
-}
-
-type StructuredTextUnit = {
-  readonly root: Element
-  readonly source: string
-  readonly serialized: string
-  readonly textSlots: readonly StructuredTextSlot[]
-  readonly tokenSequence: readonly StructuredTokenDescriptor[]
-}
-
-type StructuredCommitPlan = {
-  readonly values: ReadonlyMap<number, string>
-}
-
-type VisibleClaims = {
+export type VisibleClaims = {
   readonly linkedTextNodes: Set<Text>
   readonly richRoots: readonly Element[]
   readonly structuredTextNodes: Set<Text>
 }
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
 const DEFAULT_RTL_LANGS: ReadonlySet<string> = new Set(["ar", "he", "ur", "fa"])
-const HTML_NAMESPACE = "http://www.w3.org/1999/xhtml"
-const STRUCTURED_TOKEN_PREFIX = "\u27EAbf-st:"
-const STRUCTURED_TOKEN_SUFFIX = "\u27EB"
-const STRUCTURED_INLINE_TAGS: ReadonlySet<string> = new Set([
-  "a",
-  "strong",
-  "b",
-  "em",
-  "i",
-  "u",
-  "s",
-  "del",
-  "mark",
-  "span",
-])
-const STRUCTURED_INERT_SPAN_ATTRS: ReadonlySet<string> = new Set([
-  "class",
-  "id",
-  "title",
-  "lang",
-  "dir",
-  "style",
-])
 
 function compareDocumentOrder(a: Node, b: Node): number {
   if (a === b) return 0
@@ -229,16 +164,6 @@ function getBatchParent(batch: readonly TaggedTextNode[]): Element {
   return parent
 }
 
-function buildStructuredToken(key: string, slotId: number): string {
-  return `${STRUCTURED_TOKEN_PREFIX}${key}:${slotId}${STRUCTURED_TOKEN_SUFFIX}`
-}
-
-function isInertStructuredSpan(el: Element): boolean {
-  if (el.localName !== "span") return true
-  return Array.from(el.attributes).every((attr) =>
-    attr.name.startsWith("data-") || STRUCTURED_INERT_SPAN_ATTRS.has(attr.name))
-}
-
 function resolveRoots(
   selectors: readonly string[],
   scope: ParentNode | Document,
@@ -268,14 +193,9 @@ function assignPhase(node: Node, phaseRoots: Element[][]): number {
   return phaseRoots.length
 }
 
-// ---------------------------------------------------------------------------
-// Factory
-// ---------------------------------------------------------------------------
-
 export function createDOMTranslator(config: DOMTranslatorConfig): DOMTranslator {
   const scope: ParentNode | Document = config.root ?? document
 
-  // Instance-scoped state — no module singletons
   const originalTexts = new WeakMap<Text, string>()
   const originalRichElements = new Map<Element, string>()
   const originalStructuredRoots = new Map<Element, string>()
@@ -314,8 +234,6 @@ export function createDOMTranslator(config: DOMTranslatorConfig): DOMTranslator 
     return restorePlaceholders(translated, slots)
   }
 
-  // Skip selectors: elements whose children should be excluded from
-  // plain-text walking (they are translated separately).
   const skipSelectors: string[] = []
   if (config.richText) skipSelectors.push(`[${config.richText.sourceAttribute}]`)
   if (config.linkedBy) skipSelectors.push(`[${config.linkedBy.keyAttribute}]`)
@@ -356,10 +274,6 @@ export function createDOMTranslator(config: DOMTranslatorConfig): DOMTranslator 
 
     return attrs[attrName]!
   }
-
-  // -------------------------------------------------------------------------
-  // Linked element sync (e.g. section titles)
-  // -------------------------------------------------------------------------
 
   function collectLinkedGroups(roots: Element[]): LinkedGroup[] {
     if (!config.linkedBy) return []
@@ -445,10 +359,6 @@ export function createDOMTranslator(config: DOMTranslatorConfig): DOMTranslator 
       onUnit()
     }
   }
-
-  // -------------------------------------------------------------------------
-  // Attribute collection
-  // -------------------------------------------------------------------------
 
   function collectStructuredCandidates(roots: readonly Element[]): Element[] {
     if (!config.structuredText) return []
@@ -536,7 +446,11 @@ export function createDOMTranslator(config: DOMTranslatorConfig): DOMTranslator 
       if (overlapsClaimedRoot(candidate, claims.richRoots)) continue
       if (containsClaimedLinkedTextNode(candidate, claims.linkedTextNodes)) continue
 
-      const unit = tryExtractStructuredUnit(candidate, claims)
+      const unit = extractStructuredUnit(candidate, {
+        originalTexts,
+        shouldSkip,
+        claims,
+      })
       if (!unit) continue
 
       claimStructuredTextNodes(unit, claims)
@@ -544,189 +458,6 @@ export function createDOMTranslator(config: DOMTranslatorConfig): DOMTranslator 
     }
 
     return units
-  }
-
-  function tryExtractStructuredUnit(
-    root: Element,
-    claims: VisibleClaims,
-  ): StructuredTextUnit | null {
-    if (root.namespaceURI && root.namespaceURI !== HTML_NAMESPACE) return null
-    if (root.localName.includes("-")) return null
-    if (!isInertStructuredSpan(root)) return null
-    if (root.hasAttribute("contenteditable") && root.getAttribute("contenteditable") !== "false") {
-      return null
-    }
-
-    const parts: string[] = []
-    const sourceParts: string[] = []
-    const tokenSequence: StructuredTokenDescriptor[] = []
-    const textSlots: StructuredTextSlot[] = []
-    let nextSlotId = 0
-
-    function pushToken(kind: StructuredTokenKind, key: string, slotId: number): void {
-      const token = buildStructuredToken(key, slotId)
-      parts.push(token)
-      tokenSequence.push({ token, kind, slotId })
-    }
-
-    function walk(node: Node): boolean {
-      if (node.nodeType === Node.TEXT_NODE) {
-        const textNode = node as Text
-        if (claims.linkedTextNodes.has(textNode) || claims.structuredTextNodes.has(textNode)) {
-          return false
-        }
-
-        const source = captureOriginalText(textNode, originalTexts)
-        const trimmed = source.trim()
-        if (!trimmed) return true
-        if (shouldSkip(trimmed)) return false
-
-        const slotId = nextSlotId++
-        pushToken("text-open", "text-open", slotId)
-        parts.push(source)
-        sourceParts.push(source)
-        pushToken("text-close", "text-close", slotId)
-        textSlots.push({ node: textNode, slotId })
-        return true
-      }
-
-      if (node.nodeType === Node.COMMENT_NODE) {
-        return true
-      }
-
-      if (node.nodeType !== Node.ELEMENT_NODE) {
-        return false
-      }
-
-      const el = node as Element
-      if (el.namespaceURI && el.namespaceURI !== HTML_NAMESPACE) {
-        return false
-      }
-      if (el.localName.includes("-")) {
-        return false
-      }
-      if (el.hasAttribute("contenteditable") && el.getAttribute("contenteditable") !== "false") {
-        return false
-      }
-
-      const tag = el.localName
-      if (tag === "br") {
-        const slotId = nextSlotId++
-        parts.push("\n")
-        sourceParts.push("\n")
-        pushToken("br", "br", slotId)
-        return true
-      }
-
-      if (tag === "code") {
-        for (const child of el.childNodes) {
-          if (child.nodeType !== Node.TEXT_NODE) return false
-        }
-        const slotId = nextSlotId++
-        pushToken("code", "code", slotId)
-        return true
-      }
-
-      if (!STRUCTURED_INLINE_TAGS.has(tag)) {
-        return false
-      }
-      if (!isInertStructuredSpan(el)) {
-        return false
-      }
-
-      const slotId = nextSlotId++
-      pushToken("element-open", `element-open:${tag}`, slotId)
-      for (const child of el.childNodes) {
-        if (!walk(child)) return false
-      }
-      pushToken("element-close", `element-close:${tag}`, slotId)
-      return true
-    }
-
-    for (const child of root.childNodes) {
-      if (!walk(child)) return null
-    }
-
-    if (textSlots.length === 0) return null
-
-    return {
-      root,
-      source: sourceParts.join(""),
-      serialized: parts.join(""),
-      textSlots,
-      tokenSequence,
-    }
-  }
-
-  function collectStructuredTokens(
-    translated: string,
-  ): string[] | null {
-    const tokens: string[] = []
-    let cursor = 0
-
-    while (true) {
-      const start = translated.indexOf(STRUCTURED_TOKEN_PREFIX, cursor)
-      if (start < 0) return tokens
-
-      const end = translated.indexOf(
-        STRUCTURED_TOKEN_SUFFIX,
-        start + STRUCTURED_TOKEN_PREFIX.length,
-      )
-      if (end < 0) return null
-
-      tokens.push(translated.slice(start, end + STRUCTURED_TOKEN_SUFFIX.length))
-      cursor = end + STRUCTURED_TOKEN_SUFFIX.length
-    }
-  }
-
-  function extractStructuredTextValues(
-    unit: StructuredTextUnit,
-    translated: string,
-  ): StructuredCommitPlan | null {
-    const foundTokens = collectStructuredTokens(translated)
-    if (!foundTokens) return null
-
-    const expectedTokens = unit.tokenSequence.map(({ token }) => token)
-    if (foundTokens.length !== expectedTokens.length) return null
-    if (new Set(foundTokens).size !== foundTokens.length) return null
-
-    for (let i = 0; i < expectedTokens.length; i++) {
-      if (foundTokens[i] !== expectedTokens[i]) return null
-    }
-
-    const values = new Map<number, string>()
-    let cursor = 0
-    let activeTextSlotId: number | null = null
-
-    for (const token of unit.tokenSequence) {
-      const index = translated.indexOf(token.token, cursor)
-      if (index < 0) return null
-
-      const between = translated.slice(cursor, index)
-      if (activeTextSlotId == null) {
-        if (token.kind === "br") {
-          if (between !== "\n") return null
-        } else if (between.length > 0) {
-          return null
-        }
-        if (token.kind === "text-open") {
-          activeTextSlotId = token.slotId
-        }
-      } else {
-        if (between.includes(STRUCTURED_TOKEN_PREFIX)) return null
-        if (token.kind !== "text-close" || token.slotId !== activeTextSlotId) {
-          return null
-        }
-        values.set(activeTextSlotId, between)
-        activeTextSlotId = null
-      }
-
-      cursor = index + token.token.length
-    }
-
-    if (activeTextSlotId != null) return null
-    if (translated.slice(cursor).length > 0) return null
-    return { values }
   }
 
   function buildStructuredFallbackSource(unit: StructuredTextUnit): string {
@@ -757,10 +488,6 @@ export function createDOMTranslator(config: DOMTranslatorConfig): DOMTranslator 
     return items
   }
 
-  // -------------------------------------------------------------------------
-  // Rich text translation
-  // -------------------------------------------------------------------------
-
   async function translateRichElement(
     el: Element,
     targetLang: string,
@@ -771,7 +498,6 @@ export function createDOMTranslator(config: DOMTranslatorConfig): DOMTranslator 
     if (!source) return
 
     if (!originalRichElements.has(el)) {
-      // Safe: capturing current DOM state for later restore
       originalRichElements.set(el, el.innerHTML) // eslint-disable-line no-unsanitized/property
     }
 
@@ -788,8 +514,6 @@ export function createDOMTranslator(config: DOMTranslatorConfig): DOMTranslator 
     const validate = config.richText.validate ?? isWellFormedMarkdown
     if (validate(transformed)) {
       const render = config.richText.render
-      // Safe: render function provided by consumer is responsible for escaping.
-      // Default (renderInlineMarkdownToHtml) escapes all text segments.
       el.innerHTML = render(transformed) // eslint-disable-line no-unsanitized/property
     } else {
       el.textContent = stripInlineMarkdownMarkers(transformed)
@@ -817,7 +541,7 @@ export function createDOMTranslator(config: DOMTranslatorConfig): DOMTranslator 
       source: unit.source,
     })
 
-    const exactCommit = extractStructuredTextValues(unit, transformed)
+    const exactCommit = extractStructuredCommitPlan(unit, transformed)
     if (exactCommit) {
       if (signal.aborted) return
       for (const { node, slotId } of unit.textSlots) {
@@ -847,10 +571,6 @@ export function createDOMTranslator(config: DOMTranslatorConfig): DOMTranslator 
     config.hooks?.onTranslateEnd?.(unit.root)
   }
 
-  // -------------------------------------------------------------------------
-  // Core translate
-  // -------------------------------------------------------------------------
-
   async function doTranslate(targetLang: string): Promise<void> {
     if (activeController) activeController.abort()
     activeController = new AbortController()
@@ -863,7 +583,6 @@ export function createDOMTranslator(config: DOMTranslatorConfig): DOMTranslator 
       const roots = resolveRoots(config.roots, scope)
       if (roots.length === 0) return
 
-      // RTL direction
       const dir = rtlLangs.has(targetLang) ? "rtl" : "ltr"
       for (const root of roots) {
         if (!savedDirs.has(root)) savedDirs.set(root, root.getAttribute("dir"))
@@ -871,7 +590,6 @@ export function createDOMTranslator(config: DOMTranslatorConfig): DOMTranslator 
         config.hooks?.onDirectionChange?.(root, dir)
       }
 
-      // Collect all translatable units before mutation
       const linkedGroups = collectLinkedGroups(roots)
 
       const allRich = config.richText
@@ -944,7 +662,6 @@ export function createDOMTranslator(config: DOMTranslatorConfig): DOMTranslator 
         phases[assignPhase(attr.el, phaseRoots)]!.attrs.push(attr)
       }
 
-      // Linked elements first (like section titles)
       await translateLinked(linkedGroups, targetLang, signal, progress)
 
       for (const phase of phases) {
@@ -988,7 +705,6 @@ export function createDOMTranslator(config: DOMTranslatorConfig): DOMTranslator 
       progress()
     }
 
-    // Attributes
     for (const { el, attr, text } of phase.attrs) {
       if (signal.aborted) return
       const translated = await config.translate(text, targetLang)
@@ -1004,10 +720,6 @@ export function createDOMTranslator(config: DOMTranslatorConfig): DOMTranslator 
     }
   }
 
-  // -------------------------------------------------------------------------
-  // Restore
-  // -------------------------------------------------------------------------
-
   function restore(): void {
     if (activeController) {
       activeController.abort()
@@ -1016,7 +728,6 @@ export function createDOMTranslator(config: DOMTranslatorConfig): DOMTranslator 
     translating = false
     lang = null
 
-    // Restore dir attributes
     for (const [el, dir] of savedDirs) {
       if (dir !== null) {
         el.setAttribute("dir", dir)
@@ -1026,7 +737,6 @@ export function createDOMTranslator(config: DOMTranslatorConfig): DOMTranslator 
     }
     savedDirs.clear()
 
-    // Safe: restoring previously captured DOM content
     for (const [el, original] of originalRichElements) {
       el.innerHTML = original // eslint-disable-line no-unsanitized/property
     }
@@ -1037,7 +747,6 @@ export function createDOMTranslator(config: DOMTranslatorConfig): DOMTranslator 
     }
     originalStructuredRoots.clear()
 
-    // Restore attributes
     for (const [el, attrs] of originalAttrs) {
       for (const [attrKey, value] of Object.entries(attrs)) {
         el.setAttribute(attrKey, value)
@@ -1046,7 +755,6 @@ export function createDOMTranslator(config: DOMTranslatorConfig): DOMTranslator 
     originalAttrs.clear()
     originalLinkedSources.clear()
 
-    // Restore text nodes
     const roots = resolveRoots(config.roots, scope)
     for (const root of roots) {
       forEachTextNode(root, (current) => {
@@ -1058,10 +766,6 @@ export function createDOMTranslator(config: DOMTranslatorConfig): DOMTranslator 
       })
     }
   }
-
-  // -------------------------------------------------------------------------
-  // Abort
-  // -------------------------------------------------------------------------
 
   function abort(): void {
     if (activeController) {
