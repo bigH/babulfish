@@ -12,6 +12,36 @@ export type TranslatorHostElement = HTMLElement & {
   restore(): void
 }
 
+function requireElementById<T extends HTMLElement>(
+  doc: Document,
+  id: string,
+  expected: typeof HTMLElement,
+  errorMessage: string,
+): T {
+  const element = doc.getElementById(id)
+
+  if (!(element instanceof expected)) {
+    throw new Error(errorMessage)
+  }
+
+  return element as T
+}
+
+function requireElement<T extends HTMLElement>(
+  root: ParentNode,
+  selector: string,
+  expected: typeof HTMLElement,
+  errorMessage: string,
+): T {
+  const element = root.querySelector(selector)
+
+  if (!(element instanceof expected)) {
+    throw new Error(errorMessage)
+  }
+
+  return element as T
+}
+
 function formatRequestedRuntimeValue(
   requested: string | null,
   options: readonly { readonly value: string; readonly label: string }[],
@@ -37,23 +67,43 @@ export function formatRequestedDType(
 }
 
 export function requireButton(doc: Document, id: string): HTMLButtonElement {
-  const button = doc.getElementById(id)
+  return requireElementById<HTMLButtonElement>(
+    doc,
+    id,
+    HTMLButtonElement,
+    `Expected #${id} button for demo host controls`,
+  )
+}
 
-  if (!(button instanceof HTMLButtonElement)) {
-    throw new Error(`Expected #${id} button for demo host controls`)
-  }
+export function requireSelect(doc: Document, id: string): HTMLSelectElement {
+  return requireElementById<HTMLSelectElement>(
+    doc,
+    id,
+    HTMLSelectElement,
+    `Expected #${id} select for host runtime controls`,
+  )
+}
 
-  return button
+export function requireStatus(doc: Document, id: string): HTMLElement {
+  return requireElementById<HTMLElement>(doc, id, HTMLElement, `Expected #${id} host status element`)
+}
+
+export function requireHostControls(doc: Document): HTMLElement {
+  return requireElement<HTMLElement>(
+    doc,
+    ".host-controls",
+    HTMLElement,
+    'Expected ".host-controls" wrapper for demo host controls',
+  )
 }
 
 export function requireEventLog(doc: Document): HTMLElement {
-  const eventLog = doc.getElementById("event-log")
-
-  if (!(eventLog instanceof HTMLElement)) {
-    throw new Error('Expected host page to provide #event-log for demo status output')
-  }
-
-  return eventLog
+  return requireElementById<HTMLElement>(
+    doc,
+    "event-log",
+    HTMLElement,
+    "Expected host page to provide #event-log for demo status output",
+  )
 }
 
 export function appendStatusEntry(

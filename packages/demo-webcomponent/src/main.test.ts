@@ -8,6 +8,9 @@ import {
   observeHostDocument,
   requireButton,
   requireEventLog,
+  requireHostControls,
+  requireSelect,
+  requireStatus,
   restoreTranslators,
   setTranslatorLanguage,
   type TranslatorHostElement,
@@ -63,6 +66,42 @@ describe("demo main helpers", () => {
     document.body.innerHTML = `<button id="host-restore" type="button">Restore</button>`
 
     expect(requireButton(document, "host-restore")).toBeInstanceOf(HTMLButtonElement)
+  })
+
+  it("fails fast when the host page is missing a required runtime select", () => {
+    expect(() => requireSelect(document, "runtime-device")).toThrowError(
+      "Expected #runtime-device select for host runtime controls",
+    )
+  })
+
+  it("returns the requested runtime select", () => {
+    document.body.innerHTML = `<select id="runtime-device"></select>`
+
+    expect(requireSelect(document, "runtime-device")).toBeInstanceOf(HTMLSelectElement)
+  })
+
+  it("fails fast when the host page is missing a required status element", () => {
+    expect(() => requireStatus(document, "runtime-status")).toThrowError(
+      "Expected #runtime-status host status element",
+    )
+  })
+
+  it("returns the requested host status element", () => {
+    document.body.innerHTML = `<p id="runtime-status"></p>`
+
+    expect(requireStatus(document, "runtime-status")).toBeInstanceOf(HTMLElement)
+  })
+
+  it("fails fast when the host page is missing the host controls wrapper", () => {
+    expect(() => requireHostControls(document)).toThrowError(
+      'Expected ".host-controls" wrapper for demo host controls',
+    )
+  })
+
+  it("returns the host controls wrapper", () => {
+    document.body.innerHTML = `<div class="host-controls"></div>`
+
+    expect(requireHostControls(document)).toBeInstanceOf(HTMLElement)
   })
 
   it("prepends formatted status entries and mirrors them to the console", () => {

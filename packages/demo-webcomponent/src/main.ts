@@ -8,6 +8,9 @@ import {
   observeHostDocument,
   requireButton,
   requireEventLog,
+  requireHostControls,
+  requireSelect,
+  requireStatus,
   restoreTranslators,
   setTranslatorLanguage,
   type TranslatorHostElement,
@@ -25,30 +28,6 @@ import {
   type ResolvedDemoRuntimeSelection,
 } from "../../demo-shared/src/runtime-selection.js"
 
-function requireSelect(id: string): HTMLSelectElement {
-  const el = document.getElementById(id)
-  if (!(el instanceof HTMLSelectElement)) {
-    throw new Error(`Expected #${id} select for host runtime controls`)
-  }
-  return el
-}
-
-function requireStatus(id: string): HTMLElement {
-  const el = document.getElementById(id)
-  if (!(el instanceof HTMLElement)) {
-    throw new Error(`Expected #${id} host status element`)
-  }
-  return el
-}
-
-function requireHostControls(): HTMLElement {
-  const el = document.querySelector(".host-controls")
-  if (!(el instanceof HTMLElement)) {
-    throw new Error('Expected ".host-controls" wrapper for demo host controls')
-  }
-  return el
-}
-
 function readRuntimeState(): ResolvedDemoRuntimeSelection {
   const params = new URLSearchParams(window.location.search)
   return resolveDemoRuntimeSelection({
@@ -62,12 +41,12 @@ const eventLog = requireEventLog(document)
 const translators = Array.from(
   document.querySelectorAll("babulfish-translator"),
 ) as TranslatorHostElement[]
-const hostControls = requireHostControls()
-const runtimeDevice = requireSelect("runtime-device")
-const runtimeModel = requireSelect("runtime-model")
-const runtimeDType = requireSelect("runtime-dtype")
-const runtimeMessage = requireStatus("runtime-message")
-const runtimeStatus = requireStatus("runtime-status")
+const hostControls = requireHostControls(document)
+const runtimeDevice = requireSelect(document, "runtime-device")
+const runtimeModel = requireSelect(document, "runtime-model")
+const runtimeDType = requireSelect(document, "runtime-dtype")
+const runtimeMessage = requireStatus(document, "runtime-message")
+const runtimeStatus = requireStatus(document, "runtime-status")
 const translateSpanishButton = requireButton(document, "host-translate-es")
 const translateArabicButton = requireButton(document, "host-translate-ar")
 const restoreButton = requireButton(document, "host-restore")
