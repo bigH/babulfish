@@ -4,18 +4,22 @@ import { createBabulfish } from "../../core/babulfish.js"
 import type { BabulfishConfig, BabulfishCore } from "../../core/babulfish.js"
 import type { NonDomConformanceDriver } from "./types.js"
 
+function stripDomConfig(config?: BabulfishConfig): BabulfishConfig | undefined {
+  if (config?.dom == null) return config
+  const { dom: _ignoredDom, ...configWithoutDom } = config
+  return configWithoutDom
+}
+
 /** @experimental — subject to change */
 export function createDirectDriver(): NonDomConformanceDriver {
   return {
     id: "direct",
     supportsDOM: false,
     async create(config?: BabulfishConfig) {
-      if (!config) return createBabulfish()
-      const { dom: _ignoredDom, ...rest } = config
-      return createBabulfish(rest)
+      return createBabulfish(stripDomConfig(config))
     },
-    async dispose(core: BabulfishCore) {
-      await core.dispose()
+    dispose(core: BabulfishCore) {
+      return core.dispose()
     },
   }
 }

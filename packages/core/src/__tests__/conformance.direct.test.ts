@@ -39,31 +39,29 @@ describe("conformance — direct driver", () => {
     expect(applicable.every((scenario) => !scenario.requiresDOM)).toBe(true)
   })
 
-  it("ignores DOM config and leaves the document untouched", async () => {
-    resetConformanceDocument()
-    mockedLoadPipeline.mockResolvedValue(makeFakePipeline())
-
-    const core = await driver.create({
-      dom: { roots: ["#app"] },
-    })
-
-    await core.loadModel()
-    await core.translateTo("es")
-
-    expect(document.querySelector("#app p")?.textContent).toBe("Hello world")
-
-    await driver.dispose(core)
-  })
-
-  it("preserves non-DOM config while discarding DOM config", async () => {
+  it("strips the entire dom config while preserving non-DOM config", async () => {
     const customLanguages = [{ label: "Esperanto", code: "eo" }] as const
+    const otherRoot = document.createElement("div")
+    otherRoot.innerHTML = '<div id="other"><p>Leave me alone</p></div>' // eslint-disable-line no-unsanitized/property
+
+    resetConformanceDocument()
 
     const core = await driver.create({
-      dom: { roots: ["#app"] },
+      dom: {
+        root: otherRoot,
+        roots: ["#other"],
+        translateAttributes: ["aria-label"],
+      },
       languages: customLanguages,
     })
 
+    mockedLoadPipeline.mockResolvedValue(makeFakePipeline())
+    await core.loadModel()
+    await core.translateTo("es")
+
     expect(core.languages).toEqual(customLanguages)
+    expect(document.querySelector("#app p")?.textContent).toBe("Hello world")
+    expect(otherRoot.querySelector("#other p")?.textContent).toBe("Leave me alone")
 
     await driver.dispose(core)
   })
