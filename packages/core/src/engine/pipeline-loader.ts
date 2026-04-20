@@ -15,10 +15,11 @@ export async function loadPipeline(
   opts?: PipelineOptions,
 ): Promise<TextGenerationPipeline> {
   const { pipeline } = await import("@huggingface/transformers")
-  const loaded = opts === undefined
-    ? await pipeline(TEXT_GENERATION_TASK, model)
-    : await pipeline(TEXT_GENERATION_TASK, model, opts)
-  return loaded as TextGenerationPipeline
+  return (
+    opts === undefined
+      ? pipeline(TEXT_GENERATION_TASK, model)
+      : pipeline(TEXT_GENERATION_TASK, model, opts)
+  ) as Promise<TextGenerationPipeline>
 }
 
 export type {

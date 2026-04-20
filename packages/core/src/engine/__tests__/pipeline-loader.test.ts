@@ -34,6 +34,7 @@ describe("loadPipeline", () => {
       pipelineInstance,
     )
 
+    expect(mockPipelineFactory).toHaveBeenCalledOnce()
     expect(mockPipelineFactory).toHaveBeenCalledWith(
       "text-generation",
       "test-model",
@@ -47,6 +48,7 @@ describe("loadPipeline", () => {
 
     await expect(loadPipeline("model-no-options")).resolves.toBe(pipelineInstance)
 
+    expect(mockPipelineFactory).toHaveBeenCalledOnce()
     expect(mockPipelineFactory).toHaveBeenCalledWith("text-generation", "model-no-options")
   })
 
