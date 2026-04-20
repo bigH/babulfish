@@ -19,8 +19,21 @@ export type ProbeCacheKeyInput = {
 
 const probeCache = new Map<string, ProbeOutcome>()
 
+function serializeObservationForProbeCache(
+  observation: CapabilityObservation,
+): readonly string[] {
+  return [
+    observation.ready ? "ready" : "not-ready",
+    observation.hasWebGPU ? "webgpu" : "no-webgpu",
+    observation.isMobile ? "mobile" : "desktop",
+    observation.approxDeviceMemoryGiB === null
+      ? "memory:null"
+      : `memory:${observation.approxDeviceMemoryGiB}`,
+    observation.crossOriginIsolated ? "coi" : "no-coi",
+  ]
+}
+
 export function createProbeCacheKey(input: ProbeCacheKeyInput): string {
-  const obs = input.observation
   return [
     input.modelProfileId,
     input.modelProfileVersion,
@@ -29,11 +42,7 @@ export function createProbeCacheKey(input: ProbeCacheKeyInput): string {
     input.device,
     input.policyVersion,
     input.probeVersion,
-    obs.ready ? "ready" : "not-ready",
-    obs.hasWebGPU ? "webgpu" : "no-webgpu",
-    obs.isMobile ? "mobile" : "desktop",
-    obs.approxDeviceMemoryGiB === null ? "memory:null" : `memory:${obs.approxDeviceMemoryGiB}`,
-    obs.crossOriginIsolated ? "coi" : "no-coi",
+    ...serializeObservationForProbeCache(input.observation),
   ].join("|")
 }
 

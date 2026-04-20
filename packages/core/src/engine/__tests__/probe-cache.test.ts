@@ -4,10 +4,10 @@ import {
   createProbeCacheKey,
   getProbeCacheEntry,
   setProbeCacheEntry,
+  __resetProbeCacheForTests,
   type ProbeCacheKeyInput,
   type ProbeOutcome,
 } from "../probe-cache.js"
-import { __resetProbeCacheForTests } from "../testing/index.js"
 import type { CapabilityObservation } from "../../core/capabilities.js"
 
 function baseObservation(
@@ -66,13 +66,22 @@ describe("createProbeCacheKey", () => {
     const input = baseCacheKeyInput()
     const key = createProbeCacheKey(input)
 
-    expect(key).toContain(input.modelProfileId)
-    expect(key).toContain(input.modelProfileVersion)
-    expect(key).toContain(input.modelId)
-    expect(key).toContain(input.dtype)
-    expect(key).toContain(input.device)
-    expect(key).toContain(input.policyVersion)
-    expect(key).toContain(input.probeVersion)
+    expect(key).toBe(
+      [
+        input.modelProfileId,
+        input.modelProfileVersion,
+        input.modelId,
+        input.dtype,
+        input.device,
+        input.policyVersion,
+        input.probeVersion,
+        "ready",
+        "webgpu",
+        "desktop",
+        "memory:16",
+        "no-coi",
+      ].join("|"),
+    )
   })
 
   it.each([
