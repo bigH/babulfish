@@ -1,4 +1,4 @@
-import { useTranslatorContext, useTranslatorSnapshot } from "./context.js"
+import { useTranslator } from "./use-translator.js"
 
 type UseTranslateDOMReturn = {
   translatePage(lang: string): Promise<void>
@@ -7,13 +7,9 @@ type UseTranslateDOMReturn = {
 }
 
 export function useTranslateDOM(): UseTranslateDOMReturn {
-  const core = useTranslatorContext()
-  const snapshot = useTranslatorSnapshot(core)
-
+  const { translateTo, restore, translation } = useTranslator()
   const progress =
-    snapshot.translation.status === "translating"
-      ? snapshot.translation.progress
-      : null
+    translation.status === "translating" ? translation.progress : null
 
-  return { translatePage: core.translateTo, restorePage: core.restore, progress }
+  return { translatePage: translateTo, restorePage: restore, progress }
 }

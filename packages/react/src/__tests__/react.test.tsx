@@ -214,6 +214,23 @@ function DOMHookInspector() {
   )
 }
 
+function HookParityInspector() {
+  const { translation } = useTranslator()
+  const { progress } = useTranslateDOM()
+
+  return (
+    <div>
+      <span data-testid="hook-translation-status">{translation.status}</span>
+      <span data-testid="hook-translation-progress">
+        {translation.status === "translating" ? String(translation.progress) : "null"}
+      </span>
+      <span data-testid="dom-hook-progress">
+        {progress === null ? "null" : String(progress)}
+      </span>
+    </div>
+  )
+}
+
 function clickOutside() {
   fireEvent.mouseDown(document.body)
 }
@@ -1269,6 +1286,29 @@ describe("TranslateDropdown", () => {
 })
 
 describe("useTranslateDOM", () => {
+  it("projects the translation progress already exposed by useTranslator", async () => {
+    render(
+      <Wrapper config={DOM_CONFIG}>
+        <HookParityInspector />
+      </Wrapper>,
+    )
+
+    expect(screen.getByTestId("hook-translation-status")).toHaveTextContent("idle")
+    expect(screen.getByTestId("hook-translation-progress")).toHaveTextContent("null")
+    expect(screen.getByTestId("dom-hook-progress")).toHaveTextContent("null")
+
+    await act(async () => {
+      setMockSnapshot({
+        translation: { status: "translating", progress: 0.5 },
+      })
+      await Promise.resolve()
+    })
+
+    expect(screen.getByTestId("hook-translation-status")).toHaveTextContent("translating")
+    expect(screen.getByTestId("hook-translation-progress")).toHaveTextContent("0.5")
+    expect(screen.getByTestId("dom-hook-progress")).toHaveTextContent("0.5")
+  })
+
   it("calls core.translateTo on translatePage", async () => {
     render(
       <Wrapper config={DOM_CONFIG}>
