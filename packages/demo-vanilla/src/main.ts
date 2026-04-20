@@ -100,6 +100,32 @@ function formatDirections(): string {
     .join(" / ")
 }
 
+function appendOption(
+  select: HTMLSelectElement,
+  value: string,
+  label: string,
+): void {
+  const option = document.createElement("option")
+  option.value = value
+  option.textContent = label
+  select.appendChild(option)
+}
+
+function updateConstrainedOptions<T extends string>(
+  select: HTMLSelectElement,
+  allowedValues: readonly T[],
+  getLabel: (value: T) => string,
+): void {
+  for (const option of Array.from(select.options)) {
+    const value = option.value as T
+    const allowed = allowedValues.includes(value)
+    option.disabled = !allowed
+    option.textContent = allowed
+      ? getLabel(value)
+      : `${getLabel(value)} (not verified for this preset)`
+  }
+}
+
 const runtimeDevice = requireElement("runtime-device", HTMLSelectElement)
 const runtimeModel = requireElement("runtime-model", HTMLSelectElement)
 const runtimeDType = requireElement("runtime-dtype", HTMLSelectElement)
@@ -129,31 +155,19 @@ let core = createVanillaDemoCore(runtimeState.selection)
 let unsubscribe = core.subscribe(render)
 
 for (const option of DEVICE_OPTIONS) {
-  const el = document.createElement("option")
-  el.value = option.value
-  el.textContent = option.label
-  runtimeDevice.appendChild(el)
+  appendOption(runtimeDevice, option.value, option.label)
 }
 
 for (const preset of DEMO_MODEL_PRESETS) {
-  const el = document.createElement("option")
-  el.value = preset.modelId
-  el.textContent = preset.modelId
-  runtimeModel.appendChild(el)
+  appendOption(runtimeModel, preset.modelId, preset.modelId)
 }
 
 for (const option of DTYPE_OPTIONS) {
-  const el = document.createElement("option")
-  el.value = option.value
-  el.textContent = option.label
-  runtimeDType.appendChild(el)
+  appendOption(runtimeDType, option.value, option.label)
 }
 
 for (const lang of core.languages) {
-  const opt = document.createElement("option")
-  opt.value = lang.code
-  opt.textContent = lang.label
-  select.appendChild(opt)
+  appendOption(select, lang.code, lang.label)
 }
 
 function updateRuntimeMessage(): void {
@@ -199,23 +213,8 @@ function updateRuntimeControls(): void {
   runtimeDType.value = selection.dtype
   runtimeAutoload.checked = runtimeState.autoload
 
-  for (const option of Array.from(runtimeDevice.options)) {
-    const value = option.value as DemoRuntimeSelection["device"]
-    const allowed = preset.allowedDevices.includes(value)
-    option.disabled = !allowed
-    option.textContent = allowed
-      ? getDeviceLabel(value)
-      : `${getDeviceLabel(value)} (not verified for this preset)`
-  }
-
-  for (const option of Array.from(runtimeDType.options)) {
-    const value = option.value as DemoRuntimeSelection["dtype"]
-    const allowed = preset.allowedDTypes.includes(value)
-    option.disabled = !allowed
-    option.textContent = allowed
-      ? getDTypeLabel(value)
-      : `${getDTypeLabel(value)} (not verified for this preset)`
-  }
+  updateConstrainedOptions(runtimeDevice, preset.allowedDevices, getDeviceLabel)
+  updateConstrainedOptions(runtimeDType, preset.allowedDTypes, getDTypeLabel)
 
   updateRuntimeMessage()
 }

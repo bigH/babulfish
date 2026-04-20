@@ -137,6 +137,45 @@ describe("demo-vanilla main", () => {
       "onnx-community/gemma-3-270m-it-ONNX",
     )
     expect(document.getElementById("status-requested-dtype")?.textContent).toBe("Q4")
+
+    const runtimeDevice = document.getElementById("runtime-device")
+    if (!(runtimeDevice instanceof HTMLSelectElement)) {
+      throw new Error("Expected #runtime-device select")
+    }
+
+    expect(Array.from(runtimeDevice.options).map((option) => ({
+      value: option.value,
+      label: option.textContent,
+      disabled: option.disabled,
+    }))).toEqual([
+      {
+        value: "auto",
+        label: "Auto (not verified for this preset)",
+        disabled: true,
+      },
+      { value: "wasm", label: "WASM", disabled: false },
+      {
+        value: "webgpu",
+        label: "WebGPU (not verified for this preset)",
+        disabled: true,
+      },
+    ])
+
+    const runtimeDType = document.getElementById("runtime-dtype")
+    if (!(runtimeDType instanceof HTMLSelectElement)) {
+      throw new Error("Expected #runtime-dtype select")
+    }
+
+    expect(Array.from(runtimeDType.options).map((option) => ({
+      value: option.value,
+      label: option.textContent,
+      disabled: option.disabled,
+    }))).toEqual([
+      { value: "q4", label: "Q4 (not verified for this preset)", disabled: true },
+      { value: "q8", label: "Q8 (not verified for this preset)", disabled: true },
+      { value: "fp16", label: "FP16 (not verified for this preset)", disabled: true },
+      { value: "fp32", label: "FP32", disabled: false },
+    ])
   })
 
   it("recreates the demo core with the normalized runtime selection when the UI changes", async () => {
