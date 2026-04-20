@@ -1,7 +1,7 @@
 import type { ReactNode } from "react"
 import { ModelStatus } from "./model-status"
 import { DemoTranslatorShell } from "./demo-translator-shell"
-import { resolveDemoRuntimeSelection } from "../../demo-shared/src/runtime-selection.js"
+import { resolveDemoRuntimeSelectionFromSearchParams } from "../../demo-shared/src/runtime-selection.js"
 
 type DemoFact = {
   readonly title: string
@@ -98,10 +98,23 @@ const FEATURE_CARDS: ReadonlyArray<DemoFact> = [
   },
 ]
 
-function firstQueryValue(value: string | string[] | undefined): string | null {
-  if (typeof value === "string") return value
-  if (Array.isArray(value)) return value[0] ?? null
-  return null
+function createSearchParams(
+  value: Record<string, string | string[] | undefined>,
+): URLSearchParams {
+  const searchParams = new URLSearchParams()
+
+  for (const [key, entry] of Object.entries(value)) {
+    if (typeof entry === "string") {
+      searchParams.append(key, entry)
+      continue
+    }
+
+    entry?.forEach((item) => {
+      searchParams.append(key, item)
+    })
+  }
+
+  return searchParams
 }
 
 export default async function Home({
@@ -110,11 +123,9 @@ export default async function Home({
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const resolvedSearchParams = await searchParams
-  const initialRuntimeState = resolveDemoRuntimeSelection({
-    device: firstQueryValue(resolvedSearchParams.device),
-    modelId: firstQueryValue(resolvedSearchParams.modelId),
-    dtype: firstQueryValue(resolvedSearchParams.dtype),
-  })
+  const initialRuntimeState = resolveDemoRuntimeSelectionFromSearchParams(
+    createSearchParams(resolvedSearchParams),
+  )
 
   return (
     <DemoTranslatorShell initialRuntimeState={initialRuntimeState}>
