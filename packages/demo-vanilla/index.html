@@ -19,7 +19,7 @@
     </header>
 
     <div class="controls-stack">
-      <section class="runtime-controls" aria-labelledby="runtime-controls-title">
+      <section class="runtime-controls surface-card" aria-labelledby="runtime-controls-title">
         <div class="runtime-header">
           <p id="runtime-controls-title" class="panel-label">Runtime Selection</p>
           <h2 class="runtime-title">Choose the exact runtime preference config.</h2>
@@ -60,7 +60,7 @@
         </div>
       </section>
 
-      <div class="toolbar">
+      <div class="toolbar surface-card">
         <div class="toolbar-group">
           <select id="language" disabled>
             <option value="">Choose language…</option>
@@ -73,7 +73,7 @@
 
     <div class="layout">
       <main class="content">
-        <article class="panel" data-demo-copy>
+        <article class="panel surface-card" data-demo-copy>
           <p class="panel-label">Root One</p>
           <h2>DOM roots, preserve, and skip</h2>
 
@@ -93,14 +93,14 @@
             rule leaves SKU-prefixed text alone.
           </p>
 
-          <p class="structured-proof" data-structured>
+          <p class="structured-proof surface-inset" data-structured>
             Structured text keeps <strong>inline emphasis</strong>,
             <a href="https://example.com/docs">links</a>, and line breaks<br />
             while <code>npm run demo</code> stays opaque.
           </p>
         </article>
 
-        <aside class="panel panel-accent" data-demo-aside>
+        <aside class="panel panel-accent surface-card" data-demo-aside>
           <p class="panel-label">Root Two</p>
           <h2>Separate root, same core instance</h2>
 
@@ -116,7 +116,7 @@
         </aside>
       </main>
 
-      <section id="status" class="status" aria-live="polite">
+      <section id="status" class="status surface-card" aria-live="polite">
         <p class="panel-label">Status</p>
         <h2>Runtime and translation state</h2>
         <div class="status-group">
@@ -181,7 +181,7 @@
           </dl>
         </div>
 
-        <div class="raw-proof">
+        <div class="raw-proof surface-inset">
           <h3>Raw string API proof</h3>
           <p>
             The structured block gets a demo-only DOM transform suffix.

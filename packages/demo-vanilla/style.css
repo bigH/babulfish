@@ -81,14 +81,23 @@ h1 {
   margin-bottom: 1.5rem;
 }
 
+.surface-card {
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  background: var(--surface-card-bg, var(--surface));
+  box-shadow: var(--shadow);
+}
+
+.surface-inset {
+  border: 1px solid var(--border);
+  border-radius: 0.9rem;
+  background: var(--surface-inset-bg, var(--surface-muted));
+}
+
 .runtime-controls {
   display: grid;
   gap: 1rem;
   padding: 1.25rem;
-  border: 1px solid var(--border);
-  border-radius: 1rem;
-  background: var(--surface);
-  box-shadow: var(--shadow);
 }
 
 .runtime-header {
@@ -212,10 +221,6 @@ button:disabled {
   align-items: center;
   gap: 0.75rem;
   padding: 0.75rem 1rem;
-  border: 1px solid var(--border);
-  border-radius: 1rem;
-  background: var(--surface);
-  box-shadow: var(--shadow);
 }
 
 .toolbar-group {
@@ -260,10 +265,6 @@ button:disabled {
   display: grid;
   gap: 0.85rem;
   padding: 1.4rem;
-  border: 1px solid var(--border);
-  border-radius: 1rem;
-  background: var(--surface);
-  box-shadow: var(--shadow);
 }
 
 .panel h2 {
@@ -283,13 +284,11 @@ button:disabled {
 }
 
 .panel-accent {
-  background: var(--surface-subtle);
+  --surface-card-bg: var(--surface-subtle);
 }
 
 .structured-proof {
-  border: 1px solid var(--border);
-  border-radius: 0.9rem;
-  background: var(--surface-muted);
+  --surface-inset-bg: var(--surface-muted);
   padding: 1rem;
   color: var(--text);
 }
@@ -307,10 +306,6 @@ button:disabled {
   display: grid;
   gap: 1rem;
   padding: 1.25rem;
-  border: 1px solid var(--border);
-  border-radius: 1rem;
-  background: var(--surface);
-  box-shadow: var(--shadow);
 }
 
 .status h2 {
@@ -392,10 +387,8 @@ button:disabled {
 .raw-proof {
   display: grid;
   gap: 0.65rem;
+  --surface-inset-bg: var(--surface-muted);
   padding: 1rem;
-  border: 1px solid var(--border);
-  border-radius: 0.9rem;
-  background: var(--surface-muted);
 }
 
 .raw-proof h3 {
