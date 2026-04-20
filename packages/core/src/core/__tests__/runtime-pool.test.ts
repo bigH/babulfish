@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest"
 
 import type { ResolvedRuntimePlan } from "../../engine/runtime-plan.js"
-import { acquireEngine, __resetSharedEngine } from "../engine-handle.js"
+import { acquireEngine, __resetEngineForTests } from "../engine-handle.js"
 
 const BASE_PLAN: ResolvedRuntimePlan = {
   modelId: "acme/translator",
@@ -16,7 +16,7 @@ function plan(overrides: Partial<ResolvedRuntimePlan> = {}): ResolvedRuntimePlan
 }
 
 afterEach(() => {
-  __resetSharedEngine()
+  __resetEngineForTests()
 })
 
 describe("runtime pool", () => {

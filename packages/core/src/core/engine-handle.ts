@@ -40,11 +40,11 @@ export function tagCoreWithEngineIdentity(core: object, id: symbol): void {
   coreEngineIdentity.set(core, id)
 }
 
-export function getEngineIdentityForCore(core: object): symbol | undefined {
+export function getEngineIdentity(core: object): symbol | undefined {
   return coreEngineIdentity.get(core)
 }
 
-export function __resetSharedEngine(): void {
+export function __resetEngineForTests(): void {
   for (const handle of runtimePool.values()) {
     handle.engine.dispose()
   }

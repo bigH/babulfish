@@ -506,6 +506,6 @@ export async function getOrCreateEnablementAssessment(
   return nextAssessment
 }
 
-export function __resetAssessmentCache(): void {
+export function __resetEnablementAssessmentForTests(): void {
   assessmentCache.clear()
 }
