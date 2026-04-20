@@ -4,8 +4,19 @@ vi.mock("../../engine/pipeline-loader.js", () => ({
   loadPipeline: vi.fn(),
 }))
 
+vi.mock("../../engine/probe.js", async () => {
+  const actual = await vi.importActual<typeof import("../../engine/probe.js")>(
+    "../../engine/probe.js",
+  )
+  return {
+    ...actual,
+    runAdapterSmokeProbe: vi.fn(actual.runAdapterSmokeProbe),
+  }
+})
+
 import { createBabulfish } from "../babulfish.js"
 import { loadPipeline } from "../../engine/pipeline-loader.js"
+import { runAdapterSmokeProbe } from "../../engine/probe.js"
 import {
   __resetEnablementAssessmentForTests,
   __resetEngineForTests,
@@ -19,6 +30,7 @@ import {
 } from "../../__tests__/globals.test-utils.js"
 
 const mockLoadPipeline = vi.mocked(loadPipeline)
+const mockRunAdapterSmokeProbe = vi.mocked(runAdapterSmokeProbe)
 const originalGlobals = captureGlobalDescriptors()
 
 function createMockPipeline() {
@@ -112,31 +124,29 @@ describe("enablement assessment", () => {
 })
 
 describe("probe integration", () => {
-  it("probe mode off: inconclusive assessment stays needs-probe, loadModel throws", async () => {
-    const mockGPU = createMockGPU()
-    setGlobal("window", { innerWidth: 1280 })
-    setGlobal("navigator", { maxTouchPoints: 0, gpu: mockGPU })
+  it.each(["off", "manual"] as const)(
+    "probe mode %s: inconclusive assessment stays needs-probe without running the probe",
+    async (probe) => {
+      const mockGPU = createMockGPU()
+      setGlobal("window", { innerWidth: 1280 })
+      setGlobal("navigator", { maxTouchPoints: 0, gpu: mockGPU })
 
-    const core = createBabulfish({
-      engine: { enablement: { probe: "off" } },
-    })
+      const core = createBabulfish({
+        engine: { enablement: { probe } },
+      })
 
-    await expect(core.loadModel()).rejects.toThrow()
-    expect(core.snapshot.enablement.verdict.outcome).toBe("needs-probe")
-  })
-
-  it("probe mode manual: inconclusive assessment stays needs-probe, loadModel throws", async () => {
-    const mockGPU = createMockGPU()
-    setGlobal("window", { innerWidth: 1280 })
-    setGlobal("navigator", { maxTouchPoints: 0, gpu: mockGPU })
-
-    const core = createBabulfish({
-      engine: { enablement: { probe: "manual" } },
-    })
-
-    await expect(core.loadModel()).rejects.toThrow()
-    expect(core.snapshot.enablement.verdict.outcome).toBe("needs-probe")
-  })
+      await expect(core.loadModel()).rejects.toThrow()
+      expect(core.snapshot.enablement.status).toBe("ready")
+      expect(core.snapshot.enablement.verdict.outcome).toBe("needs-probe")
+      expect(core.snapshot.enablement.probe).toEqual({
+        status: "not-run",
+        kind: "adapter-smoke",
+        cache: null,
+        note: "",
+      })
+      expect(mockGPU.requestAdapter).not.toHaveBeenCalled()
+    },
+  )
 
   it("probe mode if-needed with successful probe: verdict becomes gpu-preferred", async () => {
     const mockGPU = createMockGPU()
@@ -189,6 +199,41 @@ describe("probe integration", () => {
 
     await expect(core.loadModel()).rejects.toThrow()
     expect(core.snapshot.enablement.verdict.outcome).toBe("denied")
+    expect(mockLoadPipeline).not.toHaveBeenCalled()
+  })
+
+  it("probe mode if-needed with unexpected probe error publishes probe failure before the final error state", async () => {
+    const mockGPU = createMockGPU()
+    setGlobal("window", { innerWidth: 1280 })
+    setGlobal("navigator", { maxTouchPoints: 0, gpu: mockGPU })
+    mockRunAdapterSmokeProbe.mockRejectedValueOnce(new Error("Probe exploded"))
+
+    const core = createBabulfish({
+      engine: { enablement: { probe: "if-needed" } },
+    })
+
+    const observed = new Array<(typeof core.snapshot)["enablement"]>()
+    core.subscribe((snapshot) => observed.push(snapshot.enablement))
+
+    await expect(core.loadModel()).rejects.toThrow("Probe exploded")
+    expect(core.snapshot.enablement.status).toBe("error")
+    expect(core.snapshot.enablement.verdict.outcome).toBe("unknown")
+    expect(core.snapshot.enablement.probe).toEqual({
+      status: "not-run",
+      kind: "adapter-smoke",
+      cache: null,
+      note: "",
+    })
+    expect(
+      observed.some(
+        (enablement) =>
+          enablement.status === "error" &&
+          enablement.verdict.outcome === "needs-probe" &&
+          enablement.probe.status === "error" &&
+          enablement.probe.cache === "miss" &&
+          enablement.probe.note === "Probe exploded",
+      ),
+    ).toBe(true)
     expect(mockLoadPipeline).not.toHaveBeenCalled()
   })
 

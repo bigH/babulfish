@@ -17,6 +17,7 @@ import {
   resolveRuntimePreferences,
   NOT_RUN_PROBE_SUMMARY,
   type EnablementAssessment,
+  type EnablementState,
   type ModelProfile,
   type ProbeSummary,
 } from "../engine/runtime-plan.js"
@@ -106,6 +107,48 @@ export function createBabulfish(config?: BabulfishConfig): BabulfishCore {
   let unsubProgress: (() => void) | null = null
   let assessmentPromise: Promise<EnablementAssessment> | null = null
   let assessment: EnablementAssessment | null = null
+
+  function createEnablementState(
+    status: EnablementState["status"],
+    nextAssessment: Pick<EnablementAssessment, "modelProfile" | "inference" | "verdict">,
+    probe: ProbeSummary,
+  ): EnablementState {
+    return {
+      status,
+      modelProfile: nextAssessment.modelProfile,
+      inference: nextAssessment.inference,
+      probe,
+      verdict: nextAssessment.verdict,
+    }
+  }
+
+  function publishEnablementState(nextEnablement: EnablementState): void {
+    if (disposed) return
+    store.set((prev) => ({ ...prev, enablement: nextEnablement }))
+  }
+
+  function publishReadyAssessment(
+    nextAssessment: EnablementAssessment,
+    probe: ProbeSummary,
+  ): EnablementAssessment {
+    if (!disposed) {
+      assessment = nextAssessment
+    }
+    publishEnablementState(createEnablementState("ready", nextAssessment, probe))
+    return nextAssessment
+  }
+
+  function publishUnexpectedEnablementError(error: unknown): void {
+    publishEnablementState({
+      ...IDLE_ENABLEMENT_STATE,
+      status: "error",
+      verdict: {
+        outcome: "unknown",
+        resolvedDevice: null,
+        reason: error instanceof Error ? error.message : "Enablement assessment failed.",
+      },
+    })
+  }
 
   function assertNotDisposed(): void {
     if (disposed) throw new Error("Core is disposed")
@@ -263,6 +306,34 @@ export function createBabulfish(config?: BabulfishConfig): BabulfishCore {
     }
   }
 
+  function createCompletedProbeSummary(
+    outcome: ProbeOutcome,
+    cacheStatus: "hit" | "miss",
+  ): ProbeSummary {
+    return {
+      status: outcome.passed ? "passed" : "failed",
+      kind: "adapter-smoke",
+      cache: cacheStatus,
+      note: outcome.note,
+    }
+  }
+
+  function createProbeErrorSummary(error: unknown): ProbeSummary {
+    return {
+      status: "error",
+      kind: "adapter-smoke",
+      cache: "miss",
+      note: error instanceof Error ? error.message : "Probe failed unexpectedly.",
+    }
+  }
+
+  const RUNNING_PROBE_SUMMARY: ProbeSummary = {
+    status: "running",
+    kind: "adapter-smoke",
+    cache: null,
+    note: "",
+  }
+
   function finalizeProbeOutcome(
     initialAssessment: EnablementAssessment,
     outcome: ProbeOutcome,
@@ -275,48 +346,18 @@ export function createBabulfish(config?: BabulfishConfig): BabulfishCore {
       verdict,
       runtimePlan,
     })
-
-    if (!disposed) {
-      assessment = terminalAssessment
-      const probeSummary: ProbeSummary = {
-        status: outcome.passed ? "passed" : "failed",
-        kind: "adapter-smoke",
-        cache: cacheStatus,
-        note: outcome.note,
-      }
-      store.set((prev) => ({
-        ...prev,
-        enablement: {
-          status: "ready",
-          modelProfile: terminalAssessment.modelProfile,
-          inference: terminalAssessment.inference,
-          probe: probeSummary,
-          verdict: terminalAssessment.verdict,
-        },
-      }))
-    }
-
-    return terminalAssessment
+    return publishReadyAssessment(
+      terminalAssessment,
+      createCompletedProbeSummary(outcome, cacheStatus),
+    )
   }
 
   async function runProbeFlow(
     initialAssessment: EnablementAssessment,
   ): Promise<EnablementAssessment> {
-    store.set((prev) => ({
-      ...prev,
-      enablement: {
-        status: "probing" as const,
-        modelProfile: initialAssessment.modelProfile,
-        inference: initialAssessment.inference,
-        probe: {
-          status: "running" as const,
-          kind: "adapter-smoke" as const,
-          cache: null,
-          note: "",
-        },
-        verdict: initialAssessment.verdict,
-      },
-    }))
+    publishEnablementState(
+      createEnablementState("probing", initialAssessment, RUNNING_PROBE_SUMMARY),
+    )
 
     const cacheKey = buildProbeCacheKey(initialAssessment.modelProfile)
 
@@ -329,23 +370,9 @@ export function createBabulfish(config?: BabulfishConfig): BabulfishCore {
     try {
       probeResult = await runAdapterSmokeProbe()
     } catch (error) {
-      if (!disposed) {
-        store.set((prev) => ({
-          ...prev,
-          enablement: {
-            status: "error" as const,
-            modelProfile: initialAssessment.modelProfile,
-            inference: initialAssessment.inference,
-            probe: {
-              status: "error" as const,
-              kind: "adapter-smoke" as const,
-              cache: "miss" as const,
-              note: error instanceof Error ? error.message : "Probe failed unexpectedly.",
-            },
-            verdict: initialAssessment.verdict,
-          },
-        }))
-      }
+      publishEnablementState(
+        createEnablementState("error", initialAssessment, createProbeErrorSummary(error)),
+      )
       throw error
     }
 
@@ -396,34 +423,10 @@ export function createBabulfish(config?: BabulfishConfig): BabulfishCore {
           return runProbeFlow(result)
         }
 
-        assessment = result
-        store.set((prev) => ({
-          ...prev,
-          enablement: {
-            status: "ready",
-            modelProfile: result.modelProfile,
-            inference: result.inference,
-            probe: NOT_RUN_PROBE_SUMMARY,
-            verdict: result.verdict,
-          },
-        }))
-        return result
+        return publishReadyAssessment(result, NOT_RUN_PROBE_SUMMARY)
       })
       .catch((error) => {
-        if (!disposed) {
-          store.set((prev) => ({
-            ...prev,
-            enablement: {
-              ...IDLE_ENABLEMENT_STATE,
-              status: "error",
-              verdict: {
-                outcome: "unknown",
-                resolvedDevice: null,
-                reason: error instanceof Error ? error.message : "Enablement assessment failed.",
-              },
-            },
-          }))
-        }
+        publishUnexpectedEnablementError(error)
         throw error
       })
       .finally(() => {
