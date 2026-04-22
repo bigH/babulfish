@@ -1,4 +1,11 @@
 import type { VisibleClaims } from "./claims.js"
+import {
+  claimStructuredTextNodes,
+  containsClaimedLinkedTextNode,
+  hasNestedStructuredConflict,
+  overlapsClaimedRoot,
+} from "./claims.js"
+import { compareDocumentOrder } from "./phases.js"
 import { captureOriginalText } from "./walker.js"
 
 const HTML_NAMESPACE = "http://www.w3.org/1999/xhtml"
@@ -60,6 +67,10 @@ export type StructuredExtractDeps = {
   readonly originalTexts: WeakMap<Text, string>
   readonly shouldSkip: (text: string) => boolean
   readonly claims: VisibleClaims
+}
+
+type ResolveStructuredDeps = StructuredExtractDeps & {
+  readonly structuredSelector: string | null
 }
 
 export function buildStructuredToken(key: string, slotId: number): string {
@@ -255,4 +266,50 @@ export function tryExtractStructuredUnit(
     textSlots,
     tokenSequence,
   }
+}
+
+export function collectStructuredCandidates(
+  roots: readonly Element[],
+  deps: Pick<ResolveStructuredDeps, "structuredSelector">,
+): Element[] {
+  if (!deps.structuredSelector) return []
+
+  const seen = new Set<Element>()
+  const matches: Element[] = []
+  for (const root of roots) {
+    for (const el of root.querySelectorAll(deps.structuredSelector)) {
+      if (seen.has(el)) continue
+      seen.add(el)
+      matches.push(el)
+    }
+  }
+
+  return matches.sort(compareDocumentOrder)
+}
+
+export function resolveStructuredUnits(
+  roots: readonly Element[],
+  deps: ResolveStructuredDeps,
+): StructuredTextUnit[] {
+  const { claims, originalTexts, shouldSkip } = deps
+  const rawCandidates = collectStructuredCandidates(roots, deps)
+  const units: StructuredTextUnit[] = []
+
+  for (const candidate of rawCandidates) {
+    if (hasNestedStructuredConflict(candidate, rawCandidates)) continue
+    if (overlapsClaimedRoot(candidate, claims.richRoots)) continue
+    if (containsClaimedLinkedTextNode(candidate, claims.linkedTextNodes)) continue
+
+    const unit = tryExtractStructuredUnit(candidate, {
+      originalTexts,
+      shouldSkip,
+      claims,
+    })
+    if (!unit) continue
+
+    claimStructuredTextNodes(unit, claims)
+    units.push(unit)
+  }
+
+  return units
 }
