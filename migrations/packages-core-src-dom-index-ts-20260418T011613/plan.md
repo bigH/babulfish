@@ -47,8 +47,8 @@ Inside `packages/core/src/dom/`:
 
 Outside `packages/core/src/dom/` (Phase 4 only):
 
-- `packages/core/src/index.ts` — rewrites the two `./dom/index.js`
-  import blocks to three concrete-module imports.
+- `packages/core/src/index.ts` — rewrites the `./dom/index.js`
+  re-export block to three concrete-module re-exports.
 - `packages/core/src/smoke.test.ts` — drops `domBarrel` + the
   dom-barrel test block; adds a `preserve` namespace import.
 

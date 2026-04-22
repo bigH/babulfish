@@ -3,7 +3,7 @@
 ## Objective
 
 Delete `packages/core/src/dom/index.ts`. Rewrite its two consumers to
-import from the concrete modules in the flattened `dom/` directory.
+reference the concrete modules in the flattened `dom/` directory.
 After this phase, `git grep createDOMTranslator` lands on its
 definition, not on a barrel.
 
@@ -30,18 +30,29 @@ Run from repo root:
 rg -n 'dom/index' packages
 ```
 
-Expected matches (nothing else in published package code):
+Expected match set in published-package code:
 
-- `packages/core/src/index.ts` — two `from "./dom/index.js"` blocks.
+- `packages/core/src/index.ts` — the root barrel still re-exports DOM
+  symbols from `./dom/index.js`. This may be one combined export block
+  or multiple blocks; the file match is what matters.
 - `packages/core/src/smoke.test.ts` — one `import * as domBarrel`.
 
-Anything outside `packages/core/src/` is a surprise — stop and
-investigate. The `migrations/` directory can be ignored.
+No other file under `packages/` should match. Ignore matches under
+`migrations/`.
+
+Optional structural check:
+
+```bash
+test "$(rg -l 'dom/index' packages | sort)" = $'packages/core/src/index.ts\npackages/core/src/smoke.test.ts'
+```
+
+Anything else in published package code is a surprise — stop and
+investigate.
 
 ## What `packages/core/src/index.ts` becomes
 
-Replace the two `from "./dom/index.js"` blocks with three direct
-imports that mirror today's surface:
+Replace the `from "./dom/index.js"` re-export block with three direct
+re-exports that mirror today's surface:
 
 ```ts
 export {
@@ -89,8 +100,10 @@ Leave every other export in that file untouched.
 
 ## Steps
 
-1. Sweep with `rg -n 'dom/index' packages`. Confirm exactly the three
-   occurrences listed above.
+1. Sweep with `rg -n 'dom/index' packages`. Confirm that only
+   `packages/core/src/index.ts` and `packages/core/src/smoke.test.ts`
+   match. Ignore `migrations/`. The number of occurrences inside
+   `packages/core/src/index.ts` does not matter.
 2. Edit `packages/core/src/index.ts` per the block above.
 3. Edit `packages/core/src/smoke.test.ts`:
    - Add `preserve` import.
@@ -104,7 +117,7 @@ Leave every other export in that file untouched.
 
 - `packages/core/src/dom/index.ts` does not exist.
 - `rg -n 'dom/index' packages` returns no matches.
-- `packages/core/src/index.ts` imports `createDOMTranslator` + types
+- `packages/core/src/index.ts` re-exports `createDOMTranslator` + types
   from `./dom/translator.js`, the markdown trio from `./dom/markdown.js`,
   and `PreserveMatcher` from `./dom/preserve.js`. No `./dom/index.js`
   references remain.

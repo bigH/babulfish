@@ -2,8 +2,9 @@
 
 ## Strategy
 
-Delete `packages/core/src/dom/index.ts` outright. Point the only upstream
-consumer — `packages/core/src/index.ts` — at the concrete modules
+Delete `packages/core/src/dom/index.ts` outright. Point the remaining
+package-internal consumers — `packages/core/src/index.ts` and
+`packages/core/src/smoke.test.ts` — at the concrete modules
 (`./dom/translator.js`, `./dom/markdown.js`, `./dom/preserve.js`).
 
 The barrel today is a pure re-export file. The package's real public surface
@@ -14,9 +15,9 @@ reshaping that hides definitions" pattern our taste rules call out.
 ## Scope
 
 - Delete: `packages/core/src/dom/index.ts`
-- Edit: `packages/core/src/index.ts` — split the two `from "./dom/index.js"`
-  blocks into three direct imports by module (translator / markdown /
-  preserve).
+- Edit: `packages/core/src/index.ts` — replace the `from "./dom/index.js"`
+  re-export block with three direct re-exports by module (translator /
+  markdown / preserve).
 - Edit: `packages/core/src/smoke.test.ts` — drop the `import * as domBarrel
   from "./dom/index.js"` or redirect it to a still-meaningful target. The
   other two smoke imports already reference concrete modules.
@@ -26,9 +27,10 @@ reshaping that hides definitions" pattern our taste rules call out.
 ## Phases
 
 1. Inventory every consumer of `./dom/index.js` inside the monorepo.
-   Current count: `packages/core/src/index.ts` (2 blocks),
-   `packages/core/src/smoke.test.ts` (1 `import *`). No external consumers
-   because the package's public surface is at `@babulfish/core` root.
+   The expected published-package match set is
+   `packages/core/src/index.ts` and `packages/core/src/smoke.test.ts`.
+   No external consumers because the package's public surface is at
+   `@babulfish/core` root.
 2. Rewrite those imports to point at concrete modules.
 3. Delete `dom/index.ts`.
 4. Run `pnpm lint`, `pnpm test`, `pnpm docs:check`.
