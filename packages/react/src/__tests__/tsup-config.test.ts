@@ -2,7 +2,6 @@
 
 import { readFileSync } from "node:fs"
 import { describe, expect, it } from "vitest"
-import { reactTsupConfig } from "../../tsup.config"
 
 type PackageExportTarget = {
   import: string
@@ -11,6 +10,19 @@ type PackageExportTarget = {
 
 type PackageJson = {
   exports: Record<string, string | PackageExportTarget>
+}
+
+type ReactTsupConfig = {
+  entry: Record<string, string>
+}
+
+async function readReactTsupConfig(): Promise<ReactTsupConfig> {
+  const tsupConfigUrl = new URL("../../tsup.config.ts", import.meta.url)
+  const tsupConfigModule = (await import(tsupConfigUrl.href)) as {
+    reactTsupConfig: ReactTsupConfig
+  }
+
+  return tsupConfigModule.reactTsupConfig
 }
 
 function readPackageJson(): PackageJson {
@@ -23,11 +35,13 @@ function readPackageExports(): Record<string, string | PackageExportTarget> {
 }
 
 describe("react tsup config", () => {
-  it("keeps the package root export aligned with the configured entrypoint and dist filenames", () => {
+  it("keeps the package root export aligned with the configured entrypoint and dist filenames", async () => {
     expect(readPackageExports()["."]).toEqual({
       import: "./dist/index.js",
       types: "./dist/index.d.ts",
     })
+
+    const reactTsupConfig = await readReactTsupConfig()
 
     expect(reactTsupConfig.entry).toEqual({
       index: "src/index.ts",
