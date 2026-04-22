@@ -15,7 +15,6 @@ export default defineConfig({
     alias: {
       "@babulfish/core": coreEntry("index.ts"),
       "@babulfish/core/engine": coreEntry("engine", "index.ts"),
-      "@babulfish/core/dom": coreEntry("dom", "index.ts"),
     },
   },
   server: { headers: crossOriginIsolationHeaders },

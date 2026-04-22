@@ -45,7 +45,7 @@ The config table below is intentionally a highlights view, not the full DOM conf
 | `dom.outputTransform` | `(translated, context) => string` | Normalize DOM-bound output immediately before writes |
 | `languages` | `readonly Language[]` | Override the built-in language list |
 
-For the full DOM config surface, read `DOMTranslatorConfig` from `@babulfish/core/dom` plus the behavior notes below. That surface also includes `preserve`, `skipTags`, `shouldSkip`, `richText`, `linkedBy`, `phases`, `batchCharLimit`, `rtlLanguages`, `translateAttributes`, and `hooks`.
+For the full DOM config surface, read `DOMTranslatorConfig` from `@babulfish/core` plus the behavior notes below. That surface also includes `preserve`, `skipTags`, `shouldSkip`, `richText`, `linkedBy`, `phases`, `batchCharLimit`, `rtlLanguages`, `translateAttributes`, and `hooks`.
 
 ### `BabulfishCore`
 
@@ -101,7 +101,7 @@ Binding authors can derive narrow compat booleans from `enablement` with `create
 
 ## DOM config
 
-`createBabulfish({ dom: ... })` uses the same DOM translator contract exported from `@babulfish/core/dom`.
+`createBabulfish({ dom: ... })` uses the same DOM translator contract exported from `@babulfish/core`.
 
 ### Other current DOM behavior
 

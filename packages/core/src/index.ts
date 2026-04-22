@@ -39,14 +39,20 @@ export {
 
 export {
   createDOMTranslator,
+} from "./dom/translator.js"
+export type {
+  DOMOutputTransformContext,
+  DOMTranslator,
+  DOMTranslatorConfig,
+  LinkedConfig,
+  RichTextConfig,
+  StructuredTextConfig,
+} from "./dom/translator.js"
+
+export {
   isWellFormedMarkdown,
   parseInlineMarkdown,
   renderInlineMarkdownToHtml,
-  type DOMOutputTransformContext,
-  type DOMTranslator,
-  type DOMTranslatorConfig,
-  type LinkedConfig,
-  type PreserveMatcher,
-  type RichTextConfig,
-  type StructuredTextConfig,
-} from "./dom/index.js"
+} from "./dom/markdown.js"
+
+export type { PreserveMatcher } from "./dom/preserve.js"

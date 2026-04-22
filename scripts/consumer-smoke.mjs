@@ -26,12 +26,6 @@ const EXPECTED_CORE_RUNTIME_KEYS = [
   "parseInlineMarkdown",
   "renderInlineMarkdownToHtml",
 ]
-const EXPECTED_CORE_DOM_RUNTIME_KEYS = [
-  "createDOMTranslator",
-  "isWellFormedMarkdown",
-  "parseInlineMarkdown",
-  "renderInlineMarkdownToHtml",
-]
 const EXPECTED_REACT_RUNTIME_KEYS = [
   "DEFAULT_LANGUAGES",
   "TranslateButton",
@@ -184,7 +178,6 @@ import { readFileSync } from "node:fs"
 
 const expectedCoreSnapshotKeys = ${JSON.stringify(EXPECTED_CORE_SNAPSHOT_KEYS)}
 const expectedCoreKeys = ${JSON.stringify(EXPECTED_CORE_RUNTIME_KEYS)}
-const expectedCoreDomKeys = ${JSON.stringify(EXPECTED_CORE_DOM_RUNTIME_KEYS)}
 const cssBridgeImport = ${JSON.stringify(CSS_BRIDGE_IMPORT)}
 
 function ok(message) {
@@ -237,17 +230,7 @@ assert(scenario, "snapshot-no-spurious-notify scenario missing")
 await scenario.run(driver)
 ok("OK [@babulfish/core/testing]: direct-driver scenario passed")
 
-const domModule = await import("@babulfish/core/dom")
-assert(
-  JSON.stringify(Object.keys(domModule).toSorted()) === JSON.stringify(expectedCoreDomKeys),
-  "@babulfish/core/dom runtime exports drifted",
-)
-assert(
-  coreModule.createDOMTranslator === domModule.createDOMTranslator,
-  "@babulfish/core should re-export createDOMTranslator",
-)
 await import("@babulfish/core/engine")
-ok("OK [@babulfish/core/dom]: documented runtime surface present")
 ok("OK [@babulfish/core/engine]: import succeeds")
 
 let missingReact = false

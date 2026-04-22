@@ -19,7 +19,6 @@ describe("demo-vanilla vite config", () => {
     expect(viteConfig.resolve?.alias).toMatchObject({
       "@babulfish/core": path.resolve(coreSrc, "index.ts"),
       "@babulfish/core/engine": path.resolve(coreSrc, "engine", "index.ts"),
-      "@babulfish/core/dom": path.resolve(coreSrc, "dom", "index.ts"),
     })
   })
 

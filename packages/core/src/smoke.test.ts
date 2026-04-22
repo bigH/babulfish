@@ -10,8 +10,8 @@ import { createBabulfish } from "./core/babulfish.js"
 import { DEFAULT_LANGUAGES } from "./core/languages.js"
 import type { Language } from "./core/languages.js"
 import type { ModelState, Snapshot, TranslationState } from "./core/store.js"
-import * as domBarrel from "./dom/index.js"
 import * as markdown from "./dom/markdown.js"
+import * as preserve from "./dom/preserve.js"
 import * as domTranslator from "./dom/translator.js"
 import * as engineBarrel from "./engine/index.js"
 import * as detect from "./engine/detect.js"
@@ -44,13 +44,6 @@ const EXPECTED_ROOT_RUNTIME_EXPORTS = [
   "createEnablementCompat",
   "createEngine",
   "getTranslationCapabilities",
-  "isWellFormedMarkdown",
-  "parseInlineMarkdown",
-  "renderInlineMarkdownToHtml",
-] as const
-
-const EXPECTED_DOM_RUNTIME_EXPORTS = [
-  "createDOMTranslator",
   "isWellFormedMarkdown",
   "parseInlineMarkdown",
   "renderInlineMarkdownToHtml",
@@ -120,10 +113,10 @@ describe("smoke tests", () => {
       DEFAULT_LANGUAGES,
       createEngine: engineBarrel.createEngine,
       getTranslationCapabilities: engineBarrel.getTranslationCapabilities,
-      createDOMTranslator: domBarrel.createDOMTranslator,
-      renderInlineMarkdownToHtml: domBarrel.renderInlineMarkdownToHtml,
-      parseInlineMarkdown: domBarrel.parseInlineMarkdown,
-      isWellFormedMarkdown: domBarrel.isWellFormedMarkdown,
+      createDOMTranslator: domTranslator.createDOMTranslator,
+      renderInlineMarkdownToHtml: markdown.renderInlineMarkdownToHtml,
+      parseInlineMarkdown: markdown.parseInlineMarkdown,
+      isWellFormedMarkdown: markdown.isWellFormedMarkdown,
       IDLE_ENABLEMENT_STATE: runtimePlan.IDLE_ENABLEMENT_STATE,
       NOT_RUN_PROBE_SUMMARY: runtimePlan.NOT_RUN_PROBE_SUMMARY,
       createEnablementCompat: runtimePlan.createEnablementCompat,
@@ -166,7 +159,7 @@ describe("smoke tests", () => {
     expectTypeOf<domTranslator.StructuredTextConfig>().toEqualTypeOf<barrel.StructuredTextConfig>()
     expectTypeOf<domTranslator.DOMOutputTransformContext>()
       .toEqualTypeOf<barrel.DOMOutputTransformContext>()
-    expectTypeOf<domBarrel.PreserveMatcher>().toEqualTypeOf<barrel.PreserveMatcher>()
+    expectTypeOf<preserve.PreserveMatcher>().toEqualTypeOf<barrel.PreserveMatcher>()
   })
 
   it("engine barrel re-exports the public engine surface without detection internals", () => {
@@ -190,37 +183,6 @@ describe("smoke tests", () => {
     expectTypeOf<detect.DevicePreference>().toEqualTypeOf<engineBarrel.DevicePreference>()
     expectTypeOf<detect.ResolvedDevice>().toEqualTypeOf<engineBarrel.ResolvedDevice>()
     expectTypeOf<detect.TranslationCapabilities>().toEqualTypeOf<engineBarrel.TranslationCapabilities>()
-  })
-
-  it("dom barrel re-exports the public DOM surface", () => {
-    expect(Object.keys(domBarrel).toSorted()).toEqual(EXPECTED_DOM_RUNTIME_EXPORTS)
-
-    expectValueReExports(domBarrel, {
-      createDOMTranslator: domTranslator.createDOMTranslator,
-      renderInlineMarkdownToHtml: markdown.renderInlineMarkdownToHtml,
-      parseInlineMarkdown: markdown.parseInlineMarkdown,
-      isWellFormedMarkdown: markdown.isWellFormedMarkdown,
-    })
-
-    expectTypeOf<typeof domBarrel>().toMatchTypeOf<{
-      createDOMTranslator: typeof domTranslator.createDOMTranslator
-      renderInlineMarkdownToHtml: typeof markdown.renderInlineMarkdownToHtml
-      parseInlineMarkdown: typeof markdown.parseInlineMarkdown
-      isWellFormedMarkdown: typeof markdown.isWellFormedMarkdown
-    }>()
-
-    expectTypeOf<domTranslator.DOMTranslatorConfig>().toEqualTypeOf<domBarrel.DOMTranslatorConfig>()
-    expectTypeOf<domTranslator.DOMTranslator>().toEqualTypeOf<domBarrel.DOMTranslator>()
-    expectTypeOf<domTranslator.RichTextConfig>().toEqualTypeOf<domBarrel.RichTextConfig>()
-    expectTypeOf<domTranslator.LinkedConfig>().toEqualTypeOf<domBarrel.LinkedConfig>()
-    expectTypeOf<domBarrel.StructuredTextConfig>().toEqualTypeOf<ExpectedStructuredTextConfig>()
-    expectTypeOf<domBarrel.DOMOutputTransformContext>()
-      .toEqualTypeOf<ExpectedDOMOutputTransformContext>()
-    expectTypeOf<domTranslator.StructuredTextConfig>()
-      .toEqualTypeOf<domBarrel.StructuredTextConfig>()
-    expectTypeOf<domTranslator.DOMOutputTransformContext>()
-      .toEqualTypeOf<domBarrel.DOMOutputTransformContext>()
-    expectTypeOf<barrel.PreserveMatcher>().toEqualTypeOf<domBarrel.PreserveMatcher>()
   })
 
   it("testing barrel re-exports the public conformance surface with truthful driver types", () => {
