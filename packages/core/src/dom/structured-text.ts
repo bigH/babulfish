@@ -1,4 +1,4 @@
-import type { VisibleClaims } from "./translator.js"
+import type { VisibleClaims } from "./claims.js"
 import { captureOriginalText } from "./walker.js"
 
 const HTML_NAMESPACE = "http://www.w3.org/1999/xhtml"

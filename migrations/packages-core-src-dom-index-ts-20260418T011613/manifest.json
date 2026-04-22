@@ -1,40 +1,41 @@
 {
   "awaiting_human_review": false,
+  "cooldown_until": null,
   "created_at": "2026-04-18T01:16:13.253-07:00",
-  "current_phase": 1,
+  "current_phase": "linked-rich-attrs",
   "human_review_reason": null,
-  "last_touch": "2026-04-20T12:40:28.146-07:00",
+  "last_touch": "2026-04-21T22:53:09.628-07:00",
   "name": "packages-core-src-dom-index-ts-20260418T011613",
   "phases": [
     {
       "done": true,
       "file": "phase-1-structured-text.md",
       "name": "structured-text",
-      "ready_when": "phase 1 prerequisites met"
+      "precondition": "phase 1 prerequisites met"
     },
     {
-      "done": false,
+      "done": true,
       "file": "phase-2-claims-and-phases.md",
       "name": "claims-and-phases",
-      "ready_when": "phase 2 prerequisites met"
+      "precondition": "phase 2 prerequisites met"
     },
     {
       "done": false,
       "file": "phase-3-linked-rich-attrs.md",
       "name": "linked-rich-attrs",
-      "ready_when": "phase 3 prerequisites met"
+      "precondition": "phase 3 prerequisites met"
     },
     {
       "done": false,
       "file": "phase-4-flatten-barrel.md",
       "name": "flatten-barrel",
-      "ready_when": "phase 4 prerequisites met"
+      "precondition": "phase 4 prerequisites met"
     },
     {
       "done": false,
       "file": "phase-5-trim-and-validate.md",
       "name": "trim-and-validate",
-      "ready_when": "phase 5 prerequisites met"
+      "precondition": "phase 5 prerequisites met"
     }
   ],
   "status": "ready",

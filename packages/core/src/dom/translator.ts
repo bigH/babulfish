@@ -1,6 +1,11 @@
 import type { TaggedTextNode } from "./walker.js"
 import type { PreserveMatcher } from "./preserve.js"
 import {
+  buildVisibleClaims, claimStructuredTextNodes, containsClaimedLinkedTextNode,
+  hasNestedStructuredConflict, overlapsClaimedRoot, type VisibleClaims,
+} from "./claims.js"
+export type { VisibleClaims } from "./claims.js"
+import {
   buildSkipTags,
   captureOriginalText,
   collectTextNodes,
@@ -12,6 +17,10 @@ import {
   buildBatches,
   DEFAULT_BATCH_CHAR_LIMIT,
 } from "./batcher.js"
+import {
+  assignPhase, compareDocumentOrder, compareVisibleWork, findOwningRootIndex,
+  type PhaseWork, type TranslatableAttr, type VisibleWork,
+} from "./phases.js"
 import { insertPlaceholders, restorePlaceholders } from "./preserve.js"
 import { isWellFormedMarkdown, stripInlineMarkdownMarkers } from "./markdown.js"
 import {
@@ -81,80 +90,18 @@ export type DOMTranslator = {
   readonly currentLang: string | null
 }
 
-type TranslatableAttr = {
-  readonly el: Element
-  readonly attr: string
-  readonly text: string
-}
-
 type LinkedTarget = {
   readonly el: Element
   readonly textNode: Text
 }
 
-type LinkedGroup = {
+export type LinkedGroup = {
   readonly key: string
   readonly writableTargets: readonly LinkedTarget[]
   readonly sourceText: string
 }
 
-type VisibleWork =
-  | {
-      readonly kind: "richText"
-      readonly rootIndex: number
-      readonly anchor: Element
-      readonly element: Element
-    }
-  | {
-      readonly kind: "structuredText"
-      readonly rootIndex: number
-      readonly anchor: Element
-      readonly unit: StructuredTextUnit
-    }
-  | {
-      readonly kind: "text"
-      readonly rootIndex: number
-      readonly anchor: Text
-      readonly parent: Element
-      readonly batch: TaggedTextNode[]
-    }
-
-type PhaseWork = {
-  visible: VisibleWork[]
-  attrs: TranslatableAttr[]
-}
-
-export type VisibleClaims = {
-  readonly linkedTextNodes: Set<Text>
-  readonly richRoots: readonly Element[]
-  readonly structuredTextNodes: Set<Text>
-}
-
 const DEFAULT_RTL_LANGS: ReadonlySet<string> = new Set(["ar", "he", "ur", "fa"])
-
-function compareDocumentOrder(a: Node, b: Node): number {
-  if (a === b) return 0
-  const relation = a.compareDocumentPosition(b)
-  if (relation & Node.DOCUMENT_POSITION_PRECEDING) return 1
-  if (relation & Node.DOCUMENT_POSITION_FOLLOWING) return -1
-  return 0
-}
-
-function findOwningRootIndex(
-  node: Node,
-  roots: readonly Element[],
-): number {
-  for (let i = 0; i < roots.length; i++) {
-    const root = roots[i]!
-    if (root === node || root.contains(node)) return i
-  }
-  return roots.length
-}
-
-function compareVisibleWork(a: VisibleWork, b: VisibleWork): number {
-  if (a.rootIndex !== b.rootIndex) return a.rootIndex - b.rootIndex
-  return compareDocumentOrder(a.anchor, b.anchor)
-}
 
 function getBatchParent(batch: readonly TaggedTextNode[]): Element {
   const parent = batch[0]?.node.parentElement
@@ -180,17 +127,6 @@ function findDirectTextNode(el: Element): Text | null {
     }
   }
   return null
-}
-
-function assignPhase(node: Node, phaseRoots: Element[][]): number {
-  const el = node instanceof Element ? node : node.parentElement
-  if (!el) return phaseRoots.length
-  for (let i = 0; i < phaseRoots.length; i++) {
-    for (const root of phaseRoots[i]!) {
-      if (root === el || root.contains(el)) return i
-    }
-  }
-  return phaseRoots.length
 }
 
 export function createDOMTranslator(config: DOMTranslatorConfig): DOMTranslator {
@@ -374,64 +310,6 @@ export function createDOMTranslator(config: DOMTranslatorConfig): DOMTranslator 
     }
 
     return matches.sort(compareDocumentOrder)
-  }
-
-  function buildVisibleClaims(
-    linkedGroups: readonly LinkedGroup[],
-    richRoots: readonly Element[],
-  ): VisibleClaims {
-    return {
-      linkedTextNodes: new Set(
-        linkedGroups.flatMap((group) =>
-          group.writableTargets.map((target) => target.textNode),
-        ),
-      ),
-      richRoots,
-      structuredTextNodes: new Set<Text>(),
-    }
-  }
-
-  function overlapsClaimedRoot(
-    candidate: Element,
-    claimedRoots: Iterable<Element>,
-  ): boolean {
-    for (const claimedRoot of claimedRoots) {
-      if (
-        claimedRoot === candidate
-        || claimedRoot.contains(candidate)
-        || candidate.contains(claimedRoot)
-      ) {
-        return true
-      }
-    }
-    return false
-  }
-
-  function containsClaimedLinkedTextNode(
-    candidate: Element,
-    linkedTextNodes: ReadonlySet<Text>,
-  ): boolean {
-    for (const textNode of linkedTextNodes) {
-      if (candidate.contains(textNode)) return true
-    }
-    return false
-  }
-
-  function hasNestedStructuredConflict(
-    candidate: Element,
-    rawCandidates: readonly Element[],
-  ): boolean {
-    return rawCandidates.some((other) =>
-      other !== candidate && (other.contains(candidate) || candidate.contains(other)))
-  }
-
-  function claimStructuredTextNodes(
-    unit: StructuredTextUnit,
-    claims: VisibleClaims,
-  ): void {
-    for (const { node } of unit.textSlots) {
-      claims.structuredTextNodes.add(node)
-    }
   }
 
   function resolveStructuredUnits(
