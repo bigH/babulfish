@@ -1,5 +1,6 @@
 import type { TaggedTextNode } from "./walker.js"
 import type { PreserveMatcher } from "./preserve.js"
+import { collectTranslatableAttrs } from "./attrs.js"
 import {
   buildVisibleClaims, claimStructuredTextNodes, containsClaimedLinkedTextNode,
   hasNestedStructuredConflict, overlapsClaimedRoot, type VisibleClaims,
@@ -7,22 +8,18 @@ import {
 export type { VisibleClaims } from "./claims.js"
 import {
   buildSkipTags,
-  captureOriginalText,
   collectTextNodes,
   defaultShouldSkip,
   forEachTextNode,
 } from "./walker.js"
-import {
-  applyTranslation,
-  buildBatches,
-  DEFAULT_BATCH_CHAR_LIMIT,
-} from "./batcher.js"
+import { applyTranslation, buildBatches, DEFAULT_BATCH_CHAR_LIMIT } from "./batcher.js"
 import {
   assignPhase, compareDocumentOrder, compareVisibleWork, findOwningRootIndex,
-  type PhaseWork, type TranslatableAttr, type VisibleWork,
+  type PhaseWork, type VisibleWork,
 } from "./phases.js"
 import { insertPlaceholders, restorePlaceholders } from "./preserve.js"
-import { isWellFormedMarkdown, stripInlineMarkdownMarkers } from "./markdown.js"
+import { collectLinkedGroups, translateLinked } from "./linked.js"
+import { translateRichElement } from "./rich-text.js"
 import {
   extractStructuredTextValues as extractStructuredCommitPlan,
   type StructuredTextUnit,
@@ -90,17 +87,6 @@ export type DOMTranslator = {
   readonly currentLang: string | null
 }
 
-type LinkedTarget = {
-  readonly el: Element
-  readonly textNode: Text
-}
-
-export type LinkedGroup = {
-  readonly key: string
-  readonly writableTargets: readonly LinkedTarget[]
-  readonly sourceText: string
-}
-
 const DEFAULT_RTL_LANGS: ReadonlySet<string> = new Set(["ar", "he", "ur", "fa"])
 
 function getBatchParent(batch: readonly TaggedTextNode[]): Element {
@@ -111,22 +97,10 @@ function getBatchParent(batch: readonly TaggedTextNode[]): Element {
   return parent
 }
 
-function resolveRoots(
-  selectors: readonly string[],
-  scope: ParentNode | Document,
-): Element[] {
+function resolveRoots(selectors: readonly string[], scope: ParentNode | Document): Element[] {
   return selectors
     .map((sel) => scope.querySelector(sel))
     .filter((el): el is Element => el !== null)
-}
-
-function findDirectTextNode(el: Element): Text | null {
-  for (const child of el.childNodes) {
-    if (child.nodeType === Node.TEXT_NODE && child.textContent?.trim()) {
-      return child as Text
-    }
-  }
-  return null
 }
 
 export function createDOMTranslator(config: DOMTranslatorConfig): DOMTranslator {
@@ -152,18 +126,11 @@ export function createDOMTranslator(config: DOMTranslatorConfig): DOMTranslator 
     ? (text: string) => config.shouldSkip!(text, defaultShouldSkip)
     : defaultShouldSkip
 
-  function transformDOMOutput(
-    translated: string,
-    context: DOMOutputTransformContext,
-  ): string {
+  function transformDOMOutput(translated: string, context: DOMOutputTransformContext): string {
     return config.outputTransform ? config.outputTransform(translated, context) : translated
   }
 
-  async function translatePreservingMatches(
-    source: string,
-    targetLang: string,
-    signal: AbortSignal,
-  ): Promise<string | null> {
+  async function translatePreservingMatches(source: string, targetLang: string, signal: AbortSignal): Promise<string | null> {
     const { masked, slots } = insertPlaceholders(source, matchers)
     const translated = await config.translate(masked, targetLang)
     if (signal.aborted) return null
@@ -188,114 +155,6 @@ export function createDOMTranslator(config: DOMTranslatorConfig): DOMTranslator 
     root.innerHTML = original // eslint-disable-line no-unsanitized/property
   }
 
-  function getOriginalAttrValue(el: Element, attrName: string): string | null {
-    const attrs = originalAttrs.get(el)
-    if (attrs && attrName in attrs) return attrs[attrName]!
-    return el.getAttribute(attrName)
-  }
-
-  function captureOriginalAttrValue(el: Element, attrName: string): string | null {
-    const current = el.getAttribute(attrName)
-    if (current == null) return null
-
-    let attrs = originalAttrs.get(el)
-    if (!attrs) {
-      attrs = {}
-      originalAttrs.set(el, attrs)
-    }
-
-    if (!(attrName in attrs)) {
-      attrs[attrName] = current
-    }
-
-    return attrs[attrName]!
-  }
-
-  function collectLinkedGroups(roots: Element[]): LinkedGroup[] {
-    if (!config.linkedBy) return []
-
-    const { selector, keyAttribute } = config.linkedBy
-    const elementsByKey = new Map<string, Element[]>()
-
-    for (const root of roots) {
-      for (const el of root.querySelectorAll(selector)) {
-        const key = el.getAttribute(keyAttribute)
-        if (key == null) continue
-
-        const group = elementsByKey.get(key)
-        if (group) {
-          group.push(el)
-        } else {
-          elementsByKey.set(key, [el])
-        }
-      }
-    }
-
-    return Array.from(elementsByKey, ([key, elements]) => {
-      const writableTargets = elements.flatMap((el) => {
-        const textNode = findDirectTextNode(el)
-        return textNode ? [{ el, textNode }] : []
-      })
-      const sourceText =
-        originalLinkedSources.get(key)
-        ?? writableTargets[0]?.textNode.textContent?.trim()
-        ?? ""
-
-      return {
-        key,
-        writableTargets,
-        sourceText,
-      }
-    })
-  }
-
-  async function translateLinked(
-    groups: readonly LinkedGroup[],
-    targetLang: string,
-    signal: AbortSignal,
-    onUnit: () => void,
-  ): Promise<void> {
-    for (const { key, writableTargets, sourceText } of groups) {
-      if (signal.aborted) return
-      if (writableTargets.length === 0) {
-        onUnit()
-        continue
-      }
-
-      if (!sourceText || shouldSkip(sourceText)) {
-        onUnit()
-        continue
-      }
-      if (!originalLinkedSources.has(key)) {
-        originalLinkedSources.set(key, sourceText)
-      }
-
-      for (const { el } of writableTargets) {
-        config.hooks?.onTranslateStart?.(el)
-      }
-
-      const translated = await config.translate(sourceText, targetLang)
-      if (signal.aborted) return
-      const transformed = transformDOMOutput(translated, {
-        kind: "linked",
-        targetLang,
-        source: sourceText,
-      })
-
-      for (const { el, textNode } of writableTargets) {
-        captureOriginalText(
-          textNode,
-          originalTexts,
-          originalLinkedSources.get(key) ?? textNode.textContent ?? "",
-        )
-        textNode.textContent = transformed
-        config.hooks?.onTranslateEnd?.(el)
-      }
-
-      onUnit()
-    }
-  }
-
   function collectStructuredCandidates(roots: readonly Element[]): Element[] {
     if (!config.structuredText) return []
 
@@ -312,10 +171,7 @@ export function createDOMTranslator(config: DOMTranslatorConfig): DOMTranslator 
     return matches.sort(compareDocumentOrder)
   }
 
-  function resolveStructuredUnits(
-    roots: readonly Element[],
-    claims: VisibleClaims,
-  ): StructuredTextUnit[] {
+  function resolveStructuredUnits(roots: readonly Element[], claims: VisibleClaims): StructuredTextUnit[] {
     const rawCandidates = collectStructuredCandidates(roots)
     const units: StructuredTextUnit[] = []
 
@@ -345,73 +201,13 @@ export function createDOMTranslator(config: DOMTranslatorConfig): DOMTranslator 
   }
 
   function collectStructuredFallbackTargets(root: Element): TaggedTextNode[] {
-    return collectTextNodes(root, {
-      skipTags,
-      shouldSkip,
-      skipInside: skipSelectors,
-    }, originalTexts)
+    return collectTextNodes(root, { skipTags, shouldSkip, skipInside: skipSelectors }, originalTexts)
   }
 
-  function collectTranslatableAttrs(root: Element): TranslatableAttr[] {
-    const items: TranslatableAttr[] = []
-    for (const el of root.querySelectorAll("*")) {
-      for (const attrName of attrNames) {
-        const sourceText = getOriginalAttrValue(el, attrName)
-        if (sourceText == null || shouldSkip(sourceText)) continue
-        const text = captureOriginalAttrValue(el, attrName)
-        if (text == null) continue
-        items.push({ el, attr: attrName, text })
-      }
-    }
-    return items
-  }
-
-  async function translateRichElement(
-    el: Element,
-    targetLang: string,
-    signal: AbortSignal,
-  ): Promise<void> {
-    if (!config.richText) return
-    const source = el.getAttribute(config.richText.sourceAttribute)
-    if (!source) return
-
-    if (!originalRichElements.has(el)) {
-      originalRichElements.set(el, el.innerHTML) // eslint-disable-line no-unsanitized/property
-    }
-
-    config.hooks?.onTranslateStart?.(el)
-
-    const translated = await translatePreservingMatches(source, targetLang, signal)
-    if (translated == null) return
-    const transformed = transformDOMOutput(translated, {
-      kind: "richText",
-      targetLang,
-      source,
-    })
-
-    const validate = config.richText.validate ?? isWellFormedMarkdown
-    if (validate(transformed)) {
-      const render = config.richText.render
-      el.innerHTML = render(transformed) // eslint-disable-line no-unsanitized/property
-    } else {
-      el.textContent = stripInlineMarkdownMarkers(transformed)
-    }
-
-    config.hooks?.onTranslateEnd?.(el)
-  }
-
-  async function translateStructuredUnit(
-    unit: StructuredTextUnit,
-    targetLang: string,
-    signal: AbortSignal,
-  ): Promise<void> {
+  async function translateStructuredUnit(unit: StructuredTextUnit, targetLang: string, signal: AbortSignal): Promise<void> {
     config.hooks?.onTranslateStart?.(unit.root)
 
-    const translated = await translatePreservingMatches(
-      unit.serialized,
-      targetLang,
-      signal,
-    )
+    const translated = await translatePreservingMatches(unit.serialized, targetLang, signal)
     if (translated == null) return
     const transformed = transformDOMOutput(translated, {
       kind: "structuredText",
@@ -430,11 +226,7 @@ export function createDOMTranslator(config: DOMTranslatorConfig): DOMTranslator 
     }
 
     const fallbackSource = buildStructuredFallbackSource(unit)
-    const fallbackTranslated = await translatePreservingMatches(
-      fallbackSource,
-      targetLang,
-      signal,
-    )
+    const fallbackTranslated = await translatePreservingMatches(fallbackSource, targetLang, signal)
     if (fallbackTranslated == null) return
     const transformedFallback = transformDOMOutput(fallbackTranslated, {
       kind: "structuredText",
@@ -468,12 +260,12 @@ export function createDOMTranslator(config: DOMTranslatorConfig): DOMTranslator 
         config.hooks?.onDirectionChange?.(root, dir)
       }
 
-      const linkedGroups = collectLinkedGroups(roots)
+      const linkedGroups = config.linkedBy
+        ? collectLinkedGroups(roots, config.linkedBy, originalLinkedSources)
+        : []
 
       const allRich = config.richText
-        ? roots.flatMap((r) =>
-          Array.from(r.querySelectorAll(config.richText!.selector)),
-        )
+        ? roots.flatMap((r) => Array.from(r.querySelectorAll(config.richText!.selector)))
         : []
 
       const claims = buildVisibleClaims(linkedGroups, allRich)
@@ -509,7 +301,8 @@ export function createDOMTranslator(config: DOMTranslatorConfig): DOMTranslator 
           batch,
         })),
       ].sort(compareVisibleWork)
-      const allAttrs = roots.flatMap(collectTranslatableAttrs)
+      const allAttrs = roots.flatMap((root) =>
+        collectTranslatableAttrs(root, attrNames, shouldSkip, originalAttrs))
 
       const total =
         linkedGroups.length
@@ -525,9 +318,7 @@ export function createDOMTranslator(config: DOMTranslatorConfig): DOMTranslator 
       }
 
       const phaseSelectors = config.phases ?? []
-      const phaseRoots = phaseSelectors.map((sel) =>
-        Array.from(scope.querySelectorAll(sel)),
-      )
+      const phaseRoots = phaseSelectors.map((sel) => Array.from(scope.querySelectorAll(sel)))
       const phases: PhaseWork[] = Array.from(
         { length: phaseSelectors.length + 1 },
         () => ({ visible: [], attrs: [] }),
@@ -540,7 +331,17 @@ export function createDOMTranslator(config: DOMTranslatorConfig): DOMTranslator 
         phases[assignPhase(attr.el, phaseRoots)]!.attrs.push(attr)
       }
 
-      await translateLinked(linkedGroups, targetLang, signal, progress)
+      await translateLinked(linkedGroups, {
+        targetLang,
+        signal,
+        translate: config.translate,
+        transformDOMOutput,
+        shouldSkip,
+        originalTexts,
+        originalLinkedSources,
+        hooks: config.hooks,
+        onUnit: progress,
+      })
 
       for (const phase of phases) {
         await translatePhaseWork(phase, targetLang, signal, progress)
@@ -559,7 +360,17 @@ export function createDOMTranslator(config: DOMTranslatorConfig): DOMTranslator 
     for (const work of phase.visible) {
       if (signal.aborted) return
       if (work.kind === "richText") {
-        await translateRichElement(work.element, targetLang, signal)
+        if (config.richText) {
+          await translateRichElement(work.element, {
+            targetLang,
+            signal,
+            config: config.richText,
+            translatePreservingMatches,
+            transformDOMOutput,
+            originalRichElements,
+            hooks: config.hooks,
+          })
+        }
       } else if (work.kind === "structuredText") {
         await translateStructuredUnit(work.unit, targetLang, signal)
       } else {

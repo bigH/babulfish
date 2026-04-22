@@ -1,5 +1,5 @@
 import type { StructuredTextUnit } from "./structured-text.js"
-import type { LinkedGroup } from "./translator.js"
+import type { LinkedGroup } from "./linked.js"
 
 export type VisibleClaims = {
   readonly linkedTextNodes: Set<Text>

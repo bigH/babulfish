@@ -1,11 +1,6 @@
 import type { StructuredTextUnit } from "./structured-text.js"
 import type { TaggedTextNode } from "./walker.js"
-
-export type TranslatableAttr = {
-  readonly el: Element
-  readonly attr: string
-  readonly text: string
-}
+import type { TranslatableAttr } from "./attrs.js"
 
 export type VisibleWork =
   | {
