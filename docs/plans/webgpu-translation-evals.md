@@ -30,7 +30,7 @@ The Node runner starts Vite with the demo's config, launches Chromium through Pl
 
 ## Scope
 
-- Default model: `qwen-2.5-0.5b`; `--model all` runs `qwen-2.5-0.5b`, `qwen-3-0.6b`, then `gemma-3-1b-it` one at a time.
+- Default model: `qwen-2.5-0.5b`; `--model all` runs `qwen-2.5-0.5b`, `qwen-3-0.6b`, `gemma-3-1b-it`, then `translategemma-4` one at a time.
 - Corpus: prose to Spanish/French, markdown-ish text, preserved brand substrings, short UI labels, punctuation/quotes, Arabic smoke, and output-only compliance.
 - Scoring: deterministic checks only: non-empty output, no prompt echo, no boilerplate wrappers, exact preserved substrings, markdown marker survival, output differs from prose source, and tiny regex/allowlist checks where useful.
 

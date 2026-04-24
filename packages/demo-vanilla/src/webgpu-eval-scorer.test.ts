@@ -75,6 +75,6 @@ describe("webgpu eval scorer", () => {
 
   it("validates known model ids", () => {
     expect(isWebGpuEvalModelId("qwen-2.5-0.5b")).toBe(true)
-    expect(isWebGpuEvalModelId("translategemma-4")).toBe(false)
+    expect(isWebGpuEvalModelId("translategemma-4")).toBe(true)
   })
 })

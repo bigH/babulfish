@@ -6,7 +6,7 @@ Run live browser/model evals explicitly from the repo root:
 pnpm eval:webgpu
 ```
 
-By default this runs `qwen-2.5-0.5b` only. Run every built-in chat model one at a time:
+By default this runs `qwen-2.5-0.5b` only. Run every WebGPU eval model one at a time:
 
 ```bash
 pnpm eval:webgpu -- --model all
@@ -17,6 +17,7 @@ Useful options:
 ```bash
 pnpm eval:webgpu -- --model qwen-3-0.6b
 pnpm eval:webgpu -- --model gemma-3-1b-it --headed
+pnpm eval:webgpu -- --model translategemma-4
 pnpm eval:webgpu -- --output-dir .evals/manual-webgpu-run
 ```
 

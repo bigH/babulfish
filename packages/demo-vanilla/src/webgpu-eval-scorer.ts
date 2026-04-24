@@ -2,6 +2,7 @@ export type WebGpuEvalModelId =
   | "qwen-2.5-0.5b"
   | "qwen-3-0.6b"
   | "gemma-3-1b-it"
+  | "translategemma-4"
 
 export type WebGpuEvalCase = {
   readonly id: string
@@ -45,6 +46,7 @@ export const WEBGPU_EVAL_MODEL_IDS = [
   "qwen-2.5-0.5b",
   "qwen-3-0.6b",
   "gemma-3-1b-it",
+  "translategemma-4",
 ] as const satisfies readonly WebGpuEvalModelId[]
 
 export const DEFAULT_WEBGPU_EVAL_MODEL_ID: WebGpuEvalModelId = "qwen-2.5-0.5b"

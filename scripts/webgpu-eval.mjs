@@ -8,7 +8,12 @@ import { fileURLToPath } from "node:url"
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const defaultOutputRoot = path.join(repoRoot, ".evals")
 const defaultEvalName = "web-gpu"
-const evalModelIds = ["qwen-2.5-0.5b", "qwen-3-0.6b", "gemma-3-1b-it"]
+const evalModelIds = [
+  "qwen-2.5-0.5b",
+  "qwen-3-0.6b",
+  "gemma-3-1b-it",
+  "translategemma-4",
+]
 
 function filenameTimestamp(date = new Date()) {
   return date.toISOString().replaceAll(":", "-").replaceAll(".", "-")
@@ -33,6 +38,8 @@ function usage() {
     "Defaults:",
     "  --model qwen-2.5-0.5b",
     "  --output-dir .evals/web-gpu-<timestamp>",
+    "",
+    `Valid models: ${evalModelIds.join(", ")}`,
     "",
     "If Chromium is missing, install it with:",
     "  pnpm exec playwright install chromium",
