@@ -1,4 +1,5 @@
 .scratchpad/
+.evals/
 
 node_modules
 dist

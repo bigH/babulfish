@@ -6,16 +6,33 @@ import path from "node:path"
 import { fileURLToPath } from "node:url"
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
-const defaultOutputPath = path.join(repoRoot, ".scratchpad/webgpu-evals/results.json")
+const defaultOutputRoot = path.join(repoRoot, ".evals")
+const defaultEvalName = "web-gpu"
 const evalModelIds = ["qwen-2.5-0.5b", "qwen-3-0.6b", "gemma-3-1b-it"]
+
+function filenameTimestamp(date = new Date()) {
+  return date.toISOString().replaceAll(":", "-").replaceAll(".", "-")
+}
+
+function createDefaultOutputDir(date = new Date()) {
+  return path.join(defaultOutputRoot, `${defaultEvalName}-${filenameTimestamp(date)}`)
+}
+
+function artifactNameForModel(modelId) {
+  return `${modelId.replaceAll("/", "-")}.json`
+}
+
+function artifactPathForModel(outputDir, modelId) {
+  return path.join(outputDir, artifactNameForModel(modelId))
+}
 
 function usage() {
   return [
-    "Usage: pnpm eval:webgpu [-- --model <id|all|a,b>] [--headed] [--output <path>]",
+    "Usage: pnpm eval:webgpu [-- --model <id|all|a,b>] [--headed] [--output-dir <path>]",
     "",
     "Defaults:",
     "  --model qwen-2.5-0.5b",
-    "  --output .scratchpad/webgpu-evals/results.json",
+    "  --output-dir .evals/web-gpu-<timestamp>",
     "",
     "If Chromium is missing, install it with:",
     "  pnpm exec playwright install chromium",
@@ -33,7 +50,7 @@ function parsePositiveInteger(value, label) {
 function parseArgs(argv) {
   const options = {
     modelArg: "qwen-2.5-0.5b",
-    outputPath: defaultOutputPath,
+    outputDir: null,
     headed: false,
     port: null,
     loadTimeoutMs: 900_000,
@@ -60,10 +77,12 @@ function parseArgs(argv) {
       options.modelArg = nextValue()
     } else if (arg.startsWith("--model=")) {
       options.modelArg = arg.slice("--model=".length)
-    } else if (arg === "--output") {
-      options.outputPath = path.resolve(repoRoot, nextValue())
+    } else if (arg === "--output-dir" || arg === "--output") {
+      options.outputDir = path.resolve(repoRoot, nextValue())
+    } else if (arg.startsWith("--output-dir=")) {
+      options.outputDir = path.resolve(repoRoot, arg.slice("--output-dir=".length))
     } else if (arg.startsWith("--output=")) {
-      options.outputPath = path.resolve(repoRoot, arg.slice("--output=".length))
+      options.outputDir = path.resolve(repoRoot, arg.slice("--output=".length))
     } else if (arg === "--headed") {
       options.headed = true
     } else if (arg === "--port") {
@@ -102,6 +121,7 @@ function parseArgs(argv) {
 
   return {
     ...options,
+    outputDir: options.outputDir ?? createDefaultOutputDir(),
     models: parseModels(options.modelArg),
   }
 }
@@ -314,7 +334,7 @@ function createBaseResult(options, port) {
     pass: false,
     command: {
       models: options.models,
-      outputPath: path.relative(repoRoot, options.outputPath),
+      outputDir: path.relative(repoRoot, options.outputDir),
       headed: options.headed,
       port,
       loadTimeoutMs: options.loadTimeoutMs,
@@ -368,13 +388,47 @@ function failedModelFromError(modelId, error) {
   }
 }
 
-async function writeArtifact(outputPath, result) {
-  await mkdir(path.dirname(outputPath), { recursive: true })
-  await writeFile(outputPath, `${JSON.stringify(result, null, 2)}\n`)
+function createModelArtifact(result, model) {
+  return {
+    schemaVersion: result.schemaVersion,
+    startedAt: result.startedAt,
+    finishedAt: result.finishedAt,
+    durationMs: result.durationMs,
+    pass: model.pass && result.errors.length === 0,
+    command: result.command,
+    server: result.server,
+    browser: result.browser,
+    errors: result.errors,
+    model,
+  }
 }
 
-function summarizeResult(result, outputPath) {
-  const relativeOutput = path.relative(repoRoot, outputPath)
+async function writeArtifacts(outputDir, result) {
+  await mkdir(outputDir, { recursive: true })
+
+  const artifactPaths = []
+  for (const model of result.models) {
+    const outputPath = artifactPathForModel(outputDir, model.modelId)
+    await writeFile(
+      outputPath,
+      `${JSON.stringify(createModelArtifact(result, model), null, 2)}\n`,
+    )
+    artifactPaths.push(outputPath)
+  }
+
+  if (artifactPaths.length === 0) {
+    const outputPath = path.join(outputDir, "run-error.json")
+    await writeFile(outputPath, `${JSON.stringify(result, null, 2)}\n`)
+    artifactPaths.push(outputPath)
+  }
+
+  return artifactPaths
+}
+
+function summarizeResult(result, artifactPaths) {
+  const relativeArtifacts = artifactPaths.map((artifactPath) =>
+    path.relative(repoRoot, artifactPath),
+  )
 
   for (const model of result.models) {
     if (model.error) {
@@ -404,7 +458,9 @@ function summarizeResult(result, outputPath) {
 
   const status = result.pass ? "PASS" : "FAIL"
   const modelCount = result.models.length
-  console.log(`${status} WebGPU eval: ${modelCount} model(s). Artifact: ${relativeOutput}`)
+  console.log(
+    `${status} WebGPU eval: ${modelCount} model(s). Artifacts: ${relativeArtifacts.join(", ")}`,
+  )
 }
 
 async function stopServer(server) {
@@ -464,7 +520,11 @@ async function main() {
       }
     }
   } catch (error) {
-    result.errors.push(serializeError("environment", error))
+    const serializedError = serializeError("environment", error)
+    result.errors.push(serializedError)
+    if (result.models.length === 0 && options.models[0]) {
+      result.models.push(failedModelFromError(options.models[0], serializedError))
+    }
   } finally {
     if (browser) await browser.close().catch(() => {})
     await stopServer(server)
@@ -477,7 +537,7 @@ async function main() {
       result.models.every((model) => model.pass)
 
     try {
-      await writeArtifact(options.outputPath, result)
+      result.artifactPaths = await writeArtifacts(options.outputDir, result)
     } catch (error) {
       console.error(
         `Failed to write eval artifact: ${
@@ -489,7 +549,7 @@ async function main() {
     }
   }
 
-  summarizeResult(result, options.outputPath)
+  summarizeResult(result, result.artifactPaths)
   process.exitCode = result.pass ? 0 : 1
 }
 

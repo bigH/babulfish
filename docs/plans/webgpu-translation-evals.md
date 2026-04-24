@@ -26,7 +26,7 @@ The eval page uses the public core path only:
 3. `translateText(sourceText, targetLanguage)` for each fixed corpus case
 4. `dispose()` before the next model
 
-The Node runner starts Vite with the demo's config, launches Chromium through Playwright, executes the page-side eval function, and writes `.scratchpad/webgpu-evals/results.json`. If Playwright, Chromium, cross-origin isolation, `navigator.gpu`, adapter/device request, or the core WebGPU verdict is missing, it fails before treating the result as a model quality signal.
+The Node runner starts Vite with the demo's config, launches Chromium through Playwright, executes the page-side eval function, and writes one artifact per model at `.evals/web-gpu-<timestamp>/<model-name>.json`. If Playwright, Chromium, cross-origin isolation, `navigator.gpu`, adapter/device request, or the core WebGPU verdict is missing, it fails before treating the result as a model quality signal.
 
 ## Scope
 
