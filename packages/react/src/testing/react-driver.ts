@@ -112,6 +112,9 @@ export function ReactConformanceDriver(): ConformanceDriver {
       await act(async () => {
         registration.unmount()
       })
+      await new Promise((resolve) => {
+        setTimeout(resolve, 0)
+      })
       registration.restoreSnapshot()
       registry.delete(core)
     },

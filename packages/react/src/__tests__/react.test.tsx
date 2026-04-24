@@ -1,7 +1,7 @@
 /// <reference types="@testing-library/jest-dom" />
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import { render, screen, fireEvent, act, cleanup } from "@testing-library/react"
-import { Profiler } from "react"
+import { Profiler, StrictMode } from "react"
 import { renderToString } from "react-dom/server"
 import type { Snapshot } from "@babulfish/core"
 
@@ -341,6 +341,14 @@ async function selectLanguage(label: string) {
   })
 }
 
+async function flushDisposalTimers() {
+  await act(async () => {
+    await new Promise((resolve) => {
+      setTimeout(resolve, 0)
+    })
+  })
+}
+
 beforeEach(() => {
   vi.clearAllMocks()
   listeners.clear()
@@ -350,7 +358,10 @@ beforeEach(() => {
   mockTranslateText.mockResolvedValue("translated")
 })
 
-afterEach(cleanup)
+afterEach(async () => {
+  cleanup()
+  await flushDisposalTimers()
+})
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -517,7 +528,7 @@ describe("TranslatorProvider", () => {
     }
   })
 
-  it("disposes the created core on unmount", () => {
+  it("disposes the created core on unmount", async () => {
     const { unmount } = render(
       <TranslatorProvider>
         <span data-testid="child">hello</span>
@@ -525,9 +536,26 @@ describe("TranslatorProvider", () => {
     )
 
     unmount()
+    await flushDisposalTimers()
 
     expect(mockCreateBabulfish).toHaveBeenCalledTimes(1)
     expect(mockDispose).toHaveBeenCalledTimes(1)
+  })
+
+  it("keeps the mounted core usable after Strict Mode effect replay", async () => {
+    render(
+      <StrictMode>
+        <TranslatorProvider>
+          <HookInspector />
+        </TranslatorProvider>
+      </StrictMode>,
+    )
+
+    await flushDisposalTimers()
+    fireEvent.click(screen.getByTestId("load"))
+
+    expect(mockDispose).not.toHaveBeenCalled()
+    expect(mockLoadModel).toHaveBeenCalledTimes(1)
   })
 })
 
