@@ -39,9 +39,13 @@ describe("resolveTranslationModelConfig", () => {
 
   it.each([
     ["translategemma-4", "onnx-community/translategemma-text-4b-it-ONNX", "translategemma"],
-    ["qwen-2.5-0.5b", "onnx-community/Qwen2.5-0.5B-Instruct", "chat"],
-    ["qwen-3-0.6b", "onnx-community/Qwen3-0.6B-ONNX", "chat"],
-    ["gemma-3-1b-it", "onnx-community/gemma-3-1b-it-ONNX", "chat"],
+    [
+      "qwen-2.5-0.5b",
+      "onnx-community/Qwen2.5-0.5B-Instruct",
+      "qwen-2.5-0.5b-chat",
+    ],
+    ["qwen-3-0.6b", "onnx-community/Qwen3-0.6B-ONNX", "qwen-3-0.6b-chat"],
+    ["gemma-3-1b-it", "onnx-community/gemma-3-1b-it-ONNX", "gemma-3-1b-it-chat"],
   ] as const)("resolves built-in model %s", (model, modelId, adapterId) => {
     const resolved = resolveTranslationModelConfig({ model })
 
@@ -124,7 +128,7 @@ describe("resolveTranslationModelConfig", () => {
     })
 
     expect(resolved.modelId).toBe("acme/qwen-override")
-    expect(resolved.adapterId).toBe("chat")
+    expect(resolved.adapterId).toBe("qwen-3-0.6b-chat")
     expect(resolved.subfolder).toBe("onnx")
     expect(resolved.modelFileName).toBe("model")
     expect(resolved.requestedModel).toEqual({

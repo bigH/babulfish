@@ -165,7 +165,7 @@ describe("demo-vanilla main", () => {
       "only verified for Q4F16",
     )
     expect(document.getElementById("runtime-constraints")?.textContent).toContain(
-      "Adapter: chat.",
+      "Adapter: qwen-3-0.6b-chat.",
     )
     expect(document.getElementById("status-requested-device")?.textContent).toBe("WASM")
     expect(document.getElementById("status-requested-model")?.textContent).toBe(
@@ -177,7 +177,9 @@ describe("demo-vanilla main", () => {
     expect(document.getElementById("status-resolved-model")?.textContent).toBe(
       "onnx-community/Qwen3-0.6B-ONNX",
     )
-    expect(document.getElementById("status-adapter")?.textContent).toBe("chat")
+    expect(document.getElementById("status-adapter")?.textContent).toBe(
+      "qwen-3-0.6b-chat",
+    )
 
     const runtimeDevice = document.getElementById("runtime-device")
     if (!(runtimeDevice instanceof HTMLSelectElement)) {
@@ -256,6 +258,8 @@ describe("demo-vanilla main", () => {
     expect(document.getElementById("status-resolved-model")?.textContent).toBe(
       "onnx-community/Qwen3-0.6B-ONNX",
     )
-    expect(document.getElementById("status-adapter")?.textContent).toBe("chat")
+    expect(document.getElementById("status-adapter")?.textContent).toBe(
+      "qwen-3-0.6b-chat",
+    )
   })
 })

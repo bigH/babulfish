@@ -221,7 +221,7 @@ async function main() {
     const missingCanonicalMarkers = [
       "Qwen 3 0.6B (qwen-3-0.6b)",
       "onnx-community/Qwen3-0.6B-ONNX",
-      "chat",
+      "qwen-3-0.6b-chat",
       "WebGPU (webgpu)",
       "Q4F16 (q4f16)",
     ].filter((marker) => !canonicalHtml.includes(marker))
@@ -240,7 +240,7 @@ async function main() {
     const missingLegacyMarkers = [
       "Qwen 2.5 0.5B Instruct (qwen-2.5-0.5b)",
       "onnx-community/Qwen2.5-0.5B-Instruct",
-      "chat",
+      "qwen-2.5-0.5b-chat",
     ].filter((marker) => !legacyHtml.includes(marker))
 
     if (missingLegacyMarkers.length > 0) {

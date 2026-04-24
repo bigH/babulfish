@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest"
 
+import { resolveTranslationModelConfig } from "../../core/src/engine/model-registry.js"
 import {
   createDemoRuntimeSearchParams,
   createDemoRuntimeSelectionKey,
+  DEMO_MODEL_SPECS,
   getDefaultDemoRuntimeSelection,
   mergeDemoRuntimeSearchParams,
   mergeDemoRuntimeSelection,
@@ -23,7 +25,7 @@ describe("demo runtime selection", () => {
       id: "qwen-3-0.6b",
       label: "Qwen 3 0.6B",
       resolvedModelId: "onnx-community/Qwen3-0.6B-ONNX",
-      adapterId: "chat",
+      adapterId: "qwen-3-0.6b-chat",
       subfolder: "onnx",
       modelFileName: "model",
     })
@@ -131,7 +133,7 @@ describe("demo runtime selection", () => {
     const key = createDemoRuntimeSelectionKey(selection)
 
     expect(key).toBe(
-      "model:qwen-3-0.6b|resolved:onnx-community/Qwen3-0.6B-ONNX|adapter:chat|dtype:q4f16|device:webgpu",
+      "model:qwen-3-0.6b|resolved:onnx-community/Qwen3-0.6B-ONNX|adapter:qwen-3-0.6b-chat|dtype:q4f16|device:webgpu",
     )
 
     expect(
@@ -143,6 +145,14 @@ describe("demo runtime selection", () => {
         },
       }),
     ).not.toBe(key)
+  })
+
+  it("keeps demo adapter ids mirrored from the core model registry", () => {
+    for (const spec of DEMO_MODEL_SPECS) {
+      expect(spec.adapterId).toBe(
+        resolveTranslationModelConfig({ model: spec.id }).adapterId,
+      )
+    }
   })
 
   it("builds adapter-aware core engine config from the shared selection", () => {

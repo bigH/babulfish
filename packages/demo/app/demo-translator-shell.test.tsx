@@ -115,7 +115,7 @@ describe("DemoTranslatorShell", () => {
       "Qwen 2.5 0.5B Instruct (qwen-2.5-0.5b)",
     )
     expect(container.textContent).toContain("onnx-community/Qwen2.5-0.5B-Instruct")
-    expect(container.textContent).toContain("chat")
+    expect(container.textContent).toContain("qwen-2.5-0.5b-chat")
     expect(window.location.search).toBe("?foo=bar&model=qwen-2.5-0.5b")
     expect(providerConfigs.at(-1)).toEqual({
       engine: toBabulfishEngineConfig(initialRuntimeState.selection),
@@ -168,7 +168,7 @@ describe("DemoTranslatorShell", () => {
     expect(screen.getByText("Effective Quantization")).toBeTruthy()
     expect(screen.getByText("Qwen 3 0.6B (qwen-3-0.6b)")).toBeTruthy()
     expect(screen.getByText("onnx-community/Qwen3-0.6B-ONNX")).toBeTruthy()
-    expect(screen.getByText("chat")).toBeTruthy()
+    expect(screen.getByText("qwen-3-0.6b-chat")).toBeTruthy()
     expect(screen.getByText(/Allowed quantization:/).textContent).toContain(
       "Allowed quantization: Q4F16. Allowed devices: WebGPU.",
     )

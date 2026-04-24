@@ -8,7 +8,11 @@ import {
   type ModelDType,
 } from "./config.js"
 import type { DevicePreference } from "./detect.js"
-import { chatAdapter } from "./adapters/chat.js"
+import {
+  gemma3ChatAdapter,
+  qwen25ChatAdapter,
+  qwen3ChatAdapter,
+} from "./adapters/chat.js"
 import { translateGemmaAdapter } from "./adapters/translategemma.js"
 import type {
   BuiltinTranslationModelId,
@@ -89,7 +93,7 @@ const BUILTIN_MODELS = Object.freeze({
     id: "qwen-2.5-0.5b",
     label: "Qwen 2.5 0.5B Instruct",
     modelId: "onnx-community/Qwen2.5-0.5B-Instruct",
-    adapter: chatAdapter,
+    adapter: qwen25ChatAdapter,
     dtype: "q4f16",
     device: "webgpu",
     maxNewTokens: 256,
@@ -103,7 +107,7 @@ const BUILTIN_MODELS = Object.freeze({
     id: "qwen-3-0.6b",
     label: "Qwen 3 0.6B",
     modelId: "onnx-community/Qwen3-0.6B-ONNX",
-    adapter: chatAdapter,
+    adapter: qwen3ChatAdapter,
     dtype: "q4f16",
     device: "webgpu",
     maxNewTokens: 256,
@@ -117,7 +121,7 @@ const BUILTIN_MODELS = Object.freeze({
     id: "gemma-3-1b-it",
     label: "Gemma 3 1B IT",
     modelId: "onnx-community/gemma-3-1b-it-ONNX",
-    adapter: chatAdapter,
+    adapter: gemma3ChatAdapter,
     dtype: "q4f16",
     device: "webgpu",
     maxNewTokens: 256,
