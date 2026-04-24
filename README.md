@@ -108,6 +108,7 @@ pnpm docs:check
 What those mean today:
 
 - `pnpm docs:check` runs package-doc validation for the published CSS/compat packages plus the tarball consumer smoke in [`scripts/consumer-smoke.mjs`](scripts/consumer-smoke.mjs).
+- `pnpm eval:webgpu` is an opt-in live Chromium/WebGPU model eval and is not part of `pnpm test`; see [`docs/webgpu-evals.md`](docs/webgpu-evals.md).
 - `pnpm release:check` is the full rehearsal: `build`, `test`, then `docs:check`.
 - `pnpm release` performs `release:check` and then publishes the four public packages in order: `@babulfish/styles`, `@babulfish/core`, `@babulfish/react`, `babulfish`.
 
