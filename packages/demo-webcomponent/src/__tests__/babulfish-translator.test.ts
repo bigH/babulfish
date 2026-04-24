@@ -188,7 +188,7 @@ describe("babulfish-translator", () => {
     const shadow = connect()
     const statusEl = shadow.querySelector(".status-text") as HTMLElement
     expect(statusEl.textContent).toBe(
-      "Model: Not loaded | requested auto/q4 | resolved none",
+      "Model: Not loaded | requested model translategemma-4 (default) | spec translategemma-4 | resolved model onnx-community/translategemma-text-4b-it-ONNX | adapter translategemma | dtype q4 | requested device auto (default) | effective device auto | resolved device none",
     )
 
     state.listener?.(createSnapshot({
@@ -196,7 +196,7 @@ describe("babulfish-translator", () => {
       translation: { status: "idle" },
     }))
     expect(statusEl.textContent).toBe(
-      "Model: Downloading (42%) | requested auto/q4 | resolved none",
+      "Model: Downloading (42%) | requested model translategemma-4 (default) | spec translategemma-4 | resolved model onnx-community/translategemma-text-4b-it-ONNX | adapter translategemma | dtype q4 | requested device auto (default) | effective device auto | resolved device none",
     )
   })
 
@@ -269,36 +269,81 @@ describe("babulfish-translator", () => {
 
   it("passes runtime attrs into createBabulfish()", () => {
     el.setAttribute("device", "wasm")
-    el.setAttribute("model-id", "onnx-community/gemma-3-270m-it-ONNX")
-    el.setAttribute("dtype", "fp32")
+    el.setAttribute("model", "translategemma-4")
+    el.setAttribute("dtype", "q8")
 
     connect()
 
     expect(mockCreateBabulfish).toHaveBeenCalledWith({
       engine: {
         device: "wasm",
-        modelId: "onnx-community/gemma-3-270m-it-ONNX",
-        dtype: "fp32",
+        model: "translategemma-4",
+        dtype: "q8",
       },
       dom: expect.any(Object),
     })
   })
 
-  it("recreates the core when runtime attrs change", () => {
+  it("maps legacy model-id attrs through the shared resolver", () => {
+    el.setAttribute("model-id", "onnx-community/Qwen2.5-0.5B-Instruct")
+
+    connect()
+
+    expect(mockCreateBabulfish).toHaveBeenCalledWith({
+      engine: {
+        device: "webgpu",
+        model: "qwen-2.5-0.5b",
+        dtype: "q4f16",
+      },
+      dom: expect.any(Object),
+    })
+  })
+
+  it("lets canonical model attrs override legacy model-id attrs", () => {
+    el.setAttribute("model", "qwen-3-0.6b")
+    el.setAttribute("model-id", "onnx-community/Qwen2.5-0.5B-Instruct")
+
+    connect()
+
+    expect(mockCreateBabulfish).toHaveBeenCalledWith({
+      engine: {
+        device: "webgpu",
+        model: "qwen-3-0.6b",
+        dtype: "q4f16",
+      },
+      dom: expect.any(Object),
+    })
+  })
+
+  it("does not recreate the core when runtime attrs resolve to the same key", () => {
     connect()
     const firstMock = state.latestMock!
+    el.setAttribute("target-lang", "es")
 
-    el.setAttribute("model-id", "onnx-community/gemma-3-270m-it-ONNX")
+    el.setAttribute("model", "translategemma-4")
+
+    expect(mockCreateBabulfish).toHaveBeenCalledTimes(1)
+    expect(firstMock.dispose).not.toHaveBeenCalled()
+    expect(el.getAttribute("target-lang")).toBe("es")
+  })
+
+  it("recreates the core and clears target-lang when runtime attrs change the effective key", () => {
+    connect()
+    const firstMock = state.latestMock!
+    el.setAttribute("target-lang", "es")
+
+    el.setAttribute("model", "qwen-3-0.6b")
     const secondCall = mockCreateBabulfish.mock.calls[1] as [unknown] | undefined
 
     expect(mockCreateBabulfish).toHaveBeenCalledTimes(2)
     expect(firstMock.restore).toHaveBeenCalledTimes(1)
     expect(firstMock.dispose).toHaveBeenCalledTimes(1)
+    expect(el.hasAttribute("target-lang")).toBe(false)
     expect(secondCall?.[0]).toMatchObject({
       engine: {
-        device: "wasm",
-        modelId: "onnx-community/gemma-3-270m-it-ONNX",
-        dtype: "fp32",
+        device: "webgpu",
+        model: "qwen-3-0.6b",
+        dtype: "q4f16",
       },
     })
   })

@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 
 import {
   appendStatusEntry,
+  formatRequestedModelIdentity,
   formatRequestedDType,
   formatRequestedDevice,
   observeHostDocument,
@@ -13,8 +14,10 @@ import {
   requireStatus,
   restoreTranslators,
   setTranslatorLanguage,
+  syncTranslatorRuntimeAttrs,
   type TranslatorHostElement,
 } from "./main-helpers.js"
+import { resolveDemoRuntimeSelection } from "../../demo-shared/src/runtime-selection.js"
 
 function createSnapshot(overrides: Partial<Snapshot> = {}): Snapshot {
   return {
@@ -260,6 +263,22 @@ describe("demo main helpers", () => {
     expect(formatRequestedDType("int2", "q4")).toBe("int2")
   })
 
+  it("formats canonical and legacy requested model identities", () => {
+    expect(formatRequestedModelIdentity(null, null, "translategemma-4")).toBe(
+      "translategemma-4 (preset default)",
+    )
+    expect(formatRequestedModelIdentity("qwen-3-0.6b", null, "translategemma-4")).toBe(
+      "qwen-3-0.6b (model)",
+    )
+    expect(
+      formatRequestedModelIdentity(
+        null,
+        "onnx-community/Qwen2.5-0.5B-Instruct",
+        "translategemma-4",
+      ),
+    ).toBe("onnx-community/Qwen2.5-0.5B-Instruct (legacy model-id)")
+  })
+
   it("delegates restore() for every translator host element", () => {
     const restoreFirst = vi.fn()
     const restoreSecond = vi.fn()
@@ -279,5 +298,22 @@ describe("demo main helpers", () => {
 
     expect(restoreFirst).toHaveBeenCalledTimes(1)
     expect(restoreSecond).toHaveBeenCalledTimes(1)
+  })
+
+  it("writes canonical runtime attrs and removes stale legacy model-id attrs", () => {
+    const first = document.createElement("babulfish-translator")
+    const second = document.createElement("babulfish-translator")
+    first.setAttribute("model-id", "onnx-community/translategemma-text-4b-it-ONNX")
+    second.setAttribute("model-id", "onnx-community/translategemma-text-4b-it-ONNX")
+
+    const selection = resolveDemoRuntimeSelection({ model: "qwen-3-0.6b" }).selection
+    syncTranslatorRuntimeAttrs([first, second], selection)
+
+    for (const translator of [first, second]) {
+      expect(translator.getAttribute("model")).toBe("qwen-3-0.6b")
+      expect(translator.getAttribute("device")).toBe("webgpu")
+      expect(translator.getAttribute("dtype")).toBe("q4f16")
+      expect(translator.hasAttribute("model-id")).toBe(false)
+    }
   })
 })

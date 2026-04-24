@@ -2,15 +2,16 @@ import type { Snapshot } from "@babulfish/core"
 import "@babulfish/styles/css"
 
 import {
+  DEMO_MODEL_SPECS,
+  DEVICE_OPTIONS,
+  DTYPE_OPTIONS,
   getDTypeLabel,
   getDeviceLabel,
   mergeDemoRuntimeSelection,
   mergeDemoRuntimeSearchParams,
   resolveDemoRuntimeSelectionFromSearchParams,
-  DEMO_MODEL_PRESETS,
-  DEVICE_OPTIONS,
-  DTYPE_OPTIONS,
   type DemoRuntimeSelection,
+  type DemoRuntimeSelectionPatch,
   type ResolvedDemoRuntimeSelection,
 } from "../../demo-shared/src/runtime-selection.js"
 import { enablementText } from "./enablement-text.js"
@@ -122,7 +123,7 @@ function updateConstrainedOptions<T extends string>(
     option.disabled = !allowed
     option.textContent = allowed
       ? getLabel(value)
-      : `${getLabel(value)} (not verified for this preset)`
+      : `${getLabel(value)} (not verified for this model)`
   }
 }
 
@@ -139,6 +140,11 @@ const loadBtn = requireElement("load-model", HTMLButtonElement)
 const statusRequestedDevice = requireElement("status-requested-device", HTMLElement)
 const statusRequestedModel = requireElement("status-requested-model", HTMLElement)
 const statusRequestedDType = requireElement("status-requested-dtype", HTMLElement)
+const statusEffectiveDevice = requireElement("status-effective-device", HTMLElement)
+const statusResolvedDevice = requireElement("status-resolved-device", HTMLElement)
+const statusEffectiveDType = requireElement("status-effective-dtype", HTMLElement)
+const statusResolvedModel = requireElement("status-resolved-model", HTMLElement)
+const statusAdapter = requireElement("status-adapter", HTMLElement)
 const statusCapabilities = requireElement("status-capabilities", HTMLElement)
 const statusEnablement = requireElement("status-enablement", HTMLElement)
 const statusVerdict = requireElement("status-verdict", HTMLElement)
@@ -158,8 +164,12 @@ for (const option of DEVICE_OPTIONS) {
   appendOption(runtimeDevice, option.value, option.label)
 }
 
-for (const preset of DEMO_MODEL_PRESETS) {
-  appendOption(runtimeModel, preset.modelId, preset.modelId)
+for (const model of DEMO_MODEL_SPECS) {
+  appendOption(
+    runtimeModel,
+    model.id,
+    `${model.label} (${model.id}, adapter ${model.adapterId})`,
+  )
 }
 
 for (const option of DTYPE_OPTIONS) {
@@ -171,14 +181,16 @@ for (const lang of core.languages) {
 }
 
 function updateRuntimeMessage(): void {
-  runtimePreset.textContent = runtimeState.preset.label
+  runtimePreset.textContent = `${runtimeState.model.label} (${runtimeState.model.id})`
 
   const repairText = runtimeState.repairs.map((repair) => repair.message).join(" ")
   runtimeMessage.textContent =
-    repairText || runtimeState.preset.note || runtimeState.preset.description
+    repairText || runtimeState.model.note || runtimeState.model.description
   runtimeConstraints.textContent = [
-    `Allowed quantization: ${runtimeState.preset.allowedDTypes.map(getDTypeLabel).join(" / ")}.`,
-    `Allowed devices: ${runtimeState.preset.allowedDevices.map(getDeviceLabel).join(" / ")}.`,
+    `Adapter: ${runtimeState.model.adapterId}.`,
+    `Resolved model: ${runtimeState.model.resolvedModelId}.`,
+    `Allowed quantization: ${runtimeState.model.allowedDTypes.map(getDTypeLabel).join(" / ")}.`,
+    `Allowed devices: ${runtimeState.model.allowedDevices.map(getDeviceLabel).join(" / ")}.`,
   ].join(" ")
 }
 
@@ -190,31 +202,47 @@ function setRuntimeControlsDisabled(disabled: boolean): void {
 }
 
 function formatResolvedRuntime(snapshot: Snapshot): string {
-  const { verdict } = snapshot.enablement
-  const resolvedDevice =
-    verdict.outcome === "denied"
-      ? "Denied"
-      : verdict.resolvedDevice === null
-        ? "Pending"
-        : getDeviceLabel(verdict.resolvedDevice)
+  const devicePath = [
+    `requested ${formatRequestedDevice()}`,
+    `effective ${getDeviceLabel(runtimeState.selection.device)}`,
+    `resolved ${formatResolvedDevice(snapshot)}`,
+  ].join(" -> ")
 
   return [
-    resolvedDevice,
-    runtimeState.selection.modelId,
-    getDTypeLabel(runtimeState.selection.dtype),
+    `device ${devicePath}`,
+    `model ${runtimeState.selection.model.id} -> ${runtimeState.selection.model.resolvedModelId}`,
+    `adapter ${runtimeState.selection.model.adapterId}`,
+    `dtype ${getDTypeLabel(runtimeState.selection.dtype)}`,
   ].join(" / ")
 }
 
+function formatRequestedDevice(): string {
+  const requestedDevice = runtimeState.requested.device ?? runtimeState.model.defaultDevice
+  return getDeviceLabel(requestedDevice as DemoRuntimeSelection["device"])
+}
+
+function formatResolvedDevice(snapshot: Snapshot): string {
+  const { verdict } = snapshot.enablement
+  if (verdict.outcome === "denied") return "Denied"
+  if (verdict.resolvedDevice === null) return "Pending"
+  return getDeviceLabel(verdict.resolvedDevice)
+}
+
+function formatRequestedDType(): string {
+  const requestedDType = runtimeState.requested.dtype ?? runtimeState.model.defaultDType
+  return getDTypeLabel(requestedDType as DemoRuntimeSelection["dtype"])
+}
+
 function updateRuntimeControls(): void {
-  const { preset, selection } = runtimeState
+  const { model, selection } = runtimeState
 
   runtimeDevice.value = selection.device
-  runtimeModel.value = selection.modelId
+  runtimeModel.value = selection.model.id
   runtimeDType.value = selection.dtype
   runtimeAutoload.checked = runtimeState.autoload
 
-  updateConstrainedOptions(runtimeDevice, preset.allowedDevices, getDeviceLabel)
-  updateConstrainedOptions(runtimeDType, preset.allowedDTypes, getDTypeLabel)
+  updateConstrainedOptions(runtimeDevice, model.allowedDevices, getDeviceLabel)
+  updateConstrainedOptions(runtimeDType, model.allowedDTypes, getDTypeLabel)
 
   updateRuntimeMessage()
 }
@@ -235,14 +263,15 @@ function resetRawTextProof(): void {
 }
 
 function render(snapshot: Snapshot): void {
-  statusRequestedDevice.textContent = getDeviceLabel(
-    (runtimeState.requested.device ?? runtimeState.preset.defaultDevice) as DemoRuntimeSelection["device"],
-  )
+  statusRequestedDevice.textContent = formatRequestedDevice()
   statusRequestedModel.textContent =
-    runtimeState.requested.modelId ?? runtimeState.preset.modelId
-  statusRequestedDType.textContent = getDTypeLabel(
-    (runtimeState.requested.dtype ?? runtimeState.preset.defaultDType) as DemoRuntimeSelection["dtype"],
-  )
+    runtimeState.requested.model ?? runtimeState.selection.model.id
+  statusRequestedDType.textContent = formatRequestedDType()
+  statusEffectiveDevice.textContent = getDeviceLabel(runtimeState.selection.device)
+  statusResolvedDevice.textContent = formatResolvedDevice(snapshot)
+  statusEffectiveDType.textContent = getDTypeLabel(runtimeState.selection.dtype)
+  statusResolvedModel.textContent = runtimeState.selection.model.resolvedModelId
+  statusAdapter.textContent = runtimeState.selection.model.adapterId
   statusCapabilities.textContent = capabilitiesText(snapshot)
   statusEnablement.textContent = enablementText(snapshot)
   statusVerdict.textContent = snapshot.enablement.verdict.reason
@@ -285,9 +314,7 @@ function attachCore(nextRuntimeState: ResolvedDemoRuntimeSelection): void {
   }
 }
 
-function updateRuntimeSelection(
-  patch: Partial<DemoRuntimeSelection>,
-): void {
+function updateRuntimeSelection(patch: DemoRuntimeSelectionPatch): void {
   attachCore(mergeDemoRuntimeSelection(runtimeState, patch))
 }
 
@@ -318,7 +345,7 @@ runtimeDevice.addEventListener("change", () => {
 
 runtimeModel.addEventListener("change", () => {
   updateRuntimeSelection({
-    modelId: runtimeModel.value,
+    model: runtimeModel.value,
   })
 })
 

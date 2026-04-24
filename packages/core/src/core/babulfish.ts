@@ -214,7 +214,7 @@ export function createBabulfish(config?: BabulfishConfig): BabulfishCore {
       return engineHandle
     }
 
-    const handle = acquireEngine(plan)
+    const handle = acquireEngine(plan, config?.engine)
     engineHandle = handle
     tagCoreWithEngineIdentity(core, handle.id)
 
@@ -254,8 +254,13 @@ export function createBabulfish(config?: BabulfishConfig): BabulfishCore {
       modelProfileId: modelProfile?.id ?? "",
       modelProfileVersion: modelProfile?.version ?? "",
       modelId: resolvedConfig.modelId,
+      adapterId: resolvedConfig.adapterId,
       dtype: resolvedConfig.dtype,
       device: resolvedConfig.device,
+      sourceLanguage: resolvedConfig.sourceLanguage,
+      maxNewTokens: resolvedConfig.maxNewTokens,
+      subfolder: resolvedConfig.subfolder,
+      modelFileName: resolvedConfig.modelFileName,
       policyVersion: resolvedConfig.enablement.policy,
       probeVersion: PROBE_VERSION,
       observation: capabilities,
@@ -264,11 +269,16 @@ export function createBabulfish(config?: BabulfishConfig): BabulfishCore {
 
   function runtimePlanForDevice(device: "webgpu" | "wasm"): ResolvedRuntimePlan {
     return Object.freeze({
+      requestedModel: resolvedConfig.requestedModel,
+      resolvedModel: resolvedConfig.resolvedModel,
       modelId: resolvedConfig.modelId,
+      adapterId: resolvedConfig.adapterId,
       dtype: resolvedConfig.dtype,
       resolvedDevice: device,
       sourceLanguage: resolvedConfig.sourceLanguage,
       maxNewTokens: resolvedConfig.maxNewTokens,
+      subfolder: resolvedConfig.subfolder,
+      modelFileName: resolvedConfig.modelFileName,
     })
   }
 

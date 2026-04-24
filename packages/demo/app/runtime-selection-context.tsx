@@ -3,13 +3,13 @@
 import { createContext, useContext } from "react"
 
 import type {
-  DemoRuntimeSelection,
+  DemoRuntimeSelectionPatch,
   ResolvedDemoRuntimeSelection,
 } from "../../demo-shared/src/runtime-selection.js"
 
 export type RuntimeSelectionContextValue = {
   readonly runtimeState: ResolvedDemoRuntimeSelection
-  updateRuntimeSelection: (patch: Partial<DemoRuntimeSelection>) => void
+  updateRuntimeSelection: (patch: DemoRuntimeSelectionPatch) => void
 }
 
 const RuntimeSelectionContext = createContext<RuntimeSelectionContextValue | null>(null)

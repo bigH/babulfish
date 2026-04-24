@@ -100,7 +100,8 @@
       rendering into its own Shadow DOM, sharing a single translation engine.
       Events logged below prove the <code>babulfish-status</code> contract, and
       the host buttons use the shipped <code>target-lang</code> attribute plus
-      the public <code>restore()</code> method.
+      the public <code>restore()</code> method. Runtime controls use canonical
+      demo model spec ids while legacy <code>model-id</code> markup still resolves.
     </p>
 
     <div class="host-controls">
@@ -138,12 +139,12 @@
     <div class="instances">
       <babulfish-translator
         device="auto"
-        model-id="onnx-community/translategemma-text-4b-it-ONNX"
+        model="translategemma-4"
         dtype="q4"
       ></babulfish-translator>
       <babulfish-translator
         device="auto"
-        model-id="onnx-community/translategemma-text-4b-it-ONNX"
+        model="translategemma-4"
         dtype="q4"
       ></babulfish-translator>
     </div>

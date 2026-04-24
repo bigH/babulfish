@@ -9,12 +9,13 @@ import {
 } from "@babulfish/react"
 
 import {
-  DEMO_MODEL_PRESETS,
+  DEMO_MODEL_SPECS,
   DEVICE_OPTIONS,
   DTYPE_OPTIONS,
   getDTypeLabel,
   getDeviceLabel,
   type DemoRuntimeSelection,
+  type DemoRuntimeSelectionPatch,
 } from "../../demo-shared/src/runtime-selection.js"
 import { useRuntimeSelectionContext } from "./runtime-selection-context"
 
@@ -122,6 +123,16 @@ function readDemoRootDirection(): string {
   return root?.getAttribute("dir") ?? "none"
 }
 
+function formatRequestedOption<T extends string>(
+  requested: string | null,
+  modelDefault: T,
+  options: readonly { readonly value: T; readonly label: string }[],
+): string {
+  if (!requested) return `${options.find((entry) => entry.value === modelDefault)?.label ?? modelDefault} (${modelDefault}, model default)`
+  const match = options.find((entry) => entry.value === requested)
+  return match ? `${match.label} (${requested})` : requested
+}
+
 export function ModelStatus() {
   const {
     model,
@@ -173,22 +184,46 @@ export function ModelStatus() {
     },
   ]
 
-  function applyRuntimeSelection(patch: Partial<DemoRuntimeSelection>): void {
+  function applyRuntimeSelection(patch: DemoRuntimeSelectionPatch): void {
     restorePage()
     updateRuntimeSelection(patch)
   }
 
   const rows: ReadonlyArray<StatusRow> = [
     {
-      label: "Selected Device",
+      label: "Model Spec",
+      value: `${runtimeState.selection.model.label} (${runtimeState.selection.model.id})`,
+    },
+    {
+      label: "Resolved Model",
+      value: runtimeState.selection.model.resolvedModelId,
+    },
+    {
+      label: "Adapter",
+      value: runtimeState.selection.model.adapterId,
+    },
+    {
+      label: "Requested Device",
+      value: formatRequestedOption(
+        runtimeState.requested.device,
+        runtimeState.preset.defaultDevice,
+        DEVICE_OPTIONS,
+      ),
+    },
+    {
+      label: "Effective Device",
       value: `${getDeviceLabel(runtimeState.selection.device)} (${runtimeState.selection.device})`,
     },
     {
-      label: "Selected Model",
-      value: `${runtimeState.preset.label} (${runtimeState.selection.modelId})`,
+      label: "Requested Quantization",
+      value: formatRequestedOption(
+        runtimeState.requested.dtype,
+        runtimeState.preset.defaultDType,
+        DTYPE_OPTIONS,
+      ),
     },
     {
-      label: "Selected Quantization",
+      label: "Effective Quantization",
       value: `${getDTypeLabel(runtimeState.selection.dtype)} (${runtimeState.selection.dtype})`,
     },
     {
@@ -284,18 +319,18 @@ export function ModelStatus() {
           </label>
 
           <label className={CONTROL_LABEL_CLASS_NAME}>
-            <span>Model</span>
+            <span>Model spec</span>
             <select
               className={CONTROL_SELECT_CLASS_NAME}
               disabled={runtimeBusy}
-              value={runtimeState.selection.modelId}
+              value={runtimeState.selection.model.id}
               onChange={(event) => {
-                applyRuntimeSelection({ modelId: event.target.value })
+                applyRuntimeSelection({ model: event.target.value })
               }}
             >
-              {DEMO_MODEL_PRESETS.map((preset) => (
-                <option key={preset.id} value={preset.modelId}>
-                  {preset.label}
+              {DEMO_MODEL_SPECS.map((model) => (
+                <option key={model.id} value={model.id}>
+                  {model.label} ({model.id}, adapter {model.adapterId})
                 </option>
               ))}
             </select>

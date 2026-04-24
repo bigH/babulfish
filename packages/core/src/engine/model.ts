@@ -1,22 +1,22 @@
 // Model lifecycle: load pipeline, translate text, emit events
 
 import {
-  DEFAULT_DTYPE,
-  DEFAULT_MAX_NEW_TOKENS,
-  DEFAULT_MODEL_ID,
   DEFAULT_RESOLVED_DEVICE,
-  DEFAULT_SOURCE_LANGUAGE,
   type ModelDType,
 } from "./config.js"
 import type { TextGenerationPipeline, ProgressInfo } from "./pipeline-loader.js"
 import { loadPipeline } from "./pipeline-loader.js"
 import type { ResolvedDevice } from "./detect.js"
+import { resolveTranslationModelConfig } from "./model-registry.js"
+import type { TranslationModelSelection } from "./model-spec.js"
+import type { TranslationOptions, TranslationRequest } from "./translation-adapter.js"
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
 export type EngineConfig = {
+  readonly model?: TranslationModelSelection
   readonly modelId?: string
   readonly dtype?: ModelDType
   readonly device?: ResolvedDevice
@@ -62,11 +62,19 @@ function createListeners(): Listeners {
 // ---------------------------------------------------------------------------
 
 export function createEngine(config?: EngineConfig): Translator {
-  const modelId = config?.modelId ?? DEFAULT_MODEL_ID
-  const dtype = config?.dtype ?? DEFAULT_DTYPE
-  const device = config?.device ?? DEFAULT_RESOLVED_DEVICE
-  const maxNewTokens = config?.maxNewTokens ?? DEFAULT_MAX_NEW_TOKENS
-  const sourceLanguage = config?.sourceLanguage ?? DEFAULT_SOURCE_LANGUAGE
+  const resolvedConfig = resolveTranslationModelConfig(config)
+  const {
+    adapter,
+    modelId,
+    dtype,
+    maxNewTokens,
+    sourceLanguage,
+    subfolder,
+    modelFileName,
+  } = resolvedConfig
+  const device = resolvedConfig.device === "auto"
+    ? DEFAULT_RESOLVED_DEVICE
+    : resolvedConfig.device
 
   let currentStatus: TranslatorStatus = "idle"
   let pipelinePromise: Promise<TextGenerationPipeline> | null = null
@@ -125,6 +133,19 @@ export function createEngine(config?: EngineConfig): Translator {
     }
   }
 
+  function buildPipelineOptions(): NonNullable<Parameters<typeof loadPipeline>[1]> & {
+    readonly subfolder?: string
+    readonly model_file_name?: string
+  } {
+    return {
+      dtype,
+      device,
+      progress_callback: buildProgressCallback(),
+      ...(subfolder === null ? {} : { subfolder }),
+      ...(modelFileName === null ? {} : { model_file_name: modelFileName }),
+    }
+  }
+
   // -- Public API -----------------------------------------------------------
 
   async function load(): Promise<void> {
@@ -137,9 +158,7 @@ export function createEngine(config?: EngineConfig): Translator {
 
     const nextLoad = (async () => {
       const nextPipeline = loadPipeline(modelId, {
-        dtype,
-        device,
-        progress_callback: buildProgressCallback(),
+        ...buildPipelineOptions(),
       })
       pipelinePromise = nextPipeline
 
@@ -170,29 +189,21 @@ export function createEngine(config?: EngineConfig): Translator {
 
     const generator = await pipelinePromise
 
-    const messages = [
-      {
-        role: "user" as const,
-        content: [
-          {
-            type: "text",
-            source_lang_code: sourceLanguage,
-            target_lang_code: targetLang,
-            text,
-          },
-        ],
-      },
-    ]
-
-    const result = await generator(messages, { max_new_tokens: maxNewTokens })
-    const firstResult = result[0]
-    const lastMessage = firstResult?.generated_text.at(-1)
-
-    if (!lastMessage || typeof lastMessage.content !== "string") {
-      throw new Error("Unexpected model output format")
+    const request: TranslationRequest = {
+      text,
+      source: { code: sourceLanguage },
+      target: { code: targetLang },
     }
+    const options: TranslationOptions = { max_new_tokens: maxNewTokens }
+    const { modelInput, modelOptions } = adapter.buildInvocation(request, options)
 
-    return lastMessage.content
+    const generate = generator as unknown as (
+      input: unknown,
+      options: unknown,
+    ) => Promise<unknown>
+    const result = await generate(modelInput, modelOptions)
+
+    return adapter.extractText(request, options, result).text
   }
 
   function dispose(): void {

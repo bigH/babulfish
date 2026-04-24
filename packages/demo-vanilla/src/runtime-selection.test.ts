@@ -7,86 +7,104 @@ import {
   mergeDemoRuntimeSearchParams,
   mergeDemoRuntimeSelection,
   resolveDemoRuntimeSelection,
+  resolveDemoRuntimeSelectionFromSearchParams,
+  toBabulfishEngineConfig,
 } from "../../demo-shared/src/runtime-selection.js"
 
 describe("demo runtime selection", () => {
-  it("round-trips a supported non-default selection through the URL helpers", () => {
+  it("uses canonical model ids in URL params", () => {
     const resolved = resolveDemoRuntimeSelection({
-      device: "wasm",
-      modelId: "onnx-community/gemma-3-270m-it-ONNX",
-      dtype: "fp32",
+      model: "qwen-3-0.6b",
       autoload: "1",
     })
 
     expect(resolved.repairs).toEqual([])
-
-    const params = createDemoRuntimeSearchParams(resolved)
-    expect(params.toString()).toBe(
-      "device=wasm&modelId=onnx-community%2Fgemma-3-270m-it-ONNX&dtype=fp32&autoload=1",
-    )
-
-    const reparsed = resolveDemoRuntimeSelection({
-      device: params.get("device"),
-      modelId: params.get("modelId"),
-      dtype: params.get("dtype"),
-      autoload: params.get("autoload"),
+    expect(resolved.selection.model).toMatchObject({
+      id: "qwen-3-0.6b",
+      label: "Qwen 3 0.6B",
+      resolvedModelId: "onnx-community/Qwen3-0.6B-ONNX",
+      adapterId: "chat",
+      subfolder: "onnx",
+      modelFileName: "model",
+    })
+    expect(resolved.selection).toMatchObject({
+      device: "webgpu",
+      dtype: "q4f16",
+      modelId: "onnx-community/Qwen3-0.6B-ONNX",
     })
 
-    expect(reparsed).toEqual(resolved)
+    const params = createDemoRuntimeSearchParams(resolved)
+    expect(params.toString()).toBe("model=qwen-3-0.6b&autoload=1")
+
+    const reparsed = resolveDemoRuntimeSelectionFromSearchParams(params)
+    expect(reparsed.selection).toEqual(resolved.selection)
+    expect(reparsed.autoload).toBe(true)
   })
 
-  it("collapses the default selection to an empty query string", () => {
+  it("reads legacy modelId links when exactly one built-in matches", () => {
+    const resolved = resolveDemoRuntimeSelection({
+      modelId: "onnx-community/Qwen2.5-0.5B-Instruct",
+    })
+
+    expect(resolved.repairs).toEqual([])
+    expect(resolved.selection.model.id).toBe("qwen-2.5-0.5b")
+    expect(resolved.selection.model.resolvedModelId).toBe(
+      "onnx-community/Qwen2.5-0.5B-Instruct",
+    )
+
+    expect(createDemoRuntimeSearchParams(resolved).toString()).toBe(
+      "model=qwen-2.5-0.5b",
+    )
+  })
+
+  it("lets canonical model override disagreeing legacy modelId", () => {
+    const resolved = resolveDemoRuntimeSelection({
+      model: "qwen-3-0.6b",
+      modelId: "onnx-community/Qwen2.5-0.5B-Instruct",
+    })
+
+    expect(resolved.selection.model.id).toBe("qwen-3-0.6b")
+    expect(resolved.repairs.map((repair) => repair.code)).toEqual([
+      "legacy-model-id-ignored",
+    ])
+
+    const params = mergeDemoRuntimeSearchParams(
+      new URLSearchParams(
+        "foo=bar&modelId=onnx-community%2FQwen2.5-0.5B-Instruct&model=qwen-2.5-0.5b",
+      ),
+      resolved,
+    )
+    expect(params.toString()).toBe("foo=bar&model=qwen-3-0.6b")
+  })
+
+  it("collapses default runtime params and strips legacy modelId while preserving unrelated params", () => {
     const defaults = {
       selection: getDefaultDemoRuntimeSelection(),
       autoload: false,
     }
 
     expect(createDemoRuntimeSearchParams(defaults).toString()).toBe("")
-  })
-
-  it("preserves unrelated query params when syncing runtime selection", () => {
-    const resolved = resolveDemoRuntimeSelection({
-      device: "wasm",
-      modelId: "onnx-community/gemma-3-270m-it-ONNX",
-      dtype: "fp32",
-    })
 
     const params = mergeDemoRuntimeSearchParams(
-      new URLSearchParams("foo=bar&view=debug"),
-      resolved,
+      new URLSearchParams(
+        "foo=bar&model=qwen-3-0.6b&modelId=onnx-community%2FQwen3-0.6B-ONNX&device=webgpu&dtype=q4f16&autoload=1",
+      ),
+      defaults,
     )
 
-    expect(params.toString()).toBe(
-      "foo=bar&view=debug&device=wasm&modelId=onnx-community%2Fgemma-3-270m-it-ONNX&dtype=fp32",
-    )
+    expect(params.toString()).toBe("foo=bar")
   })
 
-  it("repairs unknown models back to the default demo catalog", () => {
+  it("repairs unsupported dtype and device values to the selected model defaults", () => {
     const resolved = resolveDemoRuntimeSelection({
-      modelId: "acme/not-real",
-      device: "webgpu",
-      dtype: "q8",
-    })
-
-    expect(resolved.selection).toEqual({
-      device: "webgpu",
-      modelId: "onnx-community/translategemma-text-4b-it-ONNX",
-      dtype: "q8",
-    })
-    expect(resolved.repairs[0]?.code).toBe("unknown-model")
-  })
-
-  it("constrains the canary preset to wasm + fp32", () => {
-    const resolved = resolveDemoRuntimeSelection({
-      modelId: "onnx-community/gemma-3-270m-it-ONNX",
-      device: "webgpu",
-      dtype: "q4",
-    })
-
-    expect(resolved.selection).toEqual({
+      model: "qwen-3-0.6b",
       device: "wasm",
-      modelId: "onnx-community/gemma-3-270m-it-ONNX",
       dtype: "fp32",
+    })
+
+    expect(resolved.selection).toMatchObject({
+      device: "webgpu",
+      dtype: "q4f16",
     })
     expect(resolved.repairs.map((repair) => repair.code)).toEqual([
       "unsupported-device",
@@ -94,10 +112,10 @@ describe("demo runtime selection", () => {
     ])
   })
 
-  it("repairs invalid device and dtype values to the preset defaults", () => {
+  it("repairs invalid dtype and device values to the selected model defaults", () => {
     const resolved = resolveDemoRuntimeSelection({
+      model: "translategemma-4",
       device: "metal",
-      modelId: "onnx-community/translategemma-text-4b-it-ONNX",
       dtype: "banana",
     })
 
@@ -108,24 +126,57 @@ describe("demo runtime selection", () => {
     ])
   })
 
-  it("keeps pending selection changes honest when the model change narrows the combo", () => {
-    const current = resolveDemoRuntimeSelection({
+  it("includes model spec, resolved model, adapter, dtype, and device in runtime keys", () => {
+    const selection = resolveDemoRuntimeSelection({ model: "qwen-3-0.6b" }).selection
+    const key = createDemoRuntimeSelectionKey(selection)
+
+    expect(key).toBe(
+      "model:qwen-3-0.6b|resolved:onnx-community/Qwen3-0.6B-ONNX|adapter:chat|dtype:q4f16|device:webgpu",
+    )
+
+    expect(
+      createDemoRuntimeSelectionKey({
+        ...selection,
+        model: {
+          ...selection.model,
+          adapterId: "other-adapter",
+        },
+      }),
+    ).not.toBe(key)
+  })
+
+  it("builds adapter-aware core engine config from the shared selection", () => {
+    const selection = resolveDemoRuntimeSelection({ model: "gemma-3-1b-it" }).selection
+    const config = toBabulfishEngineConfig(selection)
+
+    expect(config).toEqual({
+      model: "gemma-3-1b-it",
+      dtype: "q4f16",
       device: "webgpu",
-      modelId: "onnx-community/translategemma-text-4b-it-ONNX",
+    })
+    expect(config).not.toHaveProperty("modelId")
+  })
+
+  it("keeps merge patches compatible with canonical model and legacy modelId inputs", () => {
+    const current = resolveDemoRuntimeSelection({
+      model: "translategemma-4",
+      device: "webgpu",
       dtype: "q8",
     })
 
-    const next = mergeDemoRuntimeSelection(current, {
-      modelId: "onnx-community/gemma-3-270m-it-ONNX",
+    expect(mergeDemoRuntimeSelection(current, { model: "qwen-3-0.6b" }).selection).toMatchObject({
+      device: "webgpu",
+      dtype: "q4f16",
+      model: { id: "qwen-3-0.6b" },
     })
-
-    expect(next.selection).toEqual({
-      device: "wasm",
-      modelId: "onnx-community/gemma-3-270m-it-ONNX",
-      dtype: "fp32",
+    expect(
+      mergeDemoRuntimeSelection(current, {
+        modelId: "onnx-community/gemma-3-1b-it-ONNX",
+      }).selection,
+    ).toMatchObject({
+      device: "webgpu",
+      dtype: "q4f16",
+      model: { id: "gemma-3-1b-it" },
     })
-    expect(createDemoRuntimeSelectionKey(next.selection)).toBe(
-      "onnx-community/gemma-3-270m-it-ONNX|fp32|wasm",
-    )
   })
 })

@@ -5,7 +5,10 @@ import { hydrateRoot } from "react-dom/client"
 import { renderToString } from "react-dom/server"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
-import { resolveDemoRuntimeSelection } from "../../demo-shared/src/runtime-selection.js"
+import {
+  resolveDemoRuntimeSelection,
+  toBabulfishEngineConfig,
+} from "../../demo-shared/src/runtime-selection.js"
 
 const providerConfigs: unknown[] = []
 const restorePage = vi.fn()
@@ -79,10 +82,13 @@ describe("DemoTranslatorShell", () => {
 
   it("hydrates the initial runtime selection without recoverable errors", async () => {
     const initialRuntimeState = resolveDemoRuntimeSelection({
-      device: "wasm",
-      modelId: "onnx-community/gemma-3-270m-it-ONNX",
-      dtype: "fp32",
+      modelId: "onnx-community/Qwen2.5-0.5B-Instruct",
     })
+    window.history.replaceState(
+      null,
+      "",
+      "/?foo=bar&modelId=onnx-community%2FQwen2.5-0.5B-Instruct",
+    )
     const html = renderToString(
       <DemoTranslatorShell initialRuntimeState={initialRuntimeState}>
         <ModelStatus />
@@ -105,13 +111,19 @@ describe("DemoTranslatorShell", () => {
     })
 
     expect(onRecoverableError).not.toHaveBeenCalled()
-    expect(container.textContent).toContain("onnx-community/gemma-3-270m-it-ONNX")
-    expect(container.textContent).toContain("fp32")
-    expect(providerConfigs.at(-1)).toMatchObject({
-      engine: {
-        device: "wasm",
-        modelId: "onnx-community/gemma-3-270m-it-ONNX",
-        dtype: "fp32",
+    expect(container.textContent).toContain(
+      "Qwen 2.5 0.5B Instruct (qwen-2.5-0.5b)",
+    )
+    expect(container.textContent).toContain("onnx-community/Qwen2.5-0.5B-Instruct")
+    expect(container.textContent).toContain("chat")
+    expect(window.location.search).toBe("?foo=bar&model=qwen-2.5-0.5b")
+    expect(providerConfigs.at(-1)).toEqual({
+      engine: toBabulfishEngineConfig(initialRuntimeState.selection),
+      dom: {
+        roots: ["[data-demo-root]"],
+        preserve: {
+          matchers: ["babulfish", "Next.js", "TranslateGemma", "WebGPU"],
+        },
       },
     })
   })
@@ -127,31 +139,45 @@ describe("DemoTranslatorShell", () => {
       </DemoTranslatorShell>,
     )
 
-    fireEvent.change(screen.getByLabelText("Model"), {
-      target: { value: "onnx-community/gemma-3-270m-it-ONNX" },
+    fireEvent.change(screen.getByLabelText("Model spec"), {
+      target: { value: "qwen-3-0.6b" },
     })
 
     expect(restorePage).toHaveBeenCalledTimes(1)
     expect(providerConfigs.at(-1)).toMatchObject({
       engine: {
-        device: "wasm",
-        modelId: "onnx-community/gemma-3-270m-it-ONNX",
-        dtype: "fp32",
+        device: "webgpu",
+        model: "qwen-3-0.6b",
+        dtype: "q4f16",
       },
     })
+    expect(providerConfigs.at(-1)).not.toMatchObject({
+      engine: {
+        modelId: expect.any(String),
+      },
+    })
+    expect(screen.getByLabelText<HTMLSelectElement>("Model spec").value).toBe(
+      "qwen-3-0.6b",
+    )
+    expect(screen.getByText("Model Spec")).toBeTruthy()
+    expect(screen.getByText("Resolved Model")).toBeTruthy()
+    expect(screen.getByText("Adapter")).toBeTruthy()
+    expect(screen.getByText("Requested Device")).toBeTruthy()
+    expect(screen.getByText("Effective Device")).toBeTruthy()
+    expect(screen.getByText("Requested Quantization")).toBeTruthy()
+    expect(screen.getByText("Effective Quantization")).toBeTruthy()
+    expect(screen.getByText("Qwen 3 0.6B (qwen-3-0.6b)")).toBeTruthy()
+    expect(screen.getByText("onnx-community/Qwen3-0.6B-ONNX")).toBeTruthy()
+    expect(screen.getByText("chat")).toBeTruthy()
     expect(screen.getByText(/Allowed quantization:/).textContent).toContain(
-      "Allowed quantization: FP32. Allowed devices: WASM.",
+      "Allowed quantization: Q4F16. Allowed devices: WebGPU.",
     )
-    expect(window.location.search).toBe(
-      "?foo=bar&device=wasm&modelId=onnx-community%2Fgemma-3-270m-it-ONNX&dtype=fp32",
-    )
+    expect(window.location.search).toBe("?foo=bar&model=qwen-3-0.6b")
 
     rerender(
       <DemoTranslatorShell
         initialRuntimeState={resolveDemoRuntimeSelection({
-          device: "wasm",
-          modelId: "onnx-community/gemma-3-270m-it-ONNX",
-          dtype: "fp32",
+          model: "qwen-3-0.6b",
         })}
       >
         <ModelStatus />
@@ -160,9 +186,9 @@ describe("DemoTranslatorShell", () => {
 
     expect(providerConfigs.at(-1)).toMatchObject({
       engine: {
-        device: "wasm",
-        modelId: "onnx-community/gemma-3-270m-it-ONNX",
-        dtype: "fp32",
+        device: "webgpu",
+        model: "qwen-3-0.6b",
+        dtype: "q4f16",
       },
     })
   })

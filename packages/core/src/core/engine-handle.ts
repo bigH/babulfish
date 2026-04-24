@@ -1,5 +1,6 @@
-import { createEngine } from "../engine/model.js"
+import { createEngine, type EngineConfig } from "../engine/model.js"
 import { createRuntimePlanKey, type ResolvedRuntimePlan } from "../engine/runtime-plan.js"
+import type { RuntimePreferenceConfig } from "../engine/runtime-plan.js"
 
 type EngineHandle = {
   readonly engine: ReturnType<typeof createEngine>
@@ -10,7 +11,24 @@ const coreEngineIdentity = new WeakMap<object, symbol>()
 
 const runtimePool = new Map<string, EngineHandle>()
 
-export function acquireEngine(plan: ResolvedRuntimePlan): EngineHandle {
+function createEngineConfig(
+  plan: ResolvedRuntimePlan,
+  requestedConfig?: RuntimePreferenceConfig,
+): EngineConfig {
+  return {
+    ...requestedConfig,
+    ...(requestedConfig?.model === undefined ? { modelId: plan.modelId } : {}),
+    dtype: plan.dtype,
+    device: plan.resolvedDevice,
+    sourceLanguage: plan.sourceLanguage,
+    maxNewTokens: plan.maxNewTokens,
+  }
+}
+
+export function acquireEngine(
+  plan: ResolvedRuntimePlan,
+  requestedConfig?: RuntimePreferenceConfig,
+): EngineHandle {
   const key = createRuntimePlanKey(plan)
   const existing = runtimePool.get(key)
   if (existing) {
@@ -18,13 +36,7 @@ export function acquireEngine(plan: ResolvedRuntimePlan): EngineHandle {
   }
 
   const handle = {
-    engine: createEngine({
-      modelId: plan.modelId,
-      dtype: plan.dtype,
-      device: plan.resolvedDevice,
-      sourceLanguage: plan.sourceLanguage,
-      maxNewTokens: plan.maxNewTokens,
-    }),
+    engine: createEngine(createEngineConfig(plan, requestedConfig)),
     id: Symbol("engine"),
   } satisfies EngineHandle
 

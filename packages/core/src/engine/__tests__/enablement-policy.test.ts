@@ -103,11 +103,28 @@ describe("assessRuntimeEnablement", () => {
     )
 
     expect(assessment.runtimePlan).toEqual({
+      requestedModel: {
+        kind: "default",
+        id: "translategemma-4",
+        modelIdOverride: null,
+      },
+      resolvedModel: {
+        id: "translategemma-4",
+        label: "TranslateGemma 4B",
+        modelId: "onnx-community/translategemma-text-4b-it-ONNX",
+        adapterId: "translategemma",
+        subfolder: null,
+        modelFileName: null,
+        warnings: [],
+      },
       modelId: "onnx-community/translategemma-text-4b-it-ONNX",
+      adapterId: "translategemma",
       dtype: "q8",
       resolvedDevice: "webgpu",
       sourceLanguage: "fr",
       maxNewTokens: 256,
+      subfolder: null,
+      modelFileName: null,
     })
   })
 

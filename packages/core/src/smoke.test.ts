@@ -28,6 +28,21 @@ import type {
   ProbeSummary,
   ResolvedRuntimePlan,
 } from "./engine/runtime-plan.js"
+import type {
+  BuiltinTranslationModelId,
+  ResolvedTranslationModel,
+  RuntimeModelRequest,
+  TranslationModelSelection,
+  TranslationModelSpec,
+} from "./engine/model-spec.js"
+import type {
+  OptionIssues,
+  TranslationAdapter,
+  TranslationLanguage,
+  TranslationOptions,
+  TranslationRequest,
+  TranslationResult,
+} from "./engine/translation-adapter.js"
 import * as runtimePlan from "./engine/runtime-plan.js"
 import * as testingBarrel from "./testing/index.js"
 import * as testingScenarios from "./testing/scenarios.js"
@@ -149,6 +164,17 @@ describe("smoke tests", () => {
     expectTypeOf<ProbeMode>().toEqualTypeOf<barrel.ProbeMode>()
     expectTypeOf<ProbeSummary>().toEqualTypeOf<barrel.ProbeSummary>()
     expectTypeOf<ResolvedRuntimePlan>().toEqualTypeOf<barrel.ResolvedRuntimePlan>()
+    expectTypeOf<TranslationLanguage>().toEqualTypeOf<barrel.TranslationLanguage>()
+    expectTypeOf<TranslationRequest>().toEqualTypeOf<barrel.TranslationRequest>()
+    expectTypeOf<TranslationResult>().toEqualTypeOf<barrel.TranslationResult>()
+    expectTypeOf<TranslationOptions>().toEqualTypeOf<barrel.TranslationOptions>()
+    expectTypeOf<OptionIssues>().toEqualTypeOf<barrel.OptionIssues>()
+    expectTypeOf<TranslationAdapter>().toEqualTypeOf<barrel.TranslationAdapter>()
+    expectTypeOf<TranslationModelSpec>().toEqualTypeOf<barrel.TranslationModelSpec>()
+    expectTypeOf<TranslationModelSelection>().toEqualTypeOf<barrel.TranslationModelSelection>()
+    expectTypeOf<BuiltinTranslationModelId>().toEqualTypeOf<barrel.BuiltinTranslationModelId>()
+    expectTypeOf<RuntimeModelRequest>().toEqualTypeOf<barrel.RuntimeModelRequest>()
+    expectTypeOf<ResolvedTranslationModel>().toEqualTypeOf<barrel.ResolvedTranslationModel>()
     expectTypeOf<domTranslator.DOMTranslatorConfig>().toEqualTypeOf<barrel.DOMTranslatorConfig>()
     expectTypeOf<domTranslator.DOMTranslator>().toEqualTypeOf<barrel.DOMTranslator>()
     expectTypeOf<domTranslator.RichTextConfig>().toEqualTypeOf<barrel.RichTextConfig>()
@@ -183,6 +209,20 @@ describe("smoke tests", () => {
     expectTypeOf<detect.DevicePreference>().toEqualTypeOf<engineBarrel.DevicePreference>()
     expectTypeOf<detect.ResolvedDevice>().toEqualTypeOf<engineBarrel.ResolvedDevice>()
     expectTypeOf<detect.TranslationCapabilities>().toEqualTypeOf<engineBarrel.TranslationCapabilities>()
+    expectTypeOf<TranslationLanguage>().toEqualTypeOf<engineBarrel.TranslationLanguage>()
+    expectTypeOf<TranslationRequest>().toEqualTypeOf<engineBarrel.TranslationRequest>()
+    expectTypeOf<TranslationResult>().toEqualTypeOf<engineBarrel.TranslationResult>()
+    expectTypeOf<TranslationOptions>().toEqualTypeOf<engineBarrel.TranslationOptions>()
+    expectTypeOf<OptionIssues>().toEqualTypeOf<engineBarrel.OptionIssues>()
+    expectTypeOf<TranslationAdapter>().toEqualTypeOf<engineBarrel.TranslationAdapter>()
+    expectTypeOf<TranslationModelSpec>().toEqualTypeOf<engineBarrel.TranslationModelSpec>()
+    expectTypeOf<TranslationModelSelection>()
+      .toEqualTypeOf<engineBarrel.TranslationModelSelection>()
+    expectTypeOf<BuiltinTranslationModelId>()
+      .toEqualTypeOf<engineBarrel.BuiltinTranslationModelId>()
+    expectTypeOf<RuntimeModelRequest>().toEqualTypeOf<engineBarrel.RuntimeModelRequest>()
+    expectTypeOf<ResolvedTranslationModel>()
+      .toEqualTypeOf<engineBarrel.ResolvedTranslationModel>()
   })
 
   it("testing barrel re-exports the public conformance surface with truthful driver types", () => {

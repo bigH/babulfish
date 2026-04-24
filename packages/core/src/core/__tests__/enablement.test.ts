@@ -168,6 +168,77 @@ describe("probe integration", () => {
     )
   })
 
+  it("non-default q4f16 built-in reconstructs WebGPU runtime after a passed probe", async () => {
+    const mockGPU = createMockGPU()
+    setGlobal("window", { innerWidth: 1280 })
+    setGlobal("navigator", { maxTouchPoints: 0, gpu: mockGPU })
+    mockLoadPipeline.mockResolvedValue(createMockPipeline())
+
+    const core = createBabulfish({
+      engine: { model: "qwen-3-0.6b" },
+    })
+
+    await core.loadModel()
+
+    expect(core.snapshot.enablement.modelProfile).toMatchObject({
+      id: "qwen-3-0.6b-q4f16",
+      estimatedWorkingSetGiB: null,
+    })
+    expect(core.snapshot.enablement.probe.status).toBe("passed")
+    expect(core.snapshot.enablement.verdict.outcome).toBe("gpu-preferred")
+    expect(mockLoadPipeline).toHaveBeenCalledWith(
+      "onnx-community/Qwen3-0.6B-ONNX",
+      expect.objectContaining({
+        dtype: "q4f16",
+        device: "webgpu",
+        subfolder: "onnx",
+        model_file_name: "model",
+      }),
+    )
+  })
+
+  it("explicit probe off keeps non-default unknown WebGPU built-ins at needs-probe", async () => {
+    const mockGPU = createMockGPU()
+    setGlobal("window", { innerWidth: 1280 })
+    setGlobal("navigator", { maxTouchPoints: 0, gpu: mockGPU })
+
+    const core = createBabulfish({
+      engine: { model: "qwen-3-0.6b", enablement: { probe: "off" } },
+    })
+
+    await expect(core.loadModel()).rejects.toThrow(
+      "WebGPU was explicitly requested but the memory heuristic is inconclusive.",
+    )
+    expect(core.snapshot.enablement.verdict.outcome).toBe("needs-probe")
+    expect(core.snapshot.enablement.probe.status).toBe("not-run")
+    expect(mockRunAdapterSmokeProbe).not.toHaveBeenCalled()
+    expect(mockLoadPipeline).not.toHaveBeenCalled()
+  })
+
+  it("explicit WASM and q4 override bypasses probe for non-default built-ins", async () => {
+    const mockGPU = createMockGPU()
+    setGlobal("window", { innerWidth: 1280 })
+    setGlobal("navigator", { maxTouchPoints: 0, gpu: mockGPU })
+    mockLoadPipeline.mockResolvedValue(createMockPipeline())
+
+    const core = createBabulfish({
+      engine: { model: "qwen-3-0.6b", device: "wasm", dtype: "q4" },
+    })
+
+    await core.loadModel()
+
+    expect(core.snapshot.enablement.verdict.outcome).toBe("wasm-only")
+    expect(core.snapshot.enablement.probe.status).toBe("not-run")
+    expect(mockRunAdapterSmokeProbe).not.toHaveBeenCalled()
+    expect(mockLoadPipeline).toHaveBeenCalledWith(
+      "onnx-community/Qwen3-0.6B-ONNX",
+      expect.objectContaining({
+        dtype: "q4",
+        device: "wasm",
+      }),
+    )
+  })
+
   it("probe mode if-needed with failed probe (auto device): verdict becomes wasm-only", async () => {
     const mockGPU = createMockGPU({ adapterResult: null })
     setGlobal("window", { innerWidth: 1280 })

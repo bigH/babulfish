@@ -7,7 +7,10 @@ import type {
 const TEXT_GENERATION_TASK = "text-generation" as const
 
 export type PipelineOptions = Readonly<
-  Pick<PretrainedModelOptions, "dtype" | "device" | "progress_callback">
+  Pick<
+    PretrainedModelOptions,
+    "dtype" | "device" | "progress_callback" | "subfolder" | "model_file_name"
+  >
 >
 
 export async function loadPipeline(

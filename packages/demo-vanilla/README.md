@@ -6,12 +6,14 @@ This package is not published to npm. It exists to prove the current DOM contrac
 ## What it proves
 
 - `createBabulfish()` works directly against plain DOM APIs.
-- Device, model, and quantization controls drive the same URL-backed runtime config that the demo passes into `createBabulfish()`.
+- Device, model spec, and quantization controls drive the shared URL-backed runtime resolver.
+- URLs use canonical `model=<spec-id>` values; legacy `modelId=<resolved-model-id>` links are accepted and rewritten through the shared resolver.
+- The demo passes the resolver-built engine config into `createBabulfish()`, so adapters come from the shared model registry instead of demo-specific branching.
 - Multiple configured `dom.roots` translate together while the status panel stays outside the translated scope.
 - `structuredText` claims supported inline-rich DOM as one logical unit.
 - `preserve.matchers` and `shouldSkip` keep demo-specific strings exact.
 - `outputTransform` is DOM-only, while `translateText()` still returns raw engine output.
-- The status card keeps requested runtime preferences distinct from what enablement resolves: raw capabilities, the `status / outcome` line, the verdict reason, the resolved runtime, and a `probe:` suffix only once a probe has actually run.
+- The status card keeps runtime identity explicit: requested model spec, resolved model id, adapter id, dtype, requested device, repaired/effective device, and enablement-resolved device.
 - Restore resets the DOM, and Arabic flips the translated roots to RTL.
 
 The Vite server sends the COOP/COEP headers needed for WebGPU `SharedArrayBuffer` support during local development.

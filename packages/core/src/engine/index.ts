@@ -12,3 +12,19 @@ export {
   type TranslationCapabilities,
   getTranslationCapabilities,
 } from "./detect.js"
+export type {
+  OptionIssues,
+  TranslationAdapter,
+  TranslationLanguage,
+  TranslationOptions,
+  TranslationRequest,
+  TranslationResult,
+} from "./translation-adapter.js"
+export type {
+  BuiltinTranslationModelId,
+  ResolvedTranslationModel,
+  ResolvedTranslationModelSpec,
+  RuntimeModelRequest,
+  TranslationModelSelection,
+  TranslationModelSpec,
+} from "./model-spec.js"

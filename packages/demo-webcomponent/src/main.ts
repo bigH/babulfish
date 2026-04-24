@@ -3,6 +3,7 @@ import type { Snapshot } from "@babulfish/core"
 
 import {
   appendStatusEntry,
+  formatRequestedModelIdentity,
   formatRequestedDType,
   formatRequestedDevice,
   observeHostDocument,
@@ -13,9 +14,11 @@ import {
   requireStatus,
   restoreTranslators,
   setTranslatorLanguage,
+  syncTranslatorRuntimeAttrs,
   type TranslatorHostElement,
 } from "./main-helpers.js"
 import {
+  createDemoRuntimeSelectionKey,
   mergeDemoRuntimeSearchParams,
   DEMO_MODEL_PRESETS,
   DEVICE_OPTIONS,
@@ -23,18 +26,15 @@ import {
   getDTypeLabel,
   getDeviceLabel,
   mergeDemoRuntimeSelection,
-  resolveDemoRuntimeSelection,
+  resolveDemoRuntimeSelectionFromSearchParams,
   type DemoRuntimeSelection,
   type ResolvedDemoRuntimeSelection,
 } from "../../demo-shared/src/runtime-selection.js"
 
 function readRuntimeState(): ResolvedDemoRuntimeSelection {
-  const params = new URLSearchParams(window.location.search)
-  return resolveDemoRuntimeSelection({
-    device: params.get("device"),
-    modelId: params.get("modelId"),
-    dtype: params.get("dtype"),
-  })
+  return resolveDemoRuntimeSelectionFromSearchParams(
+    new URLSearchParams(window.location.search),
+  )
 }
 
 const eventLog = requireEventLog(document)
@@ -52,6 +52,7 @@ const translateArabicButton = requireButton(document, "host-translate-ar")
 const restoreButton = requireButton(document, "host-restore")
 
 let runtimeState = readRuntimeState()
+let runtimeKey = createDemoRuntimeSelectionKey(runtimeState.selection)
 const latestSnapshots = new Map<number, Snapshot>()
 
 for (const option of DEVICE_OPTIONS) {
@@ -63,8 +64,8 @@ for (const option of DEVICE_OPTIONS) {
 
 for (const preset of DEMO_MODEL_PRESETS) {
   const el = document.createElement("option")
-  el.value = preset.modelId
-  el.textContent = preset.label
+  el.value = preset.id
+  el.textContent = `${preset.label} (${preset.id})`
   runtimeModel.appendChild(el)
 }
 
@@ -88,7 +89,7 @@ function syncUrl(): void {
 
 function renderRuntimeControls(): void {
   runtimeDevice.value = runtimeState.selection.device
-  runtimeModel.value = runtimeState.selection.modelId
+  runtimeModel.value = runtimeState.selection.model.id
   runtimeDType.value = runtimeState.selection.dtype
 
   for (const option of Array.from(runtimeDevice.options)) {
@@ -120,27 +121,38 @@ function renderRuntimeStatus(): void {
     const snapshot = latestSnapshots.get(index)
     return `#${index + 1}: ${snapshot?.enablement.verdict.resolvedDevice ?? "none"}`
   })
+  const selection = runtimeState.selection
+  const requestedModel = formatRequestedModelIdentity(
+    runtimeState.requested.model,
+    runtimeState.requested.modelId,
+    runtimeState.preset.id,
+  )
 
   runtimeStatus.textContent = [
-    `Requested: ${runtimeState.requested.modelId ?? `${runtimeState.preset.modelId} (preset default)`} / ${formatRequestedDType(runtimeState.requested.dtype, runtimeState.preset.defaultDType)} / ${formatRequestedDevice(runtimeState.requested.device, runtimeState.preset.defaultDevice)}.`,
-    `Effective: ${runtimeState.selection.modelId} / ${runtimeState.selection.dtype} / ${runtimeState.selection.device}.`,
-    `Resolved: ${resolved.join(" | ")}.`,
+    `Requested Model: ${requestedModel}.`,
+    `Model Spec: ${selection.model.id}.`,
+    `Resolved Model: ${selection.model.resolvedModelId}.`,
+    `Adapter: ${selection.model.adapterId}.`,
+    `DType: ${formatRequestedDType(runtimeState.requested.dtype, runtimeState.preset.defaultDType)} -> ${getDTypeLabel(selection.dtype)} (${selection.dtype}).`,
+    `Requested Device: ${formatRequestedDevice(runtimeState.requested.device, runtimeState.preset.defaultDevice)} -> ${getDeviceLabel(selection.device)} (${selection.device}).`,
+    `Resolved Device: ${resolved.join(" | ")}.`,
   ].join(" ")
 }
 
 function applyRuntimeState(nextState: ResolvedDemoRuntimeSelection): void {
-  restoreTranslators(translators)
-  latestSnapshots.clear()
+  const nextKey = createDemoRuntimeSelectionKey(nextState.selection)
+  const runtimeChanged = nextKey !== runtimeKey
+
+  if (runtimeChanged) {
+    restoreTranslators(translators)
+    latestSnapshots.clear()
+    runtimeKey = nextKey
+  }
+
   runtimeState = nextState
   renderRuntimeControls()
   syncUrl()
-
-  translators.forEach((translator) => {
-    translator.setAttribute("device", runtimeState.selection.device)
-    translator.setAttribute("model-id", runtimeState.selection.modelId)
-    translator.setAttribute("dtype", runtimeState.selection.dtype)
-  })
-
+  syncTranslatorRuntimeAttrs(translators, runtimeState.selection)
   renderRuntimeStatus()
 }
 
@@ -167,7 +179,7 @@ runtimeDevice.addEventListener("change", () => {
 runtimeModel.addEventListener("change", () => {
   applyRuntimeState(
     mergeDemoRuntimeSelection(runtimeState, {
-      modelId: runtimeModel.value,
+      model: runtimeModel.value,
     }),
   )
 })

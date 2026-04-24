@@ -1,19 +1,18 @@
 "use client"
 
 import type { ReactNode } from "react"
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { TranslateButton, TranslatorProvider } from "@babulfish/react"
 
 import {
-  mergeDemoRuntimeSearchParams,
   createDemoRuntimeSelectionKey,
+  mergeDemoRuntimeSearchParams,
   mergeDemoRuntimeSelection,
-  type DemoRuntimeSelection,
+  toBabulfishEngineConfig,
+  type DemoRuntimeSelectionPatch,
   type ResolvedDemoRuntimeSelection,
 } from "../../demo-shared/src/runtime-selection.js"
-import {
-  RuntimeSelectionProvider,
-} from "./runtime-selection-context"
+import { RuntimeSelectionProvider } from "./runtime-selection-context"
 
 const DEMO_DOM_CONFIG = {
   roots: ["[data-demo-root]"],
@@ -46,24 +45,28 @@ export function DemoTranslatorShell({
     setRuntimeState(initialRuntimeState)
   }, [initialRuntimeState])
 
-  const providerConfig = {
-    engine: runtimeState.selection,
-    dom: DEMO_DOM_CONFIG,
-  }
+  const providerConfig = useMemo(
+    () => ({
+      engine: toBabulfishEngineConfig(runtimeState.selection),
+      dom: DEMO_DOM_CONFIG,
+    }),
+    [runtimeState.selection],
+  )
+  const providerKey = createDemoRuntimeSelectionKey(runtimeState.selection)
+  const updateRuntimeSelection = useCallback((patch: DemoRuntimeSelectionPatch) => {
+    setRuntimeState((current) => mergeDemoRuntimeSelection(current, patch))
+  }, [])
+  const runtimeSelectionContextValue = useMemo(
+    () => ({
+      runtimeState,
+      updateRuntimeSelection,
+    }),
+    [runtimeState, updateRuntimeSelection],
+  )
 
   return (
-    <RuntimeSelectionProvider
-      value={{
-        runtimeState,
-        updateRuntimeSelection: (patch: Partial<DemoRuntimeSelection>) => {
-          setRuntimeState((current) => mergeDemoRuntimeSelection(current, patch))
-        },
-      }}
-    >
-      <TranslatorProvider
-        key={createDemoRuntimeSelectionKey(runtimeState.selection)}
-        config={providerConfig}
-      >
+    <RuntimeSelectionProvider value={runtimeSelectionContextValue}>
+      <TranslatorProvider key={providerKey} config={providerConfig}>
         {children}
         <div className="fixed right-4 top-4 z-50">
           <TranslateButton />

@@ -47,6 +47,60 @@ The config table below is intentionally a highlights view, not the full DOM conf
 
 For the full DOM config surface, read `DOMTranslatorConfig` from `@babulfish/core` plus the behavior notes below. That surface also includes `preserve`, `skipTags`, `shouldSkip`, `richText`, `linkedBy`, `phases`, `batchCharLimit`, `rtlLanguages`, `translateAttributes`, and `hooks`.
 
+### Engine model selection
+
+`engine.model` selects a built-in model id or an explicit custom spec. String values are built-in ids only:
+
+- `"translategemma-4"` (default)
+- `"qwen-2.5-0.5b"`
+- `"qwen-3-0.6b"`
+- `"gemma-3-1b-it"`
+
+Use legacy `engine.modelId` for arbitrary Hugging Face repo ids when you still want the default TranslateGemma adapter. If both `engine.model` and `engine.modelId` are present, `modelId` overrides only the resolved repo id; adapter, file-location, dtype, and prompt behavior still come from `model`.
+
+Custom specs make the adapter explicit:
+
+```ts
+import type { TranslationAdapter } from "@babulfish/core"
+
+const adapter: TranslationAdapter = {
+  id: "my-chat-adapter",
+  label: "My chat adapter",
+  validateOptions: () => ({ warnings: [], errors: [] }),
+  buildInvocation: (request, options) => ({
+    modelInput: [
+      { role: "system", content: `Translate ${request.source.code} to ${request.target.code}.` },
+      { role: "user", content: request.text },
+    ],
+    modelOptions: {
+      max_new_tokens: options.max_new_tokens,
+      do_sample: false,
+      return_full_text: false,
+    },
+  }),
+  extractText: (_request, _options, output) => ({ text: String(output) }),
+}
+
+createBabulfish({
+  engine: {
+    model: {
+      id: "my-chat-model",
+      label: "My chat model",
+      modelId: "acme/my-instruct-model",
+      adapter,
+      defaults: {
+        dtype: "q4f16",
+        device: "webgpu",
+        subfolder: "onnx",
+        modelFileName: "model",
+      },
+    },
+  },
+})
+```
+
+`q4f16` is a first-class dtype. The non-default built-ins use it with WebGPU-oriented defaults and run the adapter smoke probe when the memory heuristic cannot decide.
+
 ### `BabulfishCore`
 
 | Member | Signature | Description |

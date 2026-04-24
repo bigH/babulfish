@@ -1,13 +1,15 @@
 import type { CapabilityObservation } from "../core/capabilities.js"
-import {
-  DEFAULT_DEVICE_PREFERENCE,
-  DEFAULT_DTYPE,
-  DEFAULT_MAX_NEW_TOKENS,
-  DEFAULT_MODEL_ID,
-  DEFAULT_SOURCE_LANGUAGE,
-  type ModelDType,
-} from "./config.js"
+import { DEFAULT_MODEL_ID, type ModelDType } from "./config.js"
 import type { DevicePreference, ResolvedDevice } from "./detect.js"
+import {
+  resolveTranslationModelConfig,
+  type ResolvedTranslationModelConfig,
+} from "./model-registry.js"
+import type {
+  RuntimeModelRequest,
+  ResolvedTranslationModel,
+  TranslationModelSelection,
+} from "./model-spec.js"
 
 export type ModelProfile = {
   readonly id: string
@@ -41,6 +43,7 @@ export type EnablementConfig = {
 }
 
 export type RuntimePreferenceConfig = {
+  readonly model?: TranslationModelSelection
   readonly modelId?: string
   readonly dtype?: ModelDType
   readonly device?: DevicePreference
@@ -49,12 +52,7 @@ export type RuntimePreferenceConfig = {
   readonly enablement?: EnablementConfig
 }
 
-type NormalizedRuntimePreferenceConfig = {
-  readonly modelId: string
-  readonly dtype: ModelDType
-  readonly device: DevicePreference
-  readonly maxNewTokens: number
-  readonly sourceLanguage: string
+type NormalizedRuntimePreferenceConfig = ResolvedTranslationModelConfig & {
   readonly enablement: Required<EnablementConfig>
 }
 
@@ -104,11 +102,16 @@ export type EnablementState = {
 }
 
 export type ResolvedRuntimePlan = {
+  readonly requestedModel: RuntimeModelRequest
+  readonly resolvedModel: ResolvedTranslationModel
   readonly modelId: string
+  readonly adapterId: string
   readonly dtype: ModelDType
   readonly resolvedDevice: ResolvedDevice
   readonly sourceLanguage: string
   readonly maxNewTokens: number
+  readonly subfolder: string | null
+  readonly modelFileName: string | null
 }
 
 export type EnablementAssessment = {
@@ -236,11 +239,16 @@ function buildRuntimePlan(
   resolvedDevice: ResolvedDevice,
 ): ResolvedRuntimePlan {
   return Object.freeze({
+    requestedModel: config.requestedModel,
+    resolvedModel: config.resolvedModel,
     modelId: config.modelId,
+    adapterId: config.adapterId,
     dtype: config.dtype,
     resolvedDevice,
     sourceLanguage: config.sourceLanguage,
     maxNewTokens: config.maxNewTokens,
+    subfolder: config.subfolder,
+    modelFileName: config.modelFileName,
   })
 }
 
@@ -336,10 +344,13 @@ function resolveEnablementVerdict(
 export function createRuntimePlanKey(plan: ResolvedRuntimePlan): string {
   return [
     plan.modelId,
+    plan.adapterId,
     plan.dtype,
     plan.resolvedDevice,
     plan.sourceLanguage,
     String(plan.maxNewTokens),
+    plan.subfolder ?? "null",
+    plan.modelFileName ?? "null",
   ].join("|")
 }
 
@@ -358,16 +369,22 @@ export function createEnablementCompat(state: EnablementState): EnablementCompat
 export function resolveRuntimePreferences(
   config?: RuntimePreferenceConfig,
 ): NormalizedRuntimePreferenceConfig {
+  const modelConfig = resolveTranslationModelConfig(config)
+  const explicitModelProfile =
+    config?.enablement?.modelProfile !== undefined
+  const explicitProbe =
+    config?.enablement?.probe !== undefined
+
   return Object.freeze({
-    modelId: config?.modelId ?? DEFAULT_MODEL_ID,
-    dtype: config?.dtype ?? DEFAULT_DTYPE,
-    device: config?.device ?? DEFAULT_DEVICE_PREFERENCE,
-    maxNewTokens: config?.maxNewTokens ?? DEFAULT_MAX_NEW_TOKENS,
-    sourceLanguage: config?.sourceLanguage ?? DEFAULT_SOURCE_LANGUAGE,
+    ...modelConfig,
     enablement: Object.freeze({
       policy: config?.enablement?.policy ?? "default",
-      modelProfile: config?.enablement?.modelProfile ?? "auto",
-      probe: config?.enablement?.probe ?? "off",
+      modelProfile: explicitModelProfile
+        ? config.enablement.modelProfile
+        : (modelConfig.modelProfile ?? "auto"),
+      probe: explicitProbe
+        ? config.enablement.probe
+        : modelConfig.probe,
     }),
   })
 }
@@ -461,10 +478,13 @@ export function createAssessmentCacheKey(
 
   return [
     resolvedConfig.modelId,
+    resolvedConfig.adapterId,
     resolvedConfig.dtype,
     resolvedConfig.device,
     resolvedConfig.sourceLanguage,
     String(resolvedConfig.maxNewTokens),
+    resolvedConfig.subfolder ?? "null",
+    resolvedConfig.modelFileName ?? "null",
     resolvedConfig.enablement.policy,
     modelProfileKey,
     observation.ready ? "ready" : "not-ready",

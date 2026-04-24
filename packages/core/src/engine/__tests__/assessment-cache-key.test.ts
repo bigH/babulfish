@@ -2,6 +2,20 @@ import { describe, expect, it } from "vitest"
 
 import { createAssessmentCacheKey, type RuntimePreferenceConfig } from "../runtime-plan.js"
 import type { CapabilityObservation } from "../../core/capabilities.js"
+import type { TranslationAdapter } from "../translation-adapter.js"
+
+function testAdapter(id: string): TranslationAdapter {
+  return {
+    id,
+    label: `${id} adapter`,
+    validateOptions: () => ({ warnings: [], errors: [] }),
+    buildInvocation: () => ({ modelInput: "prompt", modelOptions: { max_new_tokens: 1 } }),
+    extractText: () => ({ text: "translated" }),
+  }
+}
+
+const translateGemmaAdapter = testAdapter("translategemma")
+const chatAdapter = testAdapter("chat")
 
 function baseObservation(
   overrides: Partial<CapabilityObservation> = {},
@@ -69,6 +83,57 @@ describe("createAssessmentCacheKey", () => {
     expect(first).not.toBe(second)
   })
 
+  it("diverges when adapter or file location changes", () => {
+    const observation = baseObservation()
+    const legacy = createAssessmentCacheKey(
+      baseConfig({ modelId: "acme/shared" }),
+      observation,
+    )
+    const chat = createAssessmentCacheKey(
+      baseConfig({
+        model: {
+          id: "chat",
+          label: "Chat",
+          modelId: "acme/shared",
+          adapter: chatAdapter,
+        },
+        modelId: undefined,
+      }),
+      observation,
+    )
+    const subfolder = createAssessmentCacheKey(
+      baseConfig({
+        model: {
+          id: "subfolder",
+          label: "Subfolder",
+          modelId: "acme/shared",
+          adapter: translateGemmaAdapter,
+          defaults: { subfolder: "onnx" },
+        },
+        modelId: undefined,
+      }),
+      observation,
+    )
+    const file = createAssessmentCacheKey(
+      baseConfig({
+        model: {
+          id: "file",
+          label: "File",
+          modelId: "acme/shared",
+          adapter: translateGemmaAdapter,
+          defaults: { modelFileName: "model" },
+        },
+        modelId: undefined,
+      }),
+      observation,
+    )
+
+    expect(legacy).not.toBe(chat)
+    expect(legacy).not.toBe(subfolder)
+    expect(legacy).not.toBe(file)
+    expect(subfolder).not.toBe(file)
+  })
+
   it("diverges when dtype changes", () => {
     const observation = baseObservation()
     const first = createAssessmentCacheKey(baseConfig({ dtype: "q4" }), observation)
@@ -86,6 +151,41 @@ describe("createAssessmentCacheKey", () => {
     expect(first).not.toBe(second)
     expect(first).not.toBe(third)
     expect(second).not.toBe(third)
+  })
+
+  it("diverges when source language or max tokens change", () => {
+    const observation = baseObservation()
+    const first = createAssessmentCacheKey(
+      baseConfig({ sourceLanguage: "en", maxNewTokens: 128 }),
+      observation,
+    )
+    const source = createAssessmentCacheKey(baseConfig({ sourceLanguage: "fr" }), observation)
+    const tokens = createAssessmentCacheKey(baseConfig({ maxNewTokens: 64 }), observation)
+
+    expect(first).not.toBe(source)
+    expect(first).not.toBe(tokens)
+  })
+
+  it("matches equivalent legacy and custom configs with the same execution identity", () => {
+    const observation = baseObservation()
+    const legacy = createAssessmentCacheKey(
+      baseConfig({ modelId: "acme/shared" }),
+      observation,
+    )
+    const custom = createAssessmentCacheKey(
+      baseConfig({
+        model: {
+          id: "custom-id-does-not-enter-execution-key",
+          label: "Custom",
+          modelId: "acme/shared",
+          adapter: translateGemmaAdapter,
+        },
+        modelId: undefined,
+      }),
+      observation,
+    )
+
+    expect(custom).toBe(legacy)
   })
 
   it("diverges when modelProfileInput shape changes", () => {

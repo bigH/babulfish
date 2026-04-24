@@ -22,9 +22,13 @@ const homepageMarkers = [
   "React Boundary Proof",
   "useTranslator()",
   "useTranslateDOM()",
-  "Selected Device",
-  "Selected Model",
-  "Selected Quantization",
+  "Model Spec",
+  "Resolved Model",
+  "Adapter",
+  "Requested Device",
+  "Effective Device",
+  "Requested Quantization",
+  "Effective Quantization",
   "Capabilities",
   "Enablement",
   "Resolved Runtime",
@@ -209,20 +213,39 @@ async function main() {
       )
     }
 
-    const canaryUrl = `${url}?device=wasm&modelId=onnx-community%2Fgemma-3-270m-it-ONNX&dtype=fp32`
-    const canaryResponse = await fetch(canaryUrl, {
+    const canonicalUrl = `${url}?model=qwen-3-0.6b`
+    const canonicalResponse = await fetch(canonicalUrl, {
       signal: AbortSignal.timeout(2_000),
     })
-    const canaryHtml = await canaryResponse.text()
-    const missingCanaryMarkers = [
-      "Gemma 3 270M canary (onnx-community/gemma-3-270m-it-ONNX)",
-      "WASM (wasm)",
-      "FP32 (fp32)",
-    ].filter((marker) => !canaryHtml.includes(marker))
+    const canonicalHtml = await canonicalResponse.text()
+    const missingCanonicalMarkers = [
+      "Qwen 3 0.6B (qwen-3-0.6b)",
+      "onnx-community/Qwen3-0.6B-ONNX",
+      "chat",
+      "WebGPU (webgpu)",
+      "Q4F16 (q4f16)",
+    ].filter((marker) => !canonicalHtml.includes(marker))
 
-    if (missingCanaryMarkers.length > 0) {
+    if (missingCanonicalMarkers.length > 0) {
       throw new Error(
-        `Demo runtime deep link is missing expected markers: ${missingCanaryMarkers.join(", ")}.${formatLogs()}`,
+        `Demo canonical runtime deep link is missing expected markers: ${missingCanonicalMarkers.join(", ")}.${formatLogs()}`,
+      )
+    }
+
+    const legacyUrl = `${url}?modelId=onnx-community%2FQwen2.5-0.5B-Instruct`
+    const legacyResponse = await fetch(legacyUrl, {
+      signal: AbortSignal.timeout(2_000),
+    })
+    const legacyHtml = await legacyResponse.text()
+    const missingLegacyMarkers = [
+      "Qwen 2.5 0.5B Instruct (qwen-2.5-0.5b)",
+      "onnx-community/Qwen2.5-0.5B-Instruct",
+      "chat",
+    ].filter((marker) => !legacyHtml.includes(marker))
+
+    if (missingLegacyMarkers.length > 0) {
+      throw new Error(
+        `Demo legacy runtime deep link is missing expected markers: ${missingLegacyMarkers.join(", ")}.${formatLogs()}`,
       )
     }
 

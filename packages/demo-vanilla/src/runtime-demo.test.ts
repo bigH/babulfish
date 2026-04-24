@@ -1,6 +1,7 @@
 import type { BabulfishConfig } from "@babulfish/core"
 import { describe, expect, it, vi } from "vitest"
 
+import { resolveDemoRuntimeSelection } from "../../demo-shared/src/runtime-selection.js"
 import { createVanillaDemoCore, DEMO_ROOTS } from "./runtime-demo.js"
 
 const createdCore = { marker: "demo-core" }
@@ -14,12 +15,10 @@ vi.mock("@babulfish/core", () => ({
 }))
 
 describe("runtime-demo", () => {
-  it("passes the selected engine and demo DOM contract to createBabulfish", () => {
-    const selection = {
-      device: "wasm",
-      modelId: "onnx-community/gemma-3-270m-it-ONNX",
-      dtype: "fp32",
-    } as const
+  it("passes the shared engine config and demo DOM contract to createBabulfish", () => {
+    const selection = resolveDemoRuntimeSelection({
+      model: "gemma-3-1b-it",
+    }).selection
 
     expect(createVanillaDemoCore(selection)).toBe(createdCore)
 
@@ -29,7 +28,12 @@ describe("runtime-demo", () => {
     const config = firstCall?.[0] as unknown as BabulfishConfig
     const dom = config.dom
 
-    expect(config.engine).toEqual(selection)
+    expect(config.engine).toEqual({
+      model: "gemma-3-1b-it",
+      dtype: "q4f16",
+      device: "webgpu",
+    })
+    expect(config.engine).not.toHaveProperty("modelId")
     expect(dom?.roots).toEqual(DEMO_ROOTS.map(({ selector }) => selector))
     expect(dom?.structuredText).toEqual({ selector: "[data-structured]" })
     expect(dom?.preserve).toEqual({

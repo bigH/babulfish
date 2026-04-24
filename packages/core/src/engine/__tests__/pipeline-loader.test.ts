@@ -17,16 +17,23 @@ beforeEach(() => {
 describe("loadPipeline", () => {
   it("matches the transformers loader option subset", () => {
     expectTypeOf<PipelineOptions>().toEqualTypeOf<
-      Readonly<Pick<PretrainedModelOptions, "dtype" | "device" | "progress_callback">>
+      Readonly<
+        Pick<
+          PretrainedModelOptions,
+          "dtype" | "device" | "progress_callback" | "subfolder" | "model_file_name"
+        >
+      >
     >()
   })
 
   it("delegates to transformers pipeline with model and options", async () => {
     const pipelineInstance = {} as TextGenerationPipeline
     const options: PipelineOptions = {
-      dtype: "q4",
+      dtype: "q4f16",
       device: "webgpu",
       progress_callback: vi.fn(),
+      subfolder: "onnx",
+      model_file_name: "model",
     }
     mockPipelineFactory.mockResolvedValue(pipelineInstance)
 
@@ -40,6 +47,7 @@ describe("loadPipeline", () => {
       "test-model",
       options,
     )
+    expect(mockPipelineFactory.mock.calls[0]?.[2]).toBe(options)
   })
 
   it("delegates with no options when unspecified", async () => {

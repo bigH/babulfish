@@ -30,15 +30,19 @@ describe("Home", () => {
     capturedInitialRuntimeStates.length = 0
   })
 
-  it("derives the initial runtime state from the shared search-param resolver", async () => {
+  it("derives the initial runtime state from canonical model search params", async () => {
     const searchParams = {
       foo: "bar",
+      model: [
+        "qwen-3-0.6b",
+        "qwen-2.5-0.5b",
+      ],
       modelId: [
-        "acme/not-real",
-        "onnx-community/gemma-3-270m-it-ONNX",
+        "onnx-community/Qwen2.5-0.5B-Instruct",
+        "onnx-community/gemma-3-1b-it-ONNX",
       ],
       device: "webgpu",
-      dtype: "q8",
+      dtype: "q4f16",
     }
 
     const page = await Home({ searchParams: Promise.resolve(searchParams) })
@@ -51,10 +55,12 @@ describe("Home", () => {
       resolveDemoRuntimeSelectionFromSearchParams(
         new URLSearchParams([
           ["foo", "bar"],
-          ["modelId", "acme/not-real"],
-          ["modelId", "onnx-community/gemma-3-270m-it-ONNX"],
+          ["model", "qwen-3-0.6b"],
+          ["model", "qwen-2.5-0.5b"],
+          ["modelId", "onnx-community/Qwen2.5-0.5B-Instruct"],
+          ["modelId", "onnx-community/gemma-3-1b-it-ONNX"],
           ["device", "webgpu"],
-          ["dtype", "q8"],
+          ["dtype", "q4f16"],
         ]),
       ),
     ])

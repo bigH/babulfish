@@ -15,6 +15,7 @@ import {
   getEngineIdentity,
 } from "../../engine/testing/index.js"
 import { loadPipeline } from "../../engine/pipeline-loader.js"
+import type { TranslationAdapter } from "../../engine/translation-adapter.js"
 
 const mockLoadPipeline = vi.mocked(loadPipeline)
 
@@ -46,6 +47,16 @@ function createMockPipeline() {
 
 type LoadPipelineReturn = Awaited<ReturnType<typeof loadPipeline>>
 
+function testAdapter(id: string): TranslationAdapter {
+  return {
+    id,
+    label: `${id} adapter`,
+    validateOptions: () => ({ warnings: [], errors: [] }),
+    buildInvocation: () => ({ modelInput: "prompt", modelOptions: { max_new_tokens: 1 } }),
+    extractText: () => ({ text: "translated" }),
+  }
+}
+
 function setupPipelineMock(): void {
   mockLoadPipeline.mockImplementation(
     async () => createMockPipeline() as unknown as LoadPipelineReturn,
@@ -68,6 +79,9 @@ afterEach(() => {
 })
 
 describe("multi-core — different-key isolation", () => {
+  const translateGemmaAdapter = testAdapter("translategemma")
+  const chatAdapter = testAdapter("chat")
+
   it("two cores with different dtype get different engine identities", async () => {
     setupPipelineMock()
     const a = createBabulfish({ engine: { device: "wasm", dtype: "q4" } })
@@ -101,6 +115,81 @@ describe("multi-core — different-key isolation", () => {
 
     expect(getEngineIdentity(a)).not.toBe(getEngineIdentity(b))
     expect(mockLoadPipeline).toHaveBeenCalledTimes(2)
+  })
+
+  it("same repo with different adapters gets different engine identities", async () => {
+    setupPipelineMock()
+    const a = createBabulfish({ engine: { device: "wasm", modelId: "acme/shared" } })
+    const b = createBabulfish({
+      engine: {
+        device: "wasm",
+        model: {
+          id: "shared-chat",
+          label: "Shared chat",
+          modelId: "acme/shared",
+          adapter: chatAdapter,
+        },
+      },
+    })
+
+    await Promise.all([a.loadModel(), b.loadModel()])
+
+    expect(getEngineIdentity(a)).not.toBe(getEngineIdentity(b))
+    expect(mockLoadPipeline).toHaveBeenCalledTimes(2)
+  })
+
+  it("same repo and adapter with different file locations gets different identities", async () => {
+    setupPipelineMock()
+    const a = createBabulfish({
+      engine: {
+        device: "wasm",
+        model: {
+          id: "shared-a",
+          label: "Shared A",
+          modelId: "acme/shared",
+          adapter: translateGemmaAdapter,
+          defaults: { subfolder: "onnx" },
+        },
+      },
+    })
+    const b = createBabulfish({
+      engine: {
+        device: "wasm",
+        model: {
+          id: "shared-b",
+          label: "Shared B",
+          modelId: "acme/shared",
+          adapter: translateGemmaAdapter,
+          defaults: { modelFileName: "model" },
+        },
+      },
+    })
+
+    await Promise.all([a.loadModel(), b.loadModel()])
+
+    expect(getEngineIdentity(a)).not.toBe(getEngineIdentity(b))
+    expect(mockLoadPipeline).toHaveBeenCalledTimes(2)
+  })
+
+  it("equivalent legacy and custom resolved configs share across cores", async () => {
+    setupPipelineMock()
+    const legacy = createBabulfish({ engine: { device: "wasm", modelId: "acme/shared" } })
+    const custom = createBabulfish({
+      engine: {
+        device: "wasm",
+        model: {
+          id: "different-request-id",
+          label: "Different request",
+          modelId: "acme/shared",
+          adapter: translateGemmaAdapter,
+        },
+      },
+    })
+
+    await Promise.all([legacy.loadModel(), custom.loadModel()])
+
+    expect(getEngineIdentity(legacy)).toBe(getEngineIdentity(custom))
+    expect(mockLoadPipeline).toHaveBeenCalledTimes(1)
   })
 
   it("disposing one core does not leak enablement state or engine identity into the other", async () => {

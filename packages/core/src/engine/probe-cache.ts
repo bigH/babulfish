@@ -10,8 +10,13 @@ export type ProbeCacheKeyInput = {
   readonly modelProfileId: string
   readonly modelProfileVersion: string
   readonly modelId: string
+  readonly adapterId: string
   readonly dtype: string
   readonly device: string
+  readonly sourceLanguage: string
+  readonly maxNewTokens: number
+  readonly subfolder: string | null
+  readonly modelFileName: string | null
   readonly policyVersion: string
   readonly probeVersion: string
   readonly observation: CapabilityObservation
@@ -38,8 +43,13 @@ export function createProbeCacheKey(input: ProbeCacheKeyInput): string {
     input.modelProfileId,
     input.modelProfileVersion,
     input.modelId,
+    input.adapterId,
     input.dtype,
     input.device,
+    input.sourceLanguage,
+    String(input.maxNewTokens),
+    input.subfolder ?? "null",
+    input.modelFileName ?? "null",
     input.policyVersion,
     input.probeVersion,
     ...serializeObservationForProbeCache(input.observation),

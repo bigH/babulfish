@@ -1,7 +1,9 @@
 import { createBabulfish, type BabulfishCore, type Snapshot } from "@babulfish/core"
 
 import {
+  createDemoRuntimeSelectionKey,
   resolveDemoRuntimeSelection,
+  toBabulfishEngineConfig,
   type ResolvedDemoRuntimeSelection,
 } from "../../demo-shared/src/runtime-selection.js"
 
@@ -101,9 +103,10 @@ export class BabulfishTranslator extends HTMLElement {
   #unsubscribe: (() => void) | null = null
   #els: ShadowElements | null = null
   #runtimeState: ResolvedDemoRuntimeSelection | null = null
+  #runtimeKey: string | null = null
 
   static get observedAttributes(): readonly string[] {
-    return ["target-lang", "device", "model-id", "dtype"]
+    return ["target-lang", "device", "model", "model-id", "dtype"]
   }
 
   connectedCallback(): void {
@@ -141,8 +144,7 @@ export class BabulfishTranslator extends HTMLElement {
       return
     }
 
-    this.removeAttribute("target-lang")
-    this.#mountCore(this.shadowRoot ?? this.attachShadow({ mode: "open" }))
+    this.#remountCoreOnRuntimeChange(this.shadowRoot ?? this.attachShadow({ mode: "open" }))
   }
 
   restore(): void {
@@ -154,16 +156,21 @@ export class BabulfishTranslator extends HTMLElement {
   #readRuntimeState(): ResolvedDemoRuntimeSelection {
     return resolveDemoRuntimeSelection({
       device: this.getAttribute("device"),
+      model: this.getAttribute("model"),
       modelId: this.getAttribute("model-id"),
       dtype: this.getAttribute("dtype"),
     })
   }
 
-  #mountCore(shadow: ShadowRoot): void {
+  #mountCore(
+    shadow: ShadowRoot,
+    runtimeState: ResolvedDemoRuntimeSelection = this.#readRuntimeState(),
+  ): void {
     this.#teardownCore()
-    this.#runtimeState = this.#readRuntimeState()
+    this.#runtimeState = runtimeState
+    this.#runtimeKey = createDemoRuntimeSelectionKey(runtimeState.selection)
     this.#core = createBabulfish({
-      engine: this.#runtimeState.selection,
+      engine: toBabulfishEngineConfig(runtimeState.selection),
       dom: { root: shadow, roots: [".content"] },
     })
 
@@ -181,6 +188,20 @@ export class BabulfishTranslator extends HTMLElement {
     this.#render(this.#core.snapshot)
   }
 
+  #remountCoreOnRuntimeChange(shadow: ShadowRoot): void {
+    const nextRuntimeState = this.#readRuntimeState()
+    const nextRuntimeKey = createDemoRuntimeSelectionKey(nextRuntimeState.selection)
+
+    if (this.#runtimeKey === nextRuntimeKey) {
+      this.#runtimeState = nextRuntimeState
+      if (this.#core) this.#render(this.#core.snapshot)
+      return
+    }
+
+    this.removeAttribute("target-lang")
+    this.#mountCore(shadow, nextRuntimeState)
+  }
+
   #populateLanguages(): void {
     if (!this.#els || !this.#core) return
     for (const lang of this.#core.languages) {
@@ -195,11 +216,16 @@ export class BabulfishTranslator extends HTMLElement {
     this.#unsubscribe?.()
     this.#unsubscribe = null
 
-    if (!this.#core) return
+    if (!this.#core) {
+      this.#runtimeKey = null
+      return
+    }
+
     this.#core.abort()
     this.#core.restore()
     void this.#core.dispose().catch(() => {})
     this.#core = null
+    this.#runtimeKey = null
   }
 
   #render(snapshot: Snapshot): void {
@@ -226,8 +252,24 @@ export class BabulfishTranslator extends HTMLElement {
         ? ` | Translating (${Math.round(snapshot.translation.progress * 100)}%)`
         : ""
     const languageText = snapshot.currentLanguage ? ` | ${snapshot.currentLanguage}` : ""
-    const requestedText = ` | requested ${this.#runtimeState.selection.device}/${this.#runtimeState.selection.dtype}`
-    const resolvedText = ` | resolved ${snapshot.enablement.verdict.resolvedDevice ?? "none"}`
+    const selection = this.#runtimeState.selection
+    const requestedModel =
+      this.#runtimeState.requested.model ??
+      this.#runtimeState.requested.modelId ??
+      `${this.#runtimeState.preset.id} (default)`
+    const requestedDevice =
+      this.#runtimeState.requested.device ??
+      `${this.#runtimeState.preset.defaultDevice} (default)`
+    const requestedText =
+      ` | requested model ${requestedModel}` +
+      ` | spec ${selection.model.id}` +
+      ` | resolved model ${selection.model.resolvedModelId}` +
+      ` | adapter ${selection.model.adapterId}` +
+      ` | dtype ${selection.dtype}` +
+      ` | requested device ${requestedDevice}` +
+      ` | effective device ${selection.device}`
+    const resolvedText =
+      ` | resolved device ${snapshot.enablement.verdict.resolvedDevice ?? "none"}`
     const probeText =
       snapshot.enablement.probe.status !== "not-run"
         ? ` | probe: ${snapshot.enablement.probe.status}`

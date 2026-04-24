@@ -21,6 +21,7 @@ vi.mock("../pipeline-loader.js", () => ({
 // Must import after mock setup
 import { createEngine } from "../model.js"
 import type { TranslatorStatus } from "../model.js"
+import type { TranslationAdapter } from "../translation-adapter.js"
 import { loadPipeline } from "../pipeline-loader.js"
 import {
   captureGlobalDescriptors,
@@ -132,6 +133,21 @@ describe("load", () => {
       expect.objectContaining({
         dtype: "fp16",
         device: "wasm",
+      }),
+    )
+  })
+
+  it("forwards adapter file location and q4f16 dtype for chat built-ins", async () => {
+    const engine = createEngine({ model: "qwen-3-0.6b" })
+    await engine.load()
+
+    expect(mockLoadPipeline).toHaveBeenCalledWith(
+      "onnx-community/Qwen3-0.6B-ONNX",
+      expect.objectContaining({
+        dtype: "q4f16",
+        device: "webgpu",
+        subfolder: "onnx",
+        model_file_name: "model",
       }),
     )
   })
@@ -259,6 +275,70 @@ describe("translate", () => {
     )
   })
 
+  it("sends deterministic chat prompts for chat adapters", async () => {
+    mockGenerate.mockResolvedValue([{ generated_text: " hola " }])
+
+    const engine = createEngine({ model: "qwen-3-0.6b" })
+    await engine.load()
+    const result = await engine.translate("hello", "es")
+
+    expect(result).toBe("hola")
+    expect(mockGenerate).toHaveBeenCalledWith(
+      [
+        {
+          role: "system",
+          content:
+            "You are a translation engine. Translate from en to es. " +
+            "Output only the translation.",
+        },
+        {
+          role: "user",
+          content: "hello",
+        },
+      ],
+      {
+        max_new_tokens: 256,
+        do_sample: false,
+        return_full_text: false,
+      },
+    )
+  })
+
+  it("extracts chat array output from the last assistant message", async () => {
+    mockGenerate.mockResolvedValue([
+      {
+        generated_text: [
+          { role: "assistant", content: " primero " },
+          { role: "user", content: "ignored" },
+          { role: "assistant", content: " segundo " },
+        ],
+      },
+    ])
+
+    const engine = createEngine({ model: "qwen-2.5-0.5b" })
+    await engine.load()
+
+    await expect(engine.translate("hello", "es")).resolves.toBe("segundo")
+  })
+
+  it("trims only the generic chat adapter output", async () => {
+    mockGenerate.mockResolvedValueOnce([
+      {
+        generated_text: [{ role: "assistant", content: " hola " }],
+      },
+    ])
+
+    const translateGemma = createEngine()
+    await translateGemma.load()
+    await expect(translateGemma.translate("hello", "es")).resolves.toBe(" hola ")
+
+    mockGenerate.mockResolvedValueOnce([{ generated_text: " hola " }])
+
+    const chat = createEngine({ model: "qwen-3-0.6b" })
+    await chat.load()
+    await expect(chat.translate("hello", "es")).resolves.toBe("hola")
+  })
+
   it("respects custom maxNewTokens", async () => {
     mockGenerate.mockResolvedValue([
       {
@@ -284,6 +364,80 @@ describe("translate", () => {
     await expect(engine.translate("hello", "es")).rejects.toThrow(
       "Unexpected model output format",
     )
+  })
+
+  it("uses custom adapter buildInvocation and extractText", async () => {
+    const adapter: TranslationAdapter = {
+      id: "custom-adapter",
+      label: "Custom adapter",
+      validateOptions: vi.fn(() => ({ warnings: [], errors: [] })),
+      buildInvocation: vi.fn((request, options) => ({
+        modelInput: `translate:${request.source.code}:${request.target.code}:${request.text}`,
+        modelOptions: { ...options, custom: "custom-adapter" },
+      })),
+      extractText: vi.fn((_request, _options, output) => ({
+        text: `done:${JSON.stringify(output)}`,
+      })),
+    }
+    mockGenerate.mockResolvedValue([{ generated_text: "raw" }])
+
+    const engine = createEngine({
+      model: {
+        id: "custom-model",
+        label: "Custom model",
+        modelId: "acme/custom",
+        adapter,
+        defaults: { maxNewTokens: 9 },
+      },
+      device: "wasm",
+    })
+    await engine.load()
+
+    await expect(engine.translate("hello", "es")).resolves.toBe(
+      "done:[{\"generated_text\":\"raw\"}]",
+    )
+    expect(adapter.buildInvocation).toHaveBeenCalledWith(
+      {
+        text: "hello",
+        source: { code: "en" },
+        target: { code: "es" },
+      },
+      { max_new_tokens: 9 },
+    )
+    expect(mockGenerate).toHaveBeenCalledWith(
+      "translate:en:es:hello",
+      { max_new_tokens: 9, custom: "custom-adapter" },
+    )
+    expect(adapter.extractText).toHaveBeenCalledWith(
+      {
+        text: "hello",
+        source: { code: "en" },
+        target: { code: "es" },
+      },
+      { max_new_tokens: 9 },
+      [{ generated_text: "raw" }],
+    )
+  })
+
+  it("propagates custom adapter extraction errors unchanged", async () => {
+    const forced = new Error("adapter failed")
+    const adapter: TranslationAdapter = {
+      id: "custom-adapter",
+      label: "Custom adapter",
+      validateOptions: () => ({ warnings: [], errors: [] }),
+      buildInvocation: () => ({ modelInput: "prompt", modelOptions: { max_new_tokens: 1 } }),
+      extractText: () => {
+        throw forced
+      },
+    }
+    mockGenerate.mockResolvedValue([{ generated_text: "raw" }])
+
+    const engine = createEngine({
+      model: { id: "custom", label: "Custom model", modelId: "acme/custom", adapter },
+    })
+    await engine.load()
+
+    await expect(engine.translate("hello", "es")).rejects.toBe(forced)
   })
 })
 

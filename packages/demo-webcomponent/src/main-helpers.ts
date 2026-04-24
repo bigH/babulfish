@@ -66,6 +66,16 @@ export function formatRequestedDType(
   return formatRequestedRuntimeValue(requested, DTYPE_OPTIONS, getDTypeLabel(presetDefault))
 }
 
+export function formatRequestedModelIdentity(
+  requestedModel: string | null,
+  requestedModelId: string | null,
+  presetDefault: string,
+): string {
+  if (requestedModel) return `${requestedModel} (model)`
+  if (requestedModelId) return `${requestedModelId} (legacy model-id)`
+  return `${presetDefault} (preset default)`
+}
+
 export function requireButton(doc: Document, id: string): HTMLButtonElement {
   return requireElementById<HTMLButtonElement>(
     doc,
@@ -148,6 +158,18 @@ export function restoreTranslators(
 ): void {
   for (const translator of translators) {
     translator.restore()
+  }
+}
+
+export function syncTranslatorRuntimeAttrs(
+  translators: readonly HTMLElement[],
+  selection: DemoRuntimeSelection,
+): void {
+  for (const translator of translators) {
+    translator.setAttribute("model", selection.model.id)
+    translator.setAttribute("device", selection.device)
+    translator.setAttribute("dtype", selection.dtype)
+    translator.removeAttribute("model-id")
   }
 }
 

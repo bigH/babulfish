@@ -68,6 +68,11 @@ function setDom(): void {
     <div id="status-requested-device"></div>
     <div id="status-requested-model"></div>
     <div id="status-requested-dtype"></div>
+    <div id="status-effective-device"></div>
+    <div id="status-resolved-device"></div>
+    <div id="status-effective-dtype"></div>
+    <div id="status-resolved-model"></div>
+    <div id="status-adapter"></div>
     <div id="status-capabilities"></div>
     <div id="status-enablement"></div>
     <div id="status-verdict"></div>
@@ -97,46 +102,82 @@ describe("demo-vanilla main", () => {
     document.body.innerHTML = ""
   })
 
-  it("shows default status values without preset suffixes", async () => {
+  it("shows default status values and model spec selector values", async () => {
     window.history.replaceState(null, "", "/")
 
     await import("./main.js")
 
+    const runtimeModel = document.getElementById("runtime-model")
+    if (!(runtimeModel instanceof HTMLSelectElement)) {
+      throw new Error("Expected #runtime-model select")
+    }
+
+    expect(Array.from(runtimeModel.options).map((option) => option.value)).toEqual([
+      "translategemma-4",
+      "qwen-2.5-0.5b",
+      "qwen-3-0.6b",
+      "gemma-3-1b-it",
+    ])
+    expect(runtimeModel.options[0]?.textContent).toBe(
+      "TranslateGemma 4B (translategemma-4, adapter translategemma)",
+    )
     expect(document.getElementById("status-requested-device")?.textContent).toBe("Auto")
     expect(document.getElementById("status-requested-model")?.textContent).toBe(
-      "onnx-community/translategemma-text-4b-it-ONNX",
+      "translategemma-4",
     )
     expect(document.getElementById("status-requested-dtype")?.textContent).toBe("Q4")
+    expect(document.getElementById("status-effective-device")?.textContent).toBe("Auto")
+    expect(document.getElementById("status-resolved-device")?.textContent).toBe("WASM")
+    expect(document.getElementById("status-effective-dtype")?.textContent).toBe("Q4")
+    expect(document.getElementById("status-resolved-model")?.textContent).toBe(
+      "onnx-community/translategemma-text-4b-it-ONNX",
+    )
+    expect(document.getElementById("status-adapter")?.textContent).toBe("translategemma")
+    expect(document.getElementById("status-runtime")?.textContent).toBe(
+      "device requested Auto -> effective Auto -> resolved WASM / model translategemma-4 -> onnx-community/translategemma-text-4b-it-ONNX / adapter translategemma / dtype Q4",
+    )
   })
 
-  it("canonicalizes unsupported runtime params before booting the demo core", async () => {
+  it("canonicalizes legacy runtime params before booting the demo core", async () => {
     window.history.replaceState(
       null,
       "",
-      "/?foo=bar&device=webgpu&modelId=onnx-community/gemma-3-270m-it-ONNX&dtype=q4",
+      "/?foo=bar&device=wasm&modelId=onnx-community/Qwen3-0.6B-ONNX&dtype=fp32&autoload=1",
     )
 
     await import("./main.js")
 
     expect(mockCreateBabulfish).toHaveBeenCalledWith({
       engine: {
-        device: "wasm",
-        modelId: "onnx-community/gemma-3-270m-it-ONNX",
-        dtype: "fp32",
+        model: "qwen-3-0.6b",
+        dtype: "q4f16",
+        device: "webgpu",
       },
       dom: expect.any(Object),
     })
-    expect(window.location.search).toBe(
-      "?foo=bar&device=wasm&modelId=onnx-community%2Fgemma-3-270m-it-ONNX&dtype=fp32",
+    expect(window.location.search).toBe("?foo=bar&model=qwen-3-0.6b&autoload=1")
+    expect(createdCores[0]?.loadModel).toHaveBeenCalledTimes(1)
+    expect(document.getElementById("runtime-autoload")).toHaveProperty("checked", true)
+    expect(document.getElementById("runtime-message")?.textContent).toContain(
+      "only verified for WebGPU",
     )
     expect(document.getElementById("runtime-message")?.textContent).toContain(
-      "only verified for WASM",
+      "only verified for Q4F16",
     )
-    expect(document.getElementById("status-requested-device")?.textContent).toBe("WebGPU")
+    expect(document.getElementById("runtime-constraints")?.textContent).toContain(
+      "Adapter: chat.",
+    )
+    expect(document.getElementById("status-requested-device")?.textContent).toBe("WASM")
     expect(document.getElementById("status-requested-model")?.textContent).toBe(
-      "onnx-community/gemma-3-270m-it-ONNX",
+      "qwen-3-0.6b",
     )
-    expect(document.getElementById("status-requested-dtype")?.textContent).toBe("Q4")
+    expect(document.getElementById("status-requested-dtype")?.textContent).toBe("FP32")
+    expect(document.getElementById("status-effective-device")?.textContent).toBe("WebGPU")
+    expect(document.getElementById("status-effective-dtype")?.textContent).toBe("Q4F16")
+    expect(document.getElementById("status-resolved-model")?.textContent).toBe(
+      "onnx-community/Qwen3-0.6B-ONNX",
+    )
+    expect(document.getElementById("status-adapter")?.textContent).toBe("chat")
 
     const runtimeDevice = document.getElementById("runtime-device")
     if (!(runtimeDevice instanceof HTMLSelectElement)) {
@@ -150,14 +191,18 @@ describe("demo-vanilla main", () => {
     }))).toEqual([
       {
         value: "auto",
-        label: "Auto (not verified for this preset)",
+        label: "Auto (not verified for this model)",
         disabled: true,
       },
-      { value: "wasm", label: "WASM", disabled: false },
+      {
+        value: "wasm",
+        label: "WASM (not verified for this model)",
+        disabled: true,
+      },
       {
         value: "webgpu",
-        label: "WebGPU (not verified for this preset)",
-        disabled: true,
+        label: "WebGPU",
+        disabled: false,
       },
     ])
 
@@ -171,10 +216,11 @@ describe("demo-vanilla main", () => {
       label: option.textContent,
       disabled: option.disabled,
     }))).toEqual([
-      { value: "q4", label: "Q4 (not verified for this preset)", disabled: true },
-      { value: "q8", label: "Q8 (not verified for this preset)", disabled: true },
-      { value: "fp16", label: "FP16 (not verified for this preset)", disabled: true },
-      { value: "fp32", label: "FP32", disabled: false },
+      { value: "q4", label: "Q4 (not verified for this model)", disabled: true },
+      { value: "q4f16", label: "Q4F16", disabled: false },
+      { value: "q8", label: "Q8 (not verified for this model)", disabled: true },
+      { value: "fp16", label: "FP16 (not verified for this model)", disabled: true },
+      { value: "fp32", label: "FP32 (not verified for this model)", disabled: true },
     ])
   })
 
@@ -188,7 +234,7 @@ describe("demo-vanilla main", () => {
       throw new Error("Expected #runtime-model select")
     }
 
-    runtimeModel.value = "onnx-community/gemma-3-270m-it-ONNX"
+    runtimeModel.value = "qwen-3-0.6b"
     runtimeModel.dispatchEvent(new Event("change", { bubbles: true }))
 
     expect(mockCreateBabulfish).toHaveBeenCalledTimes(2)
@@ -197,14 +243,19 @@ describe("demo-vanilla main", () => {
     expect(createdCores[0]?.dispose).toHaveBeenCalledTimes(1)
     expect(mockCreateBabulfish.mock.calls[1]?.[0]).toEqual({
       engine: {
-        device: "wasm",
-        modelId: "onnx-community/gemma-3-270m-it-ONNX",
-        dtype: "fp32",
+        model: "qwen-3-0.6b",
+        dtype: "q4f16",
+        device: "webgpu",
       },
       dom: expect.any(Object),
     })
-    expect(window.location.search).toBe(
-      "?device=wasm&modelId=onnx-community%2Fgemma-3-270m-it-ONNX&dtype=fp32",
+    expect(window.location.search).toBe("?model=qwen-3-0.6b")
+    expect(document.getElementById("status-requested-model")?.textContent).toBe(
+      "qwen-3-0.6b",
     )
+    expect(document.getElementById("status-resolved-model")?.textContent).toBe(
+      "onnx-community/Qwen3-0.6B-ONNX",
+    )
+    expect(document.getElementById("status-adapter")?.textContent).toBe("chat")
   })
 })

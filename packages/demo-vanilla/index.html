@@ -22,7 +22,7 @@
       <section class="runtime-controls surface-card" aria-labelledby="runtime-controls-title">
         <div class="runtime-header">
           <p id="runtime-controls-title" class="panel-label">Runtime Selection</p>
-          <h2 class="runtime-title">Choose the exact runtime preference config.</h2>
+          <h2 class="runtime-title">Choose the model spec and runtime preferences.</h2>
         </div>
 
         <div class="runtime-field-grid">
@@ -31,7 +31,7 @@
             <select id="runtime-device"></select>
           </label>
           <label class="runtime-field runtime-field-model">
-            <span>Model</span>
+            <span>Model spec</span>
             <select id="runtime-model"></select>
           </label>
           <label class="runtime-field runtime-field-dtype">
@@ -47,14 +47,17 @@
           </label>
 
           <div class="runtime-summary" aria-live="polite">
-            <p id="runtime-preset" class="runtime-preset">TranslateGemma 4B</p>
+            <p id="runtime-preset" class="runtime-preset">
+              TranslateGemma 4B (translategemma-4)
+            </p>
             <p id="runtime-message" class="runtime-message">
               Runtime changes remount the demo core, clear the current translation, and
-              may reuse an already-loaded matching runtime.
+              may reuse an already-loaded matching model spec, adapter, and dtype.
             </p>
             <p id="runtime-constraints" class="runtime-constraints">
-              Allowed quantization: Q4 / Q8 / FP16 / FP32. Allowed devices: Auto / WASM /
-              WebGPU. Load mode: Manual load.
+              Adapter: translategemma. Resolved model:
+              onnx-community/translategemma-text-4b-it-ONNX. Allowed quantization: Q4 /
+              Q8 / FP16 / FP32. Allowed devices: Auto / WASM / WebGPU.
             </p>
           </div>
         </div>
@@ -123,16 +126,36 @@
           <p class="status-group-label">Selection</p>
           <dl class="status-grid">
             <div class="status-row status-row-card">
-              <dt>Device</dt>
+              <dt>Requested device</dt>
               <dd id="status-requested-device">Auto</dd>
             </div>
             <div class="status-row status-row-card">
-              <dt>Quantization</dt>
+              <dt>Effective device</dt>
+              <dd id="status-effective-device">Auto</dd>
+            </div>
+            <div class="status-row status-row-card">
+              <dt>Resolved device</dt>
+              <dd id="status-resolved-device">Pending</dd>
+            </div>
+            <div class="status-row status-row-card">
+              <dt>Requested quantization</dt>
               <dd id="status-requested-dtype">Q4</dd>
             </div>
+            <div class="status-row status-row-card">
+              <dt>Effective quantization</dt>
+              <dd id="status-effective-dtype">Q4</dd>
+            </div>
             <div class="status-row status-row-card status-row-wide">
-              <dt>Model</dt>
-              <dd id="status-requested-model">onnx-community/translategemma-text-4b-it-ONNX</dd>
+              <dt>Model spec</dt>
+              <dd id="status-requested-model">translategemma-4</dd>
+            </div>
+            <div class="status-row status-row-card status-row-wide">
+              <dt>Resolved model</dt>
+              <dd id="status-resolved-model">onnx-community/translategemma-text-4b-it-ONNX</dd>
+            </div>
+            <div class="status-row status-row-card">
+              <dt>Adapter</dt>
+              <dd id="status-adapter">translategemma</dd>
             </div>
           </dl>
         </div>
@@ -154,7 +177,11 @@
             </div>
             <div class="status-row">
               <dt>Resolved runtime</dt>
-              <dd id="status-runtime">Pending / default / Q4</dd>
+              <dd id="status-runtime">
+                device requested Auto -&gt; effective Auto -&gt; resolved Pending / model
+                translategemma-4 -&gt; onnx-community/translategemma-text-4b-it-ONNX /
+                adapter translategemma / dtype Q4
+              </dd>
             </div>
             <div class="status-row">
               <dt>Model status</dt>
