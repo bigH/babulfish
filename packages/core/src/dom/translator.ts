@@ -1,18 +1,36 @@
 import type { TaggedTextNode } from "./walker.js"
 import type { PreserveMatcher } from "./preserve.js"
+import type { TranslationOptions } from "../engine/translation-adapter.js"
+import {
+  maskPreservedSubstrings,
+  normalizedPreservedSubstrings,
+  restorePreservedSubstrings,
+} from "../engine/adapters/preservation.js"
 import { collectTranslatableAttrs } from "./attrs.js"
 import { buildVisibleClaims } from "./claims.js"
 import { buildSkipTags, collectTextNodes, defaultShouldSkip, forEachTextNode } from "./walker.js"
 import { applyTranslation, buildBatches, DEFAULT_BATCH_CHAR_LIMIT } from "./batcher.js"
 import { assignPhase, compareVisibleWork, findOwningRootIndex, type PhaseWork, type VisibleWork } from "./phases.js"
-import { insertPlaceholders, restorePlaceholders } from "./preserve.js"
+import { collectPreservedSubstrings } from "./preserve.js"
 import { collectLinkedGroups, translateLinked } from "./linked.js"
 import { translateRichElement } from "./rich-text.js"
 import {
+  collectStructuredTokens,
   extractStructuredTextValues as extractStructuredCommitPlan,
   resolveStructuredUnits as resolveStructuredTextUnits,
   type StructuredTextUnit,
 } from "./structured-text.js"
+
+type DOMTranslationIntent = Pick<
+  TranslationOptions,
+  "content_type" | "substrings_to_preserve" | "preservation_approach"
+>
+
+type DOMTranslate = (
+  text: string,
+  targetLang: string,
+  options?: DOMTranslationIntent,
+) => Promise<string>
 
 export type RichTextConfig = {
   readonly selector: string
@@ -33,7 +51,9 @@ export type DOMOutputTransformContext = {
 }
 
 export type DOMTranslatorConfig = {
-  readonly translate: (text: string, targetLang: string) => Promise<string>
+  readonly translate: DOMTranslate
+  /** Pass DOM translation intent as the third translate argument. Defaults to legacy placeholder masking. */
+  readonly passTranslationIntent?: boolean
   readonly roots: string[]
   /** Scoping root for DOM queries. Defaults to `document` when omitted. */
   readonly root?: ParentNode | Document
@@ -95,6 +115,7 @@ export function createDOMTranslator(config: DOMTranslatorConfig): DOMTranslator 
   const charLimit = config.batchCharLimit ?? DEFAULT_BATCH_CHAR_LIMIT
   const matchers = config.preserve?.matchers ?? []
   const attrNames = config.translateAttributes ?? ["title"]
+  const canPassTranslationIntent = config.passTranslationIntent === true
 
   const shouldSkip = config.shouldSkip
     ? (text: string) => config.shouldSkip!(text, defaultShouldSkip)
@@ -104,11 +125,54 @@ export function createDOMTranslator(config: DOMTranslatorConfig): DOMTranslator 
     return config.outputTransform ? config.outputTransform(translated, context) : translated
   }
 
-  async function translatePreservingMatches(source: string, targetLang: string, signal: AbortSignal): Promise<string | null> {
-    const { masked, slots } = insertPlaceholders(source, matchers)
+  function buildTranslationIntent(
+    source: string,
+    contentType: TranslationOptions["content_type"],
+    structuralSubstrings: readonly string[] = [],
+  ): {
+    readonly options: DOMTranslationIntent
+    readonly matcherSubstrings: readonly string[]
+  } {
+    const matcherSubstrings =
+      matchers.length > 0 ? collectPreservedSubstrings(source, matchers) : []
+    const substrings = normalizedPreservedSubstrings([
+      ...matcherSubstrings,
+      ...structuralSubstrings,
+    ])
+    return {
+      options: {
+        content_type: contentType,
+        ...(substrings.length > 0 ? { substrings_to_preserve: substrings } : {}),
+      },
+      matcherSubstrings,
+    }
+  }
+
+  async function translateWithIntent(
+    source: string,
+    targetLang: string,
+    signal: AbortSignal,
+    intent: ReturnType<typeof buildTranslationIntent>,
+  ): Promise<string | null> {
+    if (canPassTranslationIntent) {
+      const translated = await config.translate(source, targetLang, intent.options)
+      if (signal.aborted) return null
+      return translated
+    }
+
+    const { masked, slots } = maskPreservedSubstrings(source, intent.matcherSubstrings)
     const translated = await config.translate(masked, targetLang)
     if (signal.aborted) return null
-    return restorePlaceholders(translated, slots)
+    return restorePreservedSubstrings(translated, slots)
+  }
+
+  async function translatePreservingMatches(source: string, targetLang: string, signal: AbortSignal): Promise<string | null> {
+    return translateWithIntent(
+      source,
+      targetLang,
+      signal,
+      buildTranslationIntent(source, "markdown"),
+    )
   }
 
   const skipSelectors: string[] = []
@@ -142,7 +206,16 @@ export function createDOMTranslator(config: DOMTranslatorConfig): DOMTranslator 
   async function translateStructuredUnit(unit: StructuredTextUnit, targetLang: string, signal: AbortSignal): Promise<void> {
     config.hooks?.onTranslateStart?.(unit.root)
 
-    const translated = await translatePreservingMatches(unit.serialized, targetLang, signal)
+    const translated = await translateWithIntent(
+      unit.serialized,
+      targetLang,
+      signal,
+      buildTranslationIntent(
+        unit.serialized,
+        "structured",
+        collectStructuredTokens(unit.serialized) ?? [],
+      ),
+    )
     if (translated == null) return
     const transformed = transformDOMOutput(translated, { kind: "structuredText", targetLang, source: unit.source })
 
@@ -157,7 +230,12 @@ export function createDOMTranslator(config: DOMTranslatorConfig): DOMTranslator 
     }
 
     const fallbackSource = buildStructuredFallbackSource(unit)
-    const fallbackTranslated = await translatePreservingMatches(fallbackSource, targetLang, signal)
+    const fallbackTranslated = await translateWithIntent(
+      fallbackSource,
+      targetLang,
+      signal,
+      buildTranslationIntent(fallbackSource, "raw"),
+    )
     if (fallbackTranslated == null) return
     const transformedFallback = transformDOMOutput(fallbackTranslated, { kind: "structuredText", targetLang, source: unit.source })
 

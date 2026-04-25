@@ -50,7 +50,7 @@ export type BabulfishEngineConfig = RuntimePreferenceConfig
 
 export type BabulfishConfig = {
   readonly engine?: BabulfishEngineConfig
-  readonly dom?: Omit<DOMTranslatorConfig, "translate" | "root"> & {
+  readonly dom?: Omit<DOMTranslatorConfig, "translate" | "root" | "passTranslationIntent"> & {
     readonly root?: ParentNode | Document
   }
   readonly languages?: readonly Language[]
@@ -450,10 +450,20 @@ export function createBabulfish(config?: BabulfishConfig): BabulfishCore {
   function buildDomTranslator(rootOverride?: ParentNode | Document): DOMTranslator | null {
     if (!config?.dom) return null
     const { root: _configRoot, ...domConfig } = config.dom
+    const passTranslationIntent = resolvedConfig.requestedModel.kind !== "custom"
+    const translate = passTranslationIntent
+      ? (
+          text: string,
+          lang: string,
+          options: Parameters<DOMTranslatorConfig["translate"]>[2],
+        ) => requireLoadedEngine().translate(text, lang, options)
+      : (text: string, lang: string) => requireLoadedEngine().translate(text, lang)
+
     return createDOMTranslator({
       ...domConfig,
       root: rootOverride ?? defaultRoot,
-      translate: (text, lang) => requireLoadedEngine().translate(text, lang),
+      translate,
+      passTranslationIntent,
     })
   }
 

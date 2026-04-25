@@ -160,7 +160,7 @@ Binding authors can derive narrow compat booleans from `enablement` with `create
 ### Other current DOM behavior
 
 - `dom.roots` selects the translated descendants inside `document` or an explicit `dom.root`.
-- `dom.preserve.matchers` protects exact strings before translation and restores them after the DOM write.
+- `dom.preserve.matchers` declares exact strings that should survive translation. Built-in model paths receive that as preservation intent; direct `createDOMTranslator` callbacks use legacy placeholder masking unless `passTranslationIntent: true` is set.
 - Default skip rules already avoid tags such as `code` and `pre`. `dom.shouldSkip(text, defaultSkip)` lets you extend that rule without replacing it.
 - `restore()` restores plain text, linked groups, authored `richText`, structured roots, translated attributes, and root direction back to the original DOM state.
 - RTL languages set `dir="rtl"` on translated roots, non-RTL languages set `dir="ltr"`, and `restore()` clears that direction state.
@@ -172,7 +172,7 @@ Use `dom.structuredText = { selector }` when some live inline-rich DOM should tr
 - Selector resolution is descendants-only via `root.querySelectorAll(selector)`. If you want a whole region claimed as one unit, wrap it in a descendant element and target that wrapper.
 - Supported v1 shapes: eligible text nodes, `br`, `a`, `strong`/`b`, `em`/`i`, `u`, `s`/`del`, `mark`, `code`, and inert `span` wrappers.
 - Supported behavior: text translates as one unit, `br` round-trips as a logical newline, links and inline emphasis survive exact rehydration, and `code` stays opaque so its descendant text is not translated.
-- `dom.preserve.matchers` still apply to structured source extraction, just as they do for authored `richText`.
+- `dom.preserve.matchers` still contribute preservation intent during structured source extraction, just as they do for authored `richText`.
 - Unsupported or ineligible candidates are not claimed as structured text. The original DOM stays untouched and the subtree falls back to the normal plain-text plus translated-attribute collection path.
 - If a claimed structured root later fails exact rehydration, babulfish restores the original subtree first and then runs local structured fallback for that same root. That fallback preserves the DOM structure while falling back to text-node writes, so inline formatting meaning may be reduced.
 - Attributes inside a structured root still run later through `translateAttributes`; `structuredText` only changes how visible text is grouped.

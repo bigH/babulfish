@@ -8,12 +8,10 @@ import {
   type ModelDType,
 } from "./config.js"
 import type { DevicePreference } from "./detect.js"
-import {
-  gemma3ChatAdapter,
-  qwen25ChatAdapter,
-  qwen3ChatAdapter,
-} from "./adapters/chat.js"
-import { translateGemmaAdapter } from "./adapters/translategemma.js"
+import { gemma3ChatAdapter } from "./adapters/models/gemma-3-1b-it.js"
+import { qwen25ChatAdapter } from "./adapters/models/qwen-2-5-0-5b.js"
+import { qwen3ChatAdapter } from "./adapters/models/qwen-3-0-6b.js"
+import { translateGemmaAdapter } from "./adapters/models/translategemma-4.js"
 import type {
   BuiltinTranslationModelId,
   ResolvedTranslationModel,

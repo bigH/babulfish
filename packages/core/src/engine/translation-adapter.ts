@@ -15,7 +15,7 @@ export type TranslationOptions = {
   readonly max_new_tokens: number
   readonly do_sample?: false
   readonly return_full_text?: false
-  readonly content_type?: "raw" | "markdown" | "html"
+  readonly content_type?: "raw" | "markdown" | "html" | "structured"
   readonly substrings_to_preserve?: readonly string[]
   readonly preservation_approach?: "placeholders" | "prompting"
 }

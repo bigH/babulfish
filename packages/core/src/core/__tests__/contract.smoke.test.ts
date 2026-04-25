@@ -11,6 +11,8 @@ vi.mock("../../engine/pipeline-loader.js", () => ({
 import { createBabulfish } from "../babulfish.js"
 import type { Snapshot } from "../store.js"
 import { DEFAULT_LANGUAGES, type Language } from "../languages.js"
+import { renderInlineMarkdownToHtml } from "../../dom/markdown.js"
+import type { TranslationAdapter } from "../../engine/translation-adapter.js"
 import { __resetEngineForTests, getEngineIdentity } from "../../engine/testing/index.js"
 import { loadPipeline } from "../../engine/pipeline-loader.js"
 import { wrapGeneratorAsPipeline } from "../../testing/conformance-helpers.js"
@@ -22,6 +24,7 @@ import {
 
 const mockLoadPipeline = vi.mocked(loadPipeline)
 const APP_FIXTURE = '<div id="app"><p>Hello</p></div>'
+const PRESERVE_TOKEN_PATTERN = /\u27EAbf-preserve:[^\u27EB]+\u27EB/gu
 const originalGlobals = captureGlobalDescriptors()
 
 // ---------------------------------------------------------------------------
@@ -58,6 +61,12 @@ function createAppRoot() {
   const root = document.createElement("div")
   root.innerHTML = APP_FIXTURE
   return root
+}
+
+function expectSinglePreserveToken(text: string): string {
+  const matches = [...text.matchAll(PRESERVE_TOKEN_PATTERN)]
+  expect(matches).toHaveLength(1)
+  return matches[0]![0]
 }
 
 async function expectAbortListenerReleased(
@@ -394,6 +403,171 @@ describe("4.3 — cancellation", () => {
       () => core.translateTo("es", { signal: controller.signal }),
     )
   })
+
+  it("translates authored rich text through default TranslateGemma without rejecting markdown intent", async () => {
+    const generate = vi.fn(async (input) => {
+      const first = Array.isArray(input)
+        ? input[0] as { readonly content?: readonly [{ readonly text?: unknown }] }
+        : null
+      const text = first?.content?.[0]?.text
+      expect(typeof text).toBe("string")
+      const token = expectSinglePreserveToken(text as string)
+      expect(text).toBe(`Working at **${token}**`)
+      return [{
+        generated_text: createMockResult(
+          text as string,
+          `Trabajando en **${token}**`,
+        ),
+      }]
+    })
+    setupPipelineMock(generate)
+
+    const root = document.createElement("div")
+    root.innerHTML =
+      '<main><span data-md="Working at **Chime**">Working at <strong>Chime</strong></span></main>'
+
+    const core = createBabulfish({
+      dom: {
+        root,
+        roots: ["main"],
+        preserve: { matchers: ["Chime"] },
+        richText: {
+          selector: "[data-md]",
+          sourceAttribute: "data-md",
+          render: renderInlineMarkdownToHtml,
+        },
+      },
+    })
+
+    await core.loadModel()
+    await core.translateTo("es")
+
+    expect(root.querySelector("span")?.innerHTML).toBe(
+      "Trabajando en <strong>Chime</strong>",
+    )
+  })
+
+  it("passes DOM richText intent through built-in chat model paths", async () => {
+    const generate = vi.fn(async (input) => {
+      expect(Array.isArray(input)).toBe(true)
+      const messages = input as readonly [
+        { readonly role: "system"; readonly content: string },
+        { readonly role: "user"; readonly content: string },
+      ]
+
+      expect(messages[0].content).toContain("Preserve Markdown formatting")
+      expect(messages[0].content).toContain(
+        "Preserve these exact substrings unchanged: [\"Chime\"].",
+      )
+      expect(messages[1].content).toBe("Working at **Chime**")
+      expect(messages[1].content).not.toMatch(PRESERVE_TOKEN_PATTERN)
+
+      return [{
+        generated_text: [
+          { role: "assistant", content: "Trabajando en **Chime**" },
+        ],
+      }]
+    })
+    setupPipelineMock(generate)
+
+    const root = document.createElement("div")
+    root.innerHTML =
+      '<main><span data-md="Working at **Chime**">Working at <strong>Chime</strong></span></main>'
+
+    const core = createBabulfish({
+      engine: {
+        model: "qwen-3-0.6b",
+        device: "wasm",
+      },
+      dom: {
+        root,
+        roots: ["main"],
+        preserve: { matchers: ["Chime"] },
+        richText: {
+          selector: "[data-md]",
+          sourceAttribute: "data-md",
+          render: renderInlineMarkdownToHtml,
+        },
+      },
+    })
+
+    await core.loadModel()
+    await core.translateTo("es")
+
+    expect(root.querySelector("span")?.innerHTML).toBe(
+      "Trabajando en <strong>Chime</strong>",
+    )
+  })
+
+  it("keeps custom model DOM paths on legacy placeholder masking", async () => {
+    const adapter: TranslationAdapter<string, unknown, { readonly max_new_tokens: number }> = {
+      id: "custom-adapter",
+      label: "Custom adapter",
+      validateOptions: () => ({ warnings: [], errors: [] }),
+      buildInvocation: vi.fn((request, options) => {
+        expect(options).toEqual({ max_new_tokens: 9 })
+        expectSinglePreserveToken(request.text)
+        expect(request.text).not.toContain("Chime")
+        return {
+          modelInput: request.text,
+          modelOptions: { max_new_tokens: options.max_new_tokens },
+        }
+      }),
+      extractText: (_request, _options, output) => {
+        const first = Array.isArray(output)
+          ? output[0] as { readonly generated_text?: ReturnType<typeof createMockResult> } | undefined
+          : null
+        return { text: first?.generated_text?.at(-1)?.content ?? "" }
+      },
+    }
+    const generate = vi.fn(async (input) => {
+      const token = expectSinglePreserveToken(String(input))
+      return [{
+        generated_text: createMockResult(
+          String(input),
+          `Trabajando en **${token}**`,
+        ),
+      }]
+    })
+    setupPipelineMock(generate)
+
+    const root = document.createElement("div")
+    root.innerHTML =
+      '<main><span data-md="Working at **Chime**">Working at <strong>Chime</strong></span></main>'
+
+    const core = createBabulfish({
+      engine: {
+        model: {
+          id: "custom-model",
+          label: "Custom model",
+          modelId: "acme/custom",
+          adapter,
+          defaults: {
+            device: "wasm",
+            maxNewTokens: 9,
+          },
+        },
+      },
+      dom: {
+        root,
+        roots: ["main"],
+        preserve: { matchers: ["Chime"] },
+        richText: {
+          selector: "[data-md]",
+          sourceAttribute: "data-md",
+          render: renderInlineMarkdownToHtml,
+        },
+      },
+    })
+
+    await core.loadModel()
+    await core.translateTo("es")
+
+    expect(root.querySelector("span")?.innerHTML).toBe(
+      "Trabajando en <strong>Chime</strong>",
+    )
+    expect(adapter.buildInvocation).toHaveBeenCalledTimes(1)
+  })
 })
 
 // ---- 4.4 Root lifetime — set-once default + per-call override ------------
@@ -429,6 +603,38 @@ describe("4.4 — root lifetime", () => {
     expect(result).toBe("hola")
     expect(outputTransform).not.toHaveBeenCalled()
     expect(root.querySelector("p")?.textContent).toBe("Hello")
+  })
+
+  it("translateText ignores dom.preserve and sends raw text to the engine", async () => {
+    const generate = vi.fn(async (input) => {
+      const first = Array.isArray(input)
+        ? input[0] as { readonly content?: readonly [{ readonly text?: unknown }] }
+        : null
+      const text = first?.content?.[0]?.text
+
+      expect(text).toBe("Working at Chime")
+      expect(String(text)).not.toMatch(PRESERVE_TOKEN_PATTERN)
+
+      return [{ generated_text: createMockResult(String(text), "Trabajando en Chime") }]
+    })
+    setupPipelineMock(generate)
+
+    const root = document.createElement("div")
+    root.innerHTML = '<div id="app"><p>Working at Chime</p></div>'
+
+    const core = createBabulfish({
+      dom: {
+        root,
+        roots: ["#app"],
+        preserve: { matchers: ["Chime"] },
+      },
+    })
+
+    await core.loadModel()
+
+    await expect(core.translateText("Working at Chime", "es"))
+      .resolves.toBe("Trabajando en Chime")
+    expect(root.querySelector("p")?.textContent).toBe("Working at Chime")
   })
 
   it("restore and translateTo work without dom config", async () => {

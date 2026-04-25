@@ -33,7 +33,14 @@ export type TranslatorEvents = {
 
 export type Translator = {
   load(): Promise<void>
-  translate(text: string, targetLang: string): Promise<string>
+  translate(
+    text: string,
+    targetLang: string,
+    options?: Pick<
+      TranslationOptions,
+      "content_type" | "substrings_to_preserve" | "preservation_approach"
+    >,
+  ): Promise<string>
   dispose(): void
   on<K extends keyof TranslatorEvents>(
     event: K,
@@ -180,7 +187,14 @@ export function createEngine(config?: EngineConfig): Translator {
     }
   }
 
-  async function translate(text: string, targetLang: string): Promise<string> {
+  async function translate(
+    text: string,
+    targetLang: string,
+    translationOptions: Pick<
+      TranslationOptions,
+      "content_type" | "substrings_to_preserve" | "preservation_approach"
+    > = {},
+  ): Promise<string> {
     if (!pipelinePromise) {
       throw new Error(
         "Translation model not loaded. Call load() first.",
@@ -194,7 +208,10 @@ export function createEngine(config?: EngineConfig): Translator {
       source: { code: sourceLanguage },
       target: { code: targetLang },
     }
-    const options: TranslationOptions = { max_new_tokens: maxNewTokens }
+    const options: TranslationOptions = {
+      ...translationOptions,
+      max_new_tokens: maxNewTokens,
+    }
     const { modelInput, modelOptions } = adapter.buildInvocation(request, options)
 
     const generate = generator as unknown as (

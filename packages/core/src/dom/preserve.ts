@@ -1,31 +1,18 @@
-// Placeholder substitution for preserved strings during translation.
-// Matchers identify strings that must survive translation unchanged
-// (e.g. brand names). They are replaced with internal placeholders
-// before translation and restored afterward.
+// Preserve matcher helpers for DOM translation.
+// Intent-aware model paths receive matched substrings declaratively and let
+// adapters choose the preservation strategy. Legacy direct DOM callbacks use
+// these placeholders before translation and restore them afterward.
+
+import {
+  createPreservationPlaceholderKey,
+  isPreservationPlaceholder,
+  preservationPlaceholder,
+  restorePreservedSubstrings,
+  type PreservationSlot,
+} from "../engine/adapters/preservation.js"
 
 export type PreserveMatcher = string | RegExp | ((text: string) => string[])
-export type PreserveSlot = {
-  readonly token: string
-  readonly value: string
-}
-
-const PLACEHOLDER_PREFIX = "\u27EAbf-preserve:"
-const PLACEHOLDER_SUFFIX = "\u27EB"
-
-const placeholder = (key: string, index: number): string =>
-  `${PLACEHOLDER_PREFIX}${key}:${index}${PLACEHOLDER_SUFFIX}`
-
-function createPlaceholderKey(source: string): string {
-  let nextKey = 0
-  while (source.includes(`${PLACEHOLDER_PREFIX}${nextKey}:`)) {
-    nextKey++
-  }
-  return String(nextKey)
-}
-
-function isPlaceholderToken(value: string): boolean {
-  return value.startsWith(PLACEHOLDER_PREFIX) && value.endsWith(PLACEHOLDER_SUFFIX)
-}
+export type PreserveSlot = PreservationSlot
 
 /** Collect all strings matched by a single matcher. */
 function matchAll(matcher: PreserveMatcher, text: string): string[] {
@@ -46,7 +33,7 @@ function matchAll(matcher: PreserveMatcher, text: string): string[] {
 function collectUniqueNonEmptyMatches(matches: Iterable<string>): string[] {
   const values = new Set<string>()
   for (const match of matches) {
-    if (match.length > 0 && !isPlaceholderToken(match)) values.add(match)
+    if (match.length > 0 && !isPreservationPlaceholder(match)) values.add(match)
   }
   return [...values]
 }
@@ -56,13 +43,13 @@ export function insertPlaceholders(
   matchers: readonly PreserveMatcher[],
 ): { masked: string; slots: PreserveSlot[] } {
   const slots: PreserveSlot[] = []
-  const placeholderKey = createPlaceholderKey(source)
+  const placeholderKey = createPreservationPlaceholderKey(source)
   let masked = source
 
   for (const matcher of matchers) {
     for (const word of matchAll(matcher, masked)) {
       const slot = {
-        token: placeholder(placeholderKey, slots.length),
+        token: preservationPlaceholder(placeholderKey, slots.length),
         value: word,
       }
       const nextMasked = masked.replaceAll(word, slot.token)
@@ -75,13 +62,16 @@ export function insertPlaceholders(
   return { masked, slots }
 }
 
+export function collectPreservedSubstrings(
+  source: string,
+  matchers: readonly PreserveMatcher[],
+): readonly string[] {
+  return insertPlaceholders(source, matchers).slots.map(({ value }) => value)
+}
+
 export function restorePlaceholders(
   translated: string,
   slots: readonly PreserveSlot[],
 ): string {
-  let result = translated
-  for (const slot of slots) {
-    result = result.replaceAll(slot.token, slot.value)
-  }
-  return result
+  return restorePreservedSubstrings(translated, slots)
 }

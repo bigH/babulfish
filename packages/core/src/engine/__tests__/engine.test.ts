@@ -31,6 +31,7 @@ import {
 
 const mockLoadPipeline = vi.mocked(loadPipeline)
 const originalGlobals = captureGlobalDescriptors()
+const PRESERVE_TOKEN_PATTERN = /\u27EAbf-preserve:[^\u27EB]+\u27EB/gu
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -56,6 +57,12 @@ function createDeferred<T>() {
     reject = rej
   })
   return { promise, resolve, reject }
+}
+
+function expectSinglePreserveToken(text: string): string {
+  const matches = [...text.matchAll(PRESERVE_TOKEN_PATTERN)]
+  expect(matches).toHaveLength(1)
+  return matches[0]![0]
 }
 
 beforeEach(() => {
@@ -354,6 +361,51 @@ describe("translate", () => {
       expect.anything(),
       { max_new_tokens: 128 },
     )
+  })
+
+  it("threads declarative preservation options through built-in adapters", async () => {
+    mockGenerate.mockImplementation(async (input) => {
+      const first = Array.isArray(input)
+        ? input[0] as { readonly content?: readonly [{ readonly text?: unknown }] }
+        : null
+      const text = first?.content?.[0]?.text
+      expect(typeof text).toBe("string")
+      const token = expectSinglePreserveToken(text as string)
+      expect(text).not.toContain("Chime")
+      return [{ generated_text: [{ role: "assistant", content: `Hola ${token}` }] }]
+    })
+
+    const engine = createEngine({ sourceLanguage: "en" })
+    await engine.load()
+
+    await expect(
+      engine.translate("hello Chime", "es", {
+        substrings_to_preserve: ["Chime"],
+      }),
+    ).resolves.toBe("Hola Chime")
+  })
+
+  it("lets the default TranslateGemma adapter accept markdown intent as text", async () => {
+    mockGenerate.mockImplementation(async (input) => {
+      const first = Array.isArray(input)
+        ? input[0] as { readonly content?: readonly [{ readonly text?: unknown }] }
+        : null
+      const text = first?.content?.[0]?.text
+      expect(typeof text).toBe("string")
+      const token = expectSinglePreserveToken(text as string)
+      expect(text).toBe(`hello **${token}**`)
+      return [{ generated_text: [{ role: "assistant", content: `hola **${token}**` }] }]
+    })
+
+    const engine = createEngine({ sourceLanguage: "en" })
+    await engine.load()
+
+    await expect(
+      engine.translate("hello **Chime**", "es", {
+        content_type: "markdown",
+        substrings_to_preserve: ["Chime"],
+      }),
+    ).resolves.toBe("hola **Chime**")
   })
 
   it("throws on unexpected model output", async () => {

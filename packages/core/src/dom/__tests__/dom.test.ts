@@ -717,19 +717,21 @@ describe("DOM translator", () => {
   // -----------------------------------------------------------------------
   // 20. Preserve matchers (string)
   // -----------------------------------------------------------------------
-  it("replaces preserved strings with placeholders in rich text", async () => {
+  it("replaces preserved strings with placeholders for legacy two-arg rich-text callbacks", async () => {
     const span = setUpRichTextMain(
       "Working at **Chime** on infrastructure",
       "Working at <strong>Chime</strong> on infrastructure",
     )
 
-    translate.mockImplementation(async (text: string) => {
+    const legacyTranslate = vi.fn(async (text: string, _lang: string) => {
       const token = expectSinglePreserveToken(text)
       expect(text).not.toContain("Chime")
       return `Trabajando en **${token}** en infraestructura`
     })
 
-    const t = makeTranslator(translate, {
+    expect(legacyTranslate.length).toBe(2)
+
+    const t = makeTranslator(legacyTranslate, {
       preserve: { matchers: ["Chime"] },
       richText: RICH_TEXT_CONFIG,
     })
@@ -737,6 +739,65 @@ describe("DOM translator", () => {
 
     expect(span.textContent).toContain("Chime")
     expect(span.innerHTML).toContain("<strong>Chime</strong>")
+  })
+
+  it("passes rich-text preservation intent to opt-in callbacks with a defaulted third parameter", async () => {
+    const span = setUpRichTextMain(
+      "Working at **Chime** on infrastructure",
+      "Working at <strong>Chime</strong> on infrastructure",
+    )
+    const calls: Array<{
+      readonly text: string
+      readonly options: Parameters<DOMTranslatorConfig["translate"]>[2]
+    }> = []
+    const adapterAwareTranslate: DOMTranslatorConfig["translate"] = async (
+      text: string,
+      _lang: string,
+      options: Parameters<DOMTranslatorConfig["translate"]>[2] = {},
+    ) => {
+      calls.push({ text, options })
+      return "Trabajando en **Chime** en infraestructura"
+    }
+
+    expect(adapterAwareTranslate.length).toBe(2)
+
+    const t = createDOMTranslator({
+      translate: adapterAwareTranslate,
+      passTranslationIntent: true,
+      roots: ["main"],
+      preserve: { matchers: ["Chime"] },
+      richText: RICH_TEXT_CONFIG,
+    })
+    await t.translate("es-ES")
+
+    expect(calls).toEqual([
+      {
+        text: "Working at **Chime** on infrastructure",
+        options: {
+          content_type: "markdown",
+          substrings_to_preserve: ["Chime"],
+        },
+      },
+    ])
+    expect(span.innerHTML).toBe("Trabajando en <strong>Chime</strong> en infraestructura")
+  })
+
+  it("keeps preserve matchers scoped away from plain text batches", async () => {
+    const main = setUpMain([
+      { tag: "p", text: "Working at Chime" },
+    ])
+
+    translate.mockImplementation(async (text: string) => {
+      expect(text).toBe("Working at Chime")
+      return "Trabajando en banco"
+    })
+
+    const t = makeTranslator(translate, {
+      preserve: { matchers: ["Chime"] },
+    })
+    await t.translate("es-ES")
+
+    expect(main.textContent).toBe("Trabajando en banco")
   })
 
   // -----------------------------------------------------------------------
@@ -922,6 +983,67 @@ describe("DOM translator", () => {
     expect(translate).toHaveBeenCalledTimes(2)
     expect(rich.innerHTML).toBe("hola <strong>mundo</strong>")
     expect(structured.innerHTML).toBe("Otro <em>frase</em>")
+  })
+
+  it("keeps preserve intent working when richText and structuredText run together", async () => {
+    const rich = setUpRichSpan(
+      "Working at **Chime**",
+      "Working at <strong>Chime</strong>",
+    )
+    const structured = document.createElement("p")
+    structured.className = "structured"
+    structured.innerHTML =
+      'Version <strong>v2.1.0</strong> ships today' // eslint-disable-line no-unsanitized/property -- test-only static fixture
+    setUpMain([rich, structured])
+
+    const calls: Array<{
+      readonly text: string
+      readonly options: Parameters<DOMTranslatorConfig["translate"]>[2]
+    }> = []
+    const adapterAwareTranslate = async (
+      text: string,
+      _lang: string,
+      options?: Parameters<DOMTranslatorConfig["translate"]>[2],
+    ) => {
+      calls.push({ text, options })
+
+      if (options?.content_type === "markdown") {
+        expect(options.substrings_to_preserve).toEqual(["Chime"])
+        return "Trabajando en **Chime**"
+      }
+
+      if (options?.content_type === "structured") {
+        expect(options.substrings_to_preserve).toContain("v2.1.0")
+        expect(
+          options.substrings_to_preserve?.some((substring) =>
+            substring.startsWith(TEST_STRUCTURED_TOKEN_PREFIX)),
+        ).toBe(true)
+        return replaceAllVisibleText(text, {
+          "ships today": "ya disponible",
+        })
+      }
+
+      throw new Error(`Unexpected translation intent: ${String(options?.content_type)}`)
+    }
+
+    const t = createDOMTranslator({
+      translate: adapterAwareTranslate,
+      passTranslationIntent: true,
+      roots: ["main"],
+      preserve: { matchers: ["Chime", /v\d+\.\d+\.\d+/] },
+      richText: RICH_TEXT_CONFIG,
+      structuredText: STRUCTURED_TEXT_CONFIG,
+    })
+    await t.translate("es-ES")
+
+    expect(calls.map(({ options }) => options?.content_type)).toEqual([
+      "markdown",
+      "structured",
+    ])
+    expect(rich.innerHTML).toBe("Trabajando en <strong>Chime</strong>")
+    expect(structured.innerHTML).toBe(
+      "Version <strong>v2.1.0</strong> ya disponible",
+    )
   })
 
   it("dedupes structured candidates found through overlapping translation roots", async () => {
