@@ -1,0 +1,37 @@
+{
+  "split": "dev",
+  "category": "preservation",
+  "sourceLanguage": "en",
+  "targetLanguage": "es",
+  "contentType": "text",
+  "source": {
+    "text": "The Babulfish API v0.9.4 includes a function called translateNode() for dynamic content processing."
+  },
+  "references": [
+    {
+      "quality": "primary",
+      "text": "La API de Babulfish v0.9.4 incluye una función llamada translateNode() para el procesamiento de contenido dinámico.",
+      "notes": "Human-review required before holdout use."
+    }
+  ],
+  "checks": {
+    "sourceShouldChange": true,
+    "expectedPatterns": [
+      "(?i)\\b(función|procesamiento|contenido dinámico)\\b"
+    ],
+    "forbiddenPatterns": [
+      "(?i)<think>",
+      "(?i)</think>",
+      "```",
+      "(?i)^\\s*(translation|answer|reference)\\s*:",
+      "(?i)sourceLanguage",
+      "(?i)targetLanguage",
+      "(?i)system prompt"
+    ],
+    "preservedSubstrings": [
+      "Babulfish",
+      "v0.9.4",
+      "translateNode()"
+    ]
+  }
+}

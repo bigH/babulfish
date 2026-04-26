@@ -1,0 +1,32 @@
+{
+  "split": "holdout",
+  "category": "ui-label",
+  "sourceLanguage": "en",
+  "targetLanguage": "es",
+  "contentType": "text",
+  "source": {
+    "text": "Save changes"
+  },
+  "references": [
+    {
+      "quality": "primary",
+      "text": "Guardar cambios",
+      "notes": "Human-review required before holdout use."
+    }
+  ],
+  "checks": {
+    "sourceShouldChange": true,
+    "expectedPatterns": [
+      "(?i)\\bguardar\\b"
+    ],
+    "forbiddenPatterns": [
+      "(?i)<think>",
+      "(?i)</think>",
+      "```",
+      "(?i)^\\s*(translation|answer|reference)\\s*:",
+      "(?i)sourceLanguage",
+      "(?i)targetLanguage",
+      "(?i)system prompt"
+    ]
+  }
+}

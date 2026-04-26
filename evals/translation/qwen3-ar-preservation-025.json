@@ -1,0 +1,37 @@
+{
+  "split": "dev",
+  "category": "preservation",
+  "sourceLanguage": "en",
+  "targetLanguage": "ar",
+  "contentType": "text",
+  "source": {
+    "text": "To start the project, run the command 'pnpm build' and ensure the package '@babulfish/styles' is installed. Welcome to the Babulfish development environment!"
+  },
+  "references": [
+    {
+      "quality": "primary",
+      "text": "لبدء المشروع، شغّل الأمر 'pnpm build' وتأكد من تثبيت الحزمة '@babulfish/styles'. مرحبًا بكم في بيئة تطوير Babulfish!",
+      "notes": "Human-review required before holdout use."
+    }
+  ],
+  "checks": {
+    "sourceShouldChange": true,
+    "expectedPatterns": [
+      "[\\u0600-\\u06FF]"
+    ],
+    "forbiddenPatterns": [
+      "(?i)<think>",
+      "(?i)</think>",
+      "```",
+      "(?i)^\\s*(translation|answer|reference)\\s*:",
+      "(?i)sourceLanguage",
+      "(?i)targetLanguage",
+      "(?i)system prompt"
+    ],
+    "preservedSubstrings": [
+      "pnpm build",
+      "@babulfish/styles",
+      "Babulfish"
+    ]
+  }
+}

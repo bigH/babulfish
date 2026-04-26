@@ -1,0 +1,32 @@
+{
+  "split": "dev",
+  "category": "plain",
+  "sourceLanguage": "en",
+  "targetLanguage": "fr",
+  "contentType": "text",
+  "source": {
+    "text": "The demo page has successfully completed the local translation process."
+  },
+  "references": [
+    {
+      "quality": "primary",
+      "text": "La page de démonstration a réussi à compléter le processus de traduction local.",
+      "notes": "Human-review required before holdout use."
+    }
+  ],
+  "checks": {
+    "sourceShouldChange": true,
+    "expectedPatterns": [
+      "(?i)\\b(démonstration|traduction|processus|local)\\b"
+    ],
+    "forbiddenPatterns": [
+      "(?i)<think>",
+      "(?i)</think>",
+      "```",
+      "(?i)^\\s*(translation|answer|reference)\\s*:",
+      "(?i)sourceLanguage",
+      "(?i)targetLanguage",
+      "(?i)system prompt"
+    ]
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "split": "holdout",
+  "category": "named-entity",
+  "sourceLanguage": "en",
+  "targetLanguage": "ar",
+  "contentType": "text",
+  "source": {
+    "text": "The Babulfish team is currently addressing an issue in the Orchid Room system, as reported under ticket BF-204. Preliminary investigations suggest a configuration error."
+  },
+  "references": [
+    {
+      "quality": "primary",
+      "text": "فريق Babulfish يعمل حاليًا على معالجة مشكلة في نظام Orchid Room، وفقًا لما ورد في التذكرة BF-204. تشير التحقيقات الأولية إلى وجود خطأ في التكوين.",
+      "notes": "Human-review required before holdout use."
+    }
+  ],
+  "checks": {
+    "sourceShouldChange": true,
+    "expectedPatterns": [
+      "[\\u0600-\\u06FF]"
+    ],
+    "forbiddenPatterns": [
+      "(?i)<think>",
+      "(?i)</think>",
+      "```",
+      "(?i)^\\s*(translation|answer|reference)\\s*:",
+      "(?i)sourceLanguage",
+      "(?i)targetLanguage",
+      "(?i)system prompt"
+    ],
+    "preservedSubstrings": [
+      "Babulfish",
+      "Orchid Room",
+      "BF-204"
+    ]
+  }
+}

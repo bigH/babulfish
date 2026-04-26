@@ -1,0 +1,37 @@
+{
+  "split": "holdout",
+  "category": "named-entity",
+  "sourceLanguage": "en",
+  "targetLanguage": "es",
+  "contentType": "text",
+  "source": {
+    "text": "The new Babulfish update is now available for users in Luma Harbor. Coral Desk has also introduced performance improvements and bug fixes."
+  },
+  "references": [
+    {
+      "quality": "primary",
+      "text": "La nueva actualización de Babulfish está disponible ahora para usuarios en Luma Harbor. Coral Desk también ha introducido mejoras en el rendimiento y correcciones de errores.",
+      "notes": "Human-review required before holdout use."
+    }
+  ],
+  "checks": {
+    "sourceShouldChange": true,
+    "expectedPatterns": [
+      "(?i)\\b(actualización|usuarios|mejoras|errores)\\b"
+    ],
+    "forbiddenPatterns": [
+      "(?i)<think>",
+      "(?i)</think>",
+      "```",
+      "(?i)^\\s*(translation|answer|reference)\\s*:",
+      "(?i)sourceLanguage",
+      "(?i)targetLanguage",
+      "(?i)system prompt"
+    ],
+    "preservedSubstrings": [
+      "Babulfish",
+      "Coral Desk",
+      "Luma Harbor"
+    ]
+  }
+}

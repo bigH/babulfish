@@ -1,0 +1,40 @@
+{
+  "split": "dev",
+  "category": "markdown",
+  "sourceLanguage": "en",
+  "targetLanguage": "ar",
+  "contentType": "markdown",
+  "source": {
+    "text": "The **Babulfish** API is built on `WebGPU` for high-performance rendering."
+  },
+  "references": [
+    {
+      "quality": "primary",
+      "text": "تعتمد واجهة برمجة تطبيقات **Babulfish** على `WebGPU` لتقديم عرض عالي الأداء.",
+      "notes": "Human-review required before holdout use."
+    }
+  ],
+  "checks": {
+    "sourceShouldChange": true,
+    "expectedPatterns": [
+      "[\\u0600-\\u06FF]"
+    ],
+    "forbiddenPatterns": [
+      "(?i)<think>",
+      "(?i)</think>",
+      "```",
+      "(?i)^\\s*(translation|answer|reference)\\s*:",
+      "(?i)sourceLanguage",
+      "(?i)targetLanguage",
+      "(?i)system prompt"
+    ],
+    "preservedSubstrings": [
+      "Babulfish",
+      "`WebGPU`"
+    ],
+    "markdownMarkers": [
+      "**",
+      "`"
+    ]
+  }
+}

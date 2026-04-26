@@ -1,0 +1,40 @@
+{
+  "split": "dev",
+  "category": "markdown",
+  "sourceLanguage": "en",
+  "targetLanguage": "fr",
+  "contentType": "markdown",
+  "source": {
+    "text": "**Warning:** For support, contact [Babulfish](./docs/support.md)."
+  },
+  "references": [
+    {
+      "quality": "primary",
+      "text": "**Attention :** Pour obtenir de l'aide, contactez [Babulfish](./docs/support.md).",
+      "notes": "Human-review required before holdout use."
+    }
+  ],
+  "checks": {
+    "sourceShouldChange": true,
+    "expectedPatterns": [
+      "(?i)\\b(attention|aide|contactez)\\b"
+    ],
+    "forbiddenPatterns": [
+      "(?i)<think>",
+      "(?i)</think>",
+      "```",
+      "(?i)^\\s*(translation|answer|reference)\\s*:",
+      "(?i)sourceLanguage",
+      "(?i)targetLanguage",
+      "(?i)system prompt"
+    ],
+    "preservedSubstrings": [
+      "Babulfish"
+    ],
+    "markdownMarkers": [
+      "**",
+      "[",
+      "]("
+    ]
+  }
+}

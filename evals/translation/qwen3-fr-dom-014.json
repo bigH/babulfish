@@ -1,0 +1,47 @@
+{
+  "split": "holdout",
+  "category": "dom",
+  "sourceLanguage": "en",
+  "targetLanguage": "fr",
+  "contentType": "dom",
+  "source": {
+    "html": "<article class=\"empty-state\">\n  <h2>No results found</h2>\n  <p>Try checking your spelling or using different keywords. Learn more about <a href=\"/guides/offline\">offline mode</a> in the Babulfish documentation.</p>\n  <button>Clear filters</button>\n</article>"
+  },
+  "references": [
+    {
+      "quality": "primary",
+      "html": "<article class=\"empty-state\">\n  <h2>Aucun résultat trouvé</h2>\n  <p>Essayez de vérifier votre orthographe ou d'utiliser d'autres mots-clés. Découvrez plus d'informations sur le <a href=\"/guides/offline\">mode hors ligne</a> dans la documentation Babulfish.</p>\n  <button>Effacer les filtres</button>\n</article>",
+      "notes": "Human-review required before holdout use."
+    }
+  ],
+  "checks": {
+    "sourceShouldChange": true,
+    "expectedPatterns": [
+      "(?i)\\b(aucun résultat|orthographe|mots-clés|filtres)\\b"
+    ],
+    "forbiddenPatterns": [
+      "(?i)<think>",
+      "(?i)</think>",
+      "```",
+      "(?i)^\\s*(translation|answer|reference)\\s*:",
+      "(?i)sourceLanguage",
+      "(?i)targetLanguage",
+      "(?i)system prompt"
+    ],
+    "preservedSubstrings": [
+      "Babulfish"
+    ],
+    "requiredSelectors": [
+      "article",
+      "a",
+      "button"
+    ],
+    "preservedAttributes": [
+      {
+        "selector": "a",
+        "attribute": "href",
+        "value": "/guides/offline"
+      }
+    ]
+  }
+}

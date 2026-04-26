@@ -1,0 +1,32 @@
+{
+  "split": "holdout",
+  "category": "ui-label",
+  "sourceLanguage": "en",
+  "targetLanguage": "fr",
+  "contentType": "text",
+  "source": {
+    "text": "User Profile"
+  },
+  "references": [
+    {
+      "quality": "primary",
+      "text": "Profil utilisateur",
+      "notes": "Human-review required before holdout use."
+    }
+  ],
+  "checks": {
+    "sourceShouldChange": true,
+    "expectedPatterns": [
+      "(?i)\\b(profil|utilisateur)\\b"
+    ],
+    "forbiddenPatterns": [
+      "(?i)<think>",
+      "(?i)</think>",
+      "```",
+      "(?i)^\\s*(translation|answer|reference)\\s*:",
+      "(?i)sourceLanguage",
+      "(?i)targetLanguage",
+      "(?i)system prompt"
+    ]
+  }
+}

@@ -1,0 +1,48 @@
+{
+  "split": "holdout",
+  "category": "dom",
+  "sourceLanguage": "en",
+  "targetLanguage": "es",
+  "contentType": "dom",
+  "source": {
+    "html": "<section><p>Enable <code>WebGPU</code> support for advanced rendering. For more details, see the <a href=\"/docs/runtime\">runtime guide</a>.</p><p>Use <code>translateNode()</code> to handle dynamic content.</p></section>"
+  },
+  "references": [
+    {
+      "quality": "primary",
+      "html": "<section><p>Habilite el soporte de <code>WebGPU</code> para un renderizado avanzado. Para más detalles, consulte la <a href=\"/docs/runtime\">guía de ejecución</a>.</p><p>Use <code>translateNode()</code> para manejar contenido dinámico.</p></section>",
+      "notes": "Human-review required before holdout use."
+    }
+  ],
+  "checks": {
+    "sourceShouldChange": true,
+    "expectedPatterns": [
+      "(?i)\\b(soporte|renderizado|guía|contenido)\\b"
+    ],
+    "forbiddenPatterns": [
+      "(?i)<think>",
+      "(?i)</think>",
+      "```",
+      "(?i)^\\s*(translation|answer|reference)\\s*:",
+      "(?i)sourceLanguage",
+      "(?i)targetLanguage",
+      "(?i)system prompt"
+    ],
+    "preservedSubstrings": [
+      "WebGPU",
+      "translateNode()"
+    ],
+    "requiredSelectors": [
+      "section",
+      "a",
+      "code"
+    ],
+    "preservedAttributes": [
+      {
+        "selector": "a",
+        "attribute": "href",
+        "value": "/docs/runtime"
+      }
+    ]
+  }
+}

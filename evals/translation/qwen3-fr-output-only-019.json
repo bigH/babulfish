@@ -1,0 +1,32 @@
+{
+  "split": "dev",
+  "category": "output-only",
+  "sourceLanguage": "en",
+  "targetLanguage": "fr",
+  "contentType": "text",
+  "source": {
+    "text": "In the Babulfish sidebar, the stale draft banner should disappear after reviewers reopen the docs panel."
+  },
+  "references": [
+    {
+      "quality": "primary",
+      "text": "Dans la barre latérale de Babulfish, le bandeau de brouillon obsolète doit disparaître lorsque les réviseurs rouvrent le panneau de documentation.",
+      "notes": "Human-review required before holdout use."
+    }
+  ],
+  "checks": {
+    "sourceShouldChange": true,
+    "expectedPatterns": [
+      "(?i)\\b(barre latérale|bandeau|brouillon|panneau)\\b"
+    ],
+    "forbiddenPatterns": [
+      "(?i)<think>",
+      "(?i)</think>",
+      "```",
+      "(?i)^\\s*(translation|answer|reference)\\s*:",
+      "(?i)sourceLanguage",
+      "(?i)targetLanguage",
+      "(?i)system prompt"
+    ]
+  }
+}

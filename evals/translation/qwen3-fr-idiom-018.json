@@ -1,0 +1,35 @@
+{
+  "split": "holdout",
+  "category": "idiom",
+  "sourceLanguage": "en",
+  "targetLanguage": "fr",
+  "contentType": "text",
+  "source": {
+    "text": "Before we celebrate the fix, let's make sure we haven't jumped the gun on the WebGPU fallback."
+  },
+  "references": [
+    {
+      "quality": "primary",
+      "text": "Avant de crier victoire pour ce correctif, assurons-nous de ne pas être allés trop vite avec le repli WebGPU.",
+      "notes": "Human-review required before holdout use."
+    }
+  ],
+  "checks": {
+    "sourceShouldChange": true,
+    "expectedPatterns": [
+      "(?i)\\b(crier victoire|allés trop vite|repli)\\b"
+    ],
+    "preservedSubstrings": [
+      "WebGPU"
+    ],
+    "forbiddenPatterns": [
+      "(?i)<think>",
+      "(?i)</think>",
+      "```",
+      "(?i)^\\s*(translation|answer|reference)\\s*:",
+      "(?i)sourceLanguage",
+      "(?i)targetLanguage",
+      "(?i)system prompt"
+    ]
+  }
+}

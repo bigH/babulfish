@@ -1,0 +1,32 @@
+{
+  "split": "dev",
+  "category": "plain",
+  "sourceLanguage": "en",
+  "targetLanguage": "es",
+  "contentType": "text",
+  "source": {
+    "text": "Your browser is currently translating this page in the background."
+  },
+  "references": [
+    {
+      "quality": "primary",
+      "text": "Tu navegador está traduciendo esta página en segundo plano.",
+      "notes": "Human-review required before holdout use."
+    }
+  ],
+  "checks": {
+    "sourceShouldChange": true,
+    "expectedPatterns": [
+      "(?i)\\b(navegador|traduciendo|página|segundo plano)\\b"
+    ],
+    "forbiddenPatterns": [
+      "(?i)<think>",
+      "(?i)</think>",
+      "```",
+      "(?i)^\\s*(translation|answer|reference)\\s*:",
+      "(?i)sourceLanguage",
+      "(?i)targetLanguage",
+      "(?i)system prompt"
+    ]
+  }
+}

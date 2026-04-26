@@ -1,0 +1,53 @@
+{
+  "split": "holdout",
+  "category": "dom",
+  "sourceLanguage": "en",
+  "targetLanguage": "ar",
+  "contentType": "dom",
+  "source": {
+    "html": "<div data-testid=\"offline-banner\">Check out <a href=\"/ar/docs\">Babulfish</a> for <code>WebGPU</code> support.</div>"
+  },
+  "references": [
+    {
+      "quality": "primary",
+      "html": "<div data-testid=\"offline-banner\">اطلع على <a href=\"/ar/docs\">Babulfish</a> للحصول على دعم <code>WebGPU</code>.</div>",
+      "notes": "Human-review required before holdout use."
+    }
+  ],
+  "checks": {
+    "sourceShouldChange": true,
+    "expectedPatterns": [
+      "[\\u0600-\\u06FF]"
+    ],
+    "forbiddenPatterns": [
+      "(?i)<think>",
+      "(?i)</think>",
+      "```",
+      "(?i)^\\s*(translation|answer|reference)\\s*:",
+      "(?i)sourceLanguage",
+      "(?i)targetLanguage",
+      "(?i)system prompt"
+    ],
+    "preservedSubstrings": [
+      "Babulfish",
+      "WebGPU"
+    ],
+    "requiredSelectors": [
+      "div",
+      "a",
+      "code"
+    ],
+    "preservedAttributes": [
+      {
+        "selector": "a",
+        "attribute": "href",
+        "value": "/ar/docs"
+      },
+      {
+        "selector": "div",
+        "attribute": "data-testid",
+        "value": "offline-banner"
+      }
+    ]
+  }
+}

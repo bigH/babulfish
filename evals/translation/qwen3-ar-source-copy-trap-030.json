@@ -1,0 +1,40 @@
+{
+  "split": "holdout",
+  "category": "source-copy-trap",
+  "sourceLanguage": "en",
+  "targetLanguage": "ar",
+  "contentType": "markdown",
+  "source": {
+    "text": "The Babulfish engine uses `translate()` and WebGPU for real-time rendering."
+  },
+  "references": [
+    {
+      "quality": "primary",
+      "text": "يستخدم محرك Babulfish `translate()` و WebGPU للعرض في الوقت الفعلي.",
+      "notes": "Human-review required before holdout use."
+    }
+  ],
+  "checks": {
+    "sourceShouldChange": true,
+    "expectedPatterns": [
+      "[\\u0600-\\u06FF]"
+    ],
+    "forbiddenPatterns": [
+      "(?i)<think>",
+      "(?i)</think>",
+      "```",
+      "(?i)^\\s*(translation|answer|reference)\\s*:",
+      "(?i)sourceLanguage",
+      "(?i)targetLanguage",
+      "(?i)system prompt"
+    ],
+    "preservedSubstrings": [
+      "Babulfish",
+      "`translate()`",
+      "WebGPU"
+    ],
+    "markdownMarkers": [
+      "`"
+    ]
+  }
+}

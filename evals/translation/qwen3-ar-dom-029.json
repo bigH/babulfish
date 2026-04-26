@@ -1,0 +1,53 @@
+{
+  "split": "dev",
+  "category": "dom",
+  "sourceLanguage": "en",
+  "targetLanguage": "ar",
+  "contentType": "dom",
+  "source": {
+    "html": "<aside data-testid=\"dom-notice\">Babulfish is using <code>translate()</code> for dynamic content. Learn more <a href=\"/docs/dom\">here</a>.</aside>"
+  },
+  "references": [
+    {
+      "quality": "primary",
+      "html": "<aside data-testid=\"dom-notice\">يستخدم Babulfish دالة <code>translate()</code> للحصول على محتوى ديناميكي. تعلّم المزيد <a href=\"/docs/dom\">هنا</a>.</aside>",
+      "notes": "Human-review required before holdout use."
+    }
+  ],
+  "checks": {
+    "sourceShouldChange": true,
+    "expectedPatterns": [
+      "[\\u0600-\\u06FF]"
+    ],
+    "forbiddenPatterns": [
+      "(?i)<think>",
+      "(?i)</think>",
+      "```",
+      "(?i)^\\s*(translation|answer|reference)\\s*:",
+      "(?i)sourceLanguage",
+      "(?i)targetLanguage",
+      "(?i)system prompt"
+    ],
+    "preservedSubstrings": [
+      "Babulfish",
+      "translate()"
+    ],
+    "requiredSelectors": [
+      "aside",
+      "a",
+      "code"
+    ],
+    "preservedAttributes": [
+      {
+        "selector": "a",
+        "attribute": "href",
+        "value": "/docs/dom"
+      },
+      {
+        "selector": "aside",
+        "attribute": "data-testid",
+        "value": "dom-notice"
+      }
+    ]
+  }
+}

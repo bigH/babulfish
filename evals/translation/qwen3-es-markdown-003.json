@@ -1,0 +1,40 @@
+{
+  "split": "dev",
+  "category": "markdown",
+  "sourceLanguage": "en",
+  "targetLanguage": "es",
+  "contentType": "markdown",
+  "source": {
+    "text": "- [ ] Verify that all **Babulfish** instances are preserved and that the `diff` highlights changes accurately.\n- [ ] Ensure the translation maintains the original formatting and structure."
+  },
+  "references": [
+    {
+      "quality": "primary",
+      "text": "- [ ] Verificar que todas las instancias de **Babulfish** se conserven y que el `diff` resalte los cambios con precisión.\n- [ ] Asegurarse de que la traducción mantenga el formato y la estructura originales.",
+      "notes": "Human-review required before holdout use."
+    }
+  ],
+  "checks": {
+    "sourceShouldChange": true,
+    "expectedPatterns": [
+      "(?i)\\b(verificar|asegurarse|traducción|estructura)\\b"
+    ],
+    "forbiddenPatterns": [
+      "(?i)<think>",
+      "(?i)</think>",
+      "```",
+      "(?i)^\\s*(translation|answer|reference)\\s*:",
+      "(?i)sourceLanguage",
+      "(?i)targetLanguage",
+      "(?i)system prompt"
+    ],
+    "preservedSubstrings": [
+      "Babulfish"
+    ],
+    "markdownMarkers": [
+      "- [ ]",
+      "`",
+      "**"
+    ]
+  }
+}

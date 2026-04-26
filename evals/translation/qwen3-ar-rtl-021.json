@@ -1,0 +1,32 @@
+{
+  "split": "dev",
+  "category": "rtl",
+  "sourceLanguage": "en",
+  "targetLanguage": "ar",
+  "contentType": "text",
+  "source": {
+    "text": "Your translation is 75% complete. Keep going!"
+  },
+  "references": [
+    {
+      "quality": "primary",
+      "text": "اكتملت ترجمتك بنسبة 75%. واصل التقدم!",
+      "notes": "Human-review required before holdout use."
+    }
+  ],
+  "checks": {
+    "sourceShouldChange": true,
+    "expectedPatterns": [
+      "[\\u0600-\\u06FF]"
+    ],
+    "forbiddenPatterns": [
+      "(?i)<think>",
+      "(?i)</think>",
+      "```",
+      "(?i)^\\s*(translation|answer|reference)\\s*:",
+      "(?i)sourceLanguage",
+      "(?i)targetLanguage",
+      "(?i)system prompt"
+    ]
+  }
+}

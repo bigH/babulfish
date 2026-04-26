@@ -1,0 +1,39 @@
+{
+  "split": "holdout",
+  "category": "technical-docs",
+  "sourceLanguage": "en",
+  "targetLanguage": "es",
+  "contentType": "markdown",
+  "source": {
+    "text": "To use WebGPU in your application, you need to implement a `TranslatorProvider` that handles shader translation and device initialization."
+  },
+  "references": [
+    {
+      "quality": "primary",
+      "text": "Para usar WebGPU en su aplicación, debe implementar un `TranslatorProvider` que maneje la traducción de sombreadores y la inicialización del dispositivo.",
+      "notes": "Human-review required before holdout use."
+    }
+  ],
+  "checks": {
+    "sourceShouldChange": true,
+    "expectedPatterns": [
+      "(?i)\\b(aplicación|traducción|inicialización|dispositivo)\\b"
+    ],
+    "forbiddenPatterns": [
+      "(?i)<think>",
+      "(?i)</think>",
+      "```",
+      "(?i)^\\s*(translation|answer|reference)\\s*:",
+      "(?i)sourceLanguage",
+      "(?i)targetLanguage",
+      "(?i)system prompt"
+    ],
+    "preservedSubstrings": [
+      "WebGPU",
+      "`TranslatorProvider`"
+    ],
+    "markdownMarkers": [
+      "`"
+    ]
+  }
+}

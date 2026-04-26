@@ -1,0 +1,53 @@
+{
+  "split": "holdout",
+  "category": "dom",
+  "sourceLanguage": "en",
+  "targetLanguage": "fr",
+  "contentType": "dom",
+  "source": {
+    "html": "<div data-testid=\"react-row\">For advanced users, see the <a href=\"/docs/react\">Babulfish documentation</a> and use <code>hydrateRoot()</code> for performance.</div>"
+  },
+  "references": [
+    {
+      "quality": "primary",
+      "html": "<div data-testid=\"react-row\">Pour les utilisateurs avancés, consultez la <a href=\"/docs/react\">documentation Babulfish</a> et utilisez <code>hydrateRoot()</code> pour les performances.</div>",
+      "notes": "Human-review required before holdout use."
+    }
+  ],
+  "checks": {
+    "sourceShouldChange": true,
+    "expectedPatterns": [
+      "(?i)\\b(utilisateurs avancés|consultez|performances)\\b"
+    ],
+    "forbiddenPatterns": [
+      "(?i)<think>",
+      "(?i)</think>",
+      "```",
+      "(?i)^\\s*(translation|answer|reference)\\s*:",
+      "(?i)sourceLanguage",
+      "(?i)targetLanguage",
+      "(?i)system prompt"
+    ],
+    "preservedSubstrings": [
+      "Babulfish",
+      "hydrateRoot()"
+    ],
+    "requiredSelectors": [
+      "div",
+      "a",
+      "code"
+    ],
+    "preservedAttributes": [
+      {
+        "selector": "a",
+        "attribute": "href",
+        "value": "/docs/react"
+      },
+      {
+        "selector": "div",
+        "attribute": "data-testid",
+        "value": "react-row"
+      }
+    ]
+  }
+}

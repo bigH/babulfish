@@ -1,0 +1,53 @@
+{
+  "split": "dev",
+  "category": "dom",
+  "sourceLanguage": "en",
+  "targetLanguage": "es",
+  "contentType": "dom",
+  "source": {
+    "html": "<div data-testid=\"gpu-toast\">Babulfish has launched support for <a href=\"/docs/webgpu\">WebGPU</a>. Check out the <code>webgpu()</code> API.</div>"
+  },
+  "references": [
+    {
+      "quality": "primary",
+      "html": "<div data-testid=\"gpu-toast\">Babulfish ha lanzado soporte para <a href=\"/docs/webgpu\">WebGPU</a>. Consulta la API <code>webgpu()</code>.</div>",
+      "notes": "Human-review required before holdout use."
+    }
+  ],
+  "checks": {
+    "sourceShouldChange": true,
+    "expectedPatterns": [
+      "(?i)\\b(lanzado|soporte|mire|consulta)\\b"
+    ],
+    "forbiddenPatterns": [
+      "(?i)<think>",
+      "(?i)</think>",
+      "```",
+      "(?i)^\\s*(translation|answer|reference)\\s*:",
+      "(?i)sourceLanguage",
+      "(?i)targetLanguage",
+      "(?i)system prompt"
+    ],
+    "preservedSubstrings": [
+      "Babulfish",
+      "WebGPU"
+    ],
+    "requiredSelectors": [
+      "div",
+      "a",
+      "code"
+    ],
+    "preservedAttributes": [
+      {
+        "selector": "a",
+        "attribute": "href",
+        "value": "/docs/webgpu"
+      },
+      {
+        "selector": "div",
+        "attribute": "data-testid",
+        "value": "gpu-toast"
+      }
+    ]
+  }
+}

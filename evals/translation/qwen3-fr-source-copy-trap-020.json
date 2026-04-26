@@ -1,0 +1,39 @@
+{
+  "split": "holdout",
+  "category": "source-copy-trap",
+  "sourceLanguage": "en",
+  "targetLanguage": "fr",
+  "contentType": "markdown",
+  "source": {
+    "text": "The tool `diff` is essential for developers using Babulfish."
+  },
+  "references": [
+    {
+      "quality": "primary",
+      "text": "L'outil `diff` est essentiel pour les développeurs utilisant Babulfish.",
+      "notes": "Human-review required before holdout use."
+    }
+  ],
+  "checks": {
+    "sourceShouldChange": true,
+    "expectedPatterns": [
+      "(?i)\\b(outil|essentiel|développeurs|utilisant)\\b"
+    ],
+    "forbiddenPatterns": [
+      "(?i)<think>",
+      "(?i)</think>",
+      "```",
+      "(?i)^\\s*(translation|answer|reference)\\s*:",
+      "(?i)sourceLanguage",
+      "(?i)targetLanguage",
+      "(?i)system prompt"
+    ],
+    "preservedSubstrings": [
+      "Babulfish",
+      "`diff`"
+    ],
+    "markdownMarkers": [
+      "`"
+    ]
+  }
+}

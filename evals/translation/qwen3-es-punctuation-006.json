@@ -1,0 +1,32 @@
+{
+  "split": "holdout",
+  "category": "punctuation",
+  "sourceLanguage": "en",
+  "targetLanguage": "es",
+  "contentType": "text",
+  "source": {
+    "text": "She said, \"It's time to leave!\"; the children were excited: 'We'll go to the park; it's our favorite place!'"
+  },
+  "references": [
+    {
+      "quality": "primary",
+      "text": "Ella dijo: \"¡Es hora de irse!\"; los niños estaban emocionados: \"¡Vamos al parque; es nuestro lugar favorito!\"",
+      "notes": "Human-review required before holdout use."
+    }
+  ],
+  "checks": {
+    "sourceShouldChange": true,
+    "expectedPatterns": [
+      "(?i)(¡|\\bniños\\b|\\bparque\\b|\\bfavorito\\b)"
+    ],
+    "forbiddenPatterns": [
+      "(?i)<think>",
+      "(?i)</think>",
+      "```",
+      "(?i)^\\s*(translation|answer|reference)\\s*:",
+      "(?i)sourceLanguage",
+      "(?i)targetLanguage",
+      "(?i)system prompt"
+    ]
+  }
+}

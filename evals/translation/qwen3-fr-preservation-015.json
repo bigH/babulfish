@@ -1,0 +1,37 @@
+{
+  "split": "dev",
+  "category": "preservation",
+  "sourceLanguage": "en",
+  "targetLanguage": "fr",
+  "contentType": "text",
+  "source": {
+    "text": "To use the @babulfish/react package, set the localModelPath in your config and ensure your system supports WebGPU for optimal performance."
+  },
+  "references": [
+    {
+      "quality": "primary",
+      "text": "Pour utiliser le package @babulfish/react, définissez le localModelPath dans votre configuration et assurez-vous que votre système prend en charge WebGPU pour une performance optimale.",
+      "notes": "Human-review required before holdout use."
+    }
+  ],
+  "checks": {
+    "sourceShouldChange": true,
+    "expectedPatterns": [
+      "(?i)\\b(utiliser|définissez|configuration|système)\\b"
+    ],
+    "forbiddenPatterns": [
+      "(?i)<think>",
+      "(?i)</think>",
+      "```",
+      "(?i)^\\s*(translation|answer|reference)\\s*:",
+      "(?i)sourceLanguage",
+      "(?i)targetLanguage",
+      "(?i)system prompt"
+    ],
+    "preservedSubstrings": [
+      "@babulfish/react",
+      "localModelPath",
+      "WebGPU"
+    ]
+  }
+}
