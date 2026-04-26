@@ -6,10 +6,15 @@ import {
 } from "../../demo-shared/src/runtime-selection.js"
 import {
   WEBGPU_EVAL_CORPUS,
+  scoreWebGpuEvalGenerationFailure,
   scoreWebGpuEvalCase,
+  scoreWebGpuEvalModel,
+  scoreWebGpuEvalValidationFailure,
+  type WebGpuEvalCaseScoreBreakdown,
   type WebGpuEvalCase,
   type WebGpuEvalCheck,
   type WebGpuEvalModelId,
+  type WebGpuEvalModelScoreBreakdown,
 } from "./webgpu-eval-scorer.js"
 
 type WebGpuEvalDevice = {
@@ -60,6 +65,8 @@ type WebGpuEvalCaseResult = {
   readonly normalizedOutput: string
   readonly checks: readonly WebGpuEvalCheck[]
   readonly pass: boolean
+  readonly score: number
+  readonly scoreBreakdown: WebGpuEvalCaseScoreBreakdown
   readonly translateMs: number
   readonly error: SerializedError | null
 }
@@ -76,6 +83,10 @@ export type WebGpuEvalModelResult = {
   readonly loadMs: number | null
   readonly cases: readonly WebGpuEvalCaseResult[]
   readonly pass: boolean
+  readonly score: number
+  readonly scoreBreakdown: WebGpuEvalModelScoreBreakdown
+  readonly failuresByCategory: Readonly<Record<string, number>>
+  readonly failuresByCheck: Readonly<Record<string, number>>
   readonly error: SerializedError | null
   readonly environment: WebGpuEnvironment
 }
@@ -219,11 +230,13 @@ function assertEnvironmentSupportsModel(
   }
 }
 
-function createFailedCase(
+function createGenerationFailedCase(
   evalCase: WebGpuEvalCase,
   translateMs: number,
   error: SerializedError,
 ): WebGpuEvalCaseResult {
+  const scored = scoreWebGpuEvalGenerationFailure(error.message)
+
   return {
     id: evalCase.id,
     split: evalCase.split,
@@ -233,16 +246,38 @@ function createFailedCase(
     targetLanguage: evalCase.targetLanguage,
     contentType: evalCase.contentType,
     rawOutput: "",
-    normalizedOutput: "",
-    checks: [
-      {
-        name: "generation-completed",
-        pass: false,
-        expected: "translation resolves",
-        actual: error.message,
-      },
-    ],
-    pass: false,
+    normalizedOutput: scored.normalizedOutput,
+    checks: scored.checks,
+    pass: scored.pass,
+    score: scored.score,
+    scoreBreakdown: scored.scoreBreakdown,
+    translateMs,
+    error,
+  }
+}
+
+function createValidationFailedCase(
+  evalCase: WebGpuEvalCase,
+  rawOutput: string,
+  translateMs: number,
+  error: SerializedError,
+): WebGpuEvalCaseResult {
+  const scored = scoreWebGpuEvalValidationFailure(rawOutput, error.message)
+
+  return {
+    id: evalCase.id,
+    split: evalCase.split,
+    category: evalCase.category,
+    sourceText: evalCase.sourceText,
+    sourceLanguage: evalCase.sourceLanguage,
+    targetLanguage: evalCase.targetLanguage,
+    contentType: evalCase.contentType,
+    rawOutput,
+    normalizedOutput: scored.normalizedOutput,
+    checks: scored.checks,
+    pass: scored.pass,
+    score: scored.score,
+    scoreBreakdown: scored.scoreBreakdown,
     translateMs,
     error,
   }
@@ -281,13 +316,23 @@ async function runEvalCase(
   timeoutMs: number,
 ): Promise<WebGpuEvalCaseResult> {
   const start = performance.now()
+  let rawOutput: string
 
   try {
-    const rawOutput = await withAbortableTimeout(
+    rawOutput = await withAbortableTimeout(
       (signal) => translateEvalCase(core, evalCase, signal),
       `case ${evalCase.id}`,
       timeoutMs,
     )
+  } catch (error) {
+    return createGenerationFailedCase(
+      evalCase,
+      performanceMsSince(start),
+      serializeError("generation", error),
+    )
+  }
+
+  try {
     const scored = scoreWebGpuEvalCase(evalCase, rawOutput)
 
     return {
@@ -302,14 +347,17 @@ async function runEvalCase(
       normalizedOutput: scored.normalizedOutput,
       checks: scored.checks,
       pass: scored.pass,
+      score: scored.score,
+      scoreBreakdown: scored.scoreBreakdown,
       translateMs: performanceMsSince(start),
       error: null,
     }
   } catch (error) {
-    return createFailedCase(
+    return createValidationFailedCase(
       evalCase,
+      rawOutput,
       performanceMsSince(start),
-      serializeError("generation", error),
+      serializeError("validation", error),
     )
   }
 }
@@ -320,6 +368,8 @@ function createLoadFailureResult(
   loadMs: number | null,
   error: SerializedError,
 ): WebGpuEvalModelResult {
+  const scoreSummary = scoreWebGpuEvalModel([], `${error.class}: ${error.message}`)
+
   return {
     modelId: spec.id,
     resolvedModelId: spec.resolvedModelId,
@@ -332,6 +382,10 @@ function createLoadFailureResult(
     loadMs,
     cases: [],
     pass: false,
+    score: scoreSummary.score,
+    scoreBreakdown: scoreSummary.scoreBreakdown,
+    failuresByCategory: scoreSummary.failuresByCategory,
+    failuresByCheck: scoreSummary.failuresByCheck,
     error,
     environment,
   }
@@ -392,6 +446,7 @@ async function runModelEval({
       const result = await runEvalCase(core, evalCase, caseTimeoutMs)
       cases.push(result)
     }
+    const scoreSummary = scoreWebGpuEvalModel(cases)
 
     return {
       modelId: spec.id,
@@ -405,6 +460,10 @@ async function runModelEval({
       loadMs,
       cases,
       pass: cases.every((evalCase) => evalCase.pass),
+      score: scoreSummary.score,
+      scoreBreakdown: scoreSummary.scoreBreakdown,
+      failuresByCategory: scoreSummary.failuresByCategory,
+      failuresByCheck: scoreSummary.failuresByCheck,
       error: null,
       environment,
     }

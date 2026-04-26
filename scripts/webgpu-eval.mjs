@@ -382,6 +382,16 @@ function failedModelFromError(modelId, error) {
     loadMs: null,
     cases: [],
     pass: false,
+    score: 0,
+    scoreBreakdown: {
+      weightedCheckScore: 0,
+      passedCaseRatio: 0,
+      referenceSimilarity: 0,
+      hardFailureCount: 0,
+      failureReason: `${error.class}: ${error.message}`,
+    },
+    failuresByCategory: {},
+    failuresByCheck: {},
     error,
     environment: {
       userAgent: "",
@@ -465,8 +475,11 @@ function summarizeResult(result, artifactPaths) {
 
   const status = result.pass ? "PASS" : "FAIL"
   const modelCount = result.models.length
+  const scores = result.models
+    .map((model) => `${model.modelId}=${Number(model.score ?? 0).toFixed(3)}`)
+    .join(", ")
   console.log(
-    `${status} WebGPU eval: ${modelCount} model(s). Artifacts: ${relativeArtifacts.join(", ")}`,
+    `${status} WebGPU eval: ${modelCount} model(s). Scores: ${scores}. Artifacts: ${relativeArtifacts.join(", ")}`,
   )
 }
 

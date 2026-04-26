@@ -21,6 +21,13 @@ type WebGpuEvalPreservedAttribute = {
   readonly value: string
 }
 
+export type WebGpuEvalReference = {
+  readonly quality?: string
+  readonly text?: string
+  readonly html?: string
+  readonly notes?: string
+}
+
 export type WebGpuEvalCase = {
   readonly id: string
   readonly split: WebGpuEvalSplit
@@ -38,6 +45,7 @@ export type WebGpuEvalCase = {
   readonly checkBalancedQuotes?: boolean
   readonly requiredSelectors?: readonly string[]
   readonly preservedAttributes?: readonly WebGpuEvalPreservedAttribute[]
+  readonly references: readonly WebGpuEvalReference[]
 }
 
 export type WebGpuEvalCheck = {
@@ -48,10 +56,34 @@ export type WebGpuEvalCheck = {
   readonly note?: string
 }
 
+export type WebGpuEvalCaseScoreBreakdown = {
+  readonly checkScore: number
+  readonly referenceSimilarity: number
+  readonly hardFailure: boolean
+  readonly hardFailureReason: string | null
+}
+
 export type ScoredWebGpuEvalCase = {
   readonly normalizedOutput: string
   readonly checks: readonly WebGpuEvalCheck[]
   readonly pass: boolean
+  readonly score: number
+  readonly scoreBreakdown: WebGpuEvalCaseScoreBreakdown
+}
+
+export type WebGpuEvalModelScoreBreakdown = {
+  readonly weightedCheckScore: number
+  readonly passedCaseRatio: number
+  readonly referenceSimilarity: number
+  readonly hardFailureCount: number
+  readonly failureReason: string | null
+}
+
+export type WebGpuEvalModelScoreSummary = {
+  readonly score: number
+  readonly scoreBreakdown: WebGpuEvalModelScoreBreakdown
+  readonly failuresByCategory: Readonly<Record<string, number>>
+  readonly failuresByCheck: Readonly<Record<string, number>>
 }
 
 const EXPLANATION_WRAPPER_PATTERN =
@@ -59,6 +91,15 @@ const EXPLANATION_WRAPPER_PATTERN =
 
 const PROMPT_ECHO_PATTERN =
   /\b(translate from|output only|you are a translation engine|preserve these exact substrings|source language|target language)\b/i
+
+const ARABIC_SCRIPT_PATTERN = /\p{Script=Arabic}/u
+const CHRF_MAX_NGRAM = 6
+const CHRF_BETA = 2
+const CASE_CHECK_SCORE_WEIGHT = 0.85
+const CASE_REFERENCE_SIMILARITY_WEIGHT = 0.15
+const MODEL_CHECK_SCORE_WEIGHT = 0.7
+const MODEL_PASSED_CASE_RATIO_WEIGHT = 0.2
+const MODEL_REFERENCE_SIMILARITY_WEIGHT = 0.1
 
 export const WEBGPU_EVAL_MODEL_IDS = [
   "qwen-2.5-0.5b",
@@ -79,6 +120,7 @@ type TranslationEvalJson = {
     readonly text?: string
     readonly html?: string
   }
+  readonly references: readonly WebGpuEvalReference[]
   readonly checks: {
     readonly sourceShouldChange?: boolean
     readonly expectedPatterns?: readonly string[]
@@ -127,6 +169,62 @@ function createEvalCase(path: string, json: TranslationEvalJson): WebGpuEvalCase
     checkBalancedQuotes: json.checks.checkBalancedQuotes,
     requiredSelectors: json.checks.requiredSelectors,
     preservedAttributes: json.checks.preservedAttributes,
+    references: referencesFor(json, id),
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null
+}
+
+function optionalString(value: unknown, label: string, id: string): string | undefined {
+  if (value === undefined) return undefined
+  if (typeof value === "string") return value
+  throw new Error(`Eval case ${id} has non-string reference.${label}`)
+}
+
+function referencesFor(
+  json: TranslationEvalJson,
+  id: string,
+): readonly WebGpuEvalReference[] {
+  const references = (json as { references?: unknown }).references
+  if (!Array.isArray(references) || references.length === 0) {
+    throw new Error(`Eval case ${id} must define at least one reference translation`)
+  }
+
+  return references.map((reference, index) =>
+    referenceFor(json.contentType, reference, id, index),
+  )
+}
+
+function referenceFor(
+  contentType: WebGpuEvalContentType,
+  reference: unknown,
+  id: string,
+  index: number,
+): WebGpuEvalReference {
+  if (!isRecord(reference)) {
+    throw new Error(`Eval case ${id} reference ${index + 1} must be an object`)
+  }
+
+  const text = optionalString(reference.text, "text", id)
+  const html = optionalString(reference.html, "html", id)
+  const quality = optionalString(reference.quality, "quality", id)
+  const notes = optionalString(reference.notes, "notes", id)
+
+  if (contentType === "dom") {
+    if (!html) {
+      throw new Error(`DOM eval case ${id} reference ${index + 1} must define html`)
+    }
+  } else if (!text) {
+    throw new Error(`Text eval case ${id} reference ${index + 1} must define text`)
+  }
+
+  return {
+    ...(quality ? { quality } : {}),
+    ...(text ? { text } : {}),
+    ...(html ? { html } : {}),
+    ...(notes ? { notes } : {}),
   }
 }
 
@@ -177,7 +275,7 @@ function assertUniqueIds(cases: readonly WebGpuEvalCase[]): void {
 }
 
 function normalizeText(text: string): string {
-  return text.replace(/\s+/g, " ").trim()
+  return text.normalize("NFC").replace(/\s+/g, " ").trim()
 }
 
 function lowerNormalized(text: string): string {
@@ -230,6 +328,49 @@ function createHtmlFragment(html: string): DocumentFragment | null {
   return template.content
 }
 
+function styleHidesElement(style: string): boolean {
+  return /(?:^|;)\s*(?:display\s*:\s*none|visibility\s*:\s*hidden)\s*(?:;|$)/i.test(style)
+}
+
+function isHiddenElement(element: Element): boolean {
+  if (
+    element.tagName === "SCRIPT" ||
+    element.tagName === "STYLE" ||
+    element.tagName === "NOSCRIPT" ||
+    element.hasAttribute("hidden") ||
+    element.getAttribute("aria-hidden") === "true"
+  ) {
+    return true
+  }
+
+  return styleHidesElement(element.getAttribute("style") ?? "")
+}
+
+function visibleTextFromHtml(html: string): string {
+  const fragment = createHtmlFragment(html)
+  if (fragment === null) return normalizeText(html.replace(/<[^>]*>/g, " "))
+
+  const visibleText: string[] = []
+  const walker = document.createTreeWalker(fragment, NodeFilter.SHOW_TEXT, {
+    acceptNode(node) {
+      let parent = node.parentElement
+      while (parent) {
+        if (isHiddenElement(parent)) return NodeFilter.FILTER_REJECT
+        parent = parent.parentElement
+      }
+      return NodeFilter.FILTER_ACCEPT
+    },
+  })
+
+  let current = walker.nextNode()
+  while (current) {
+    visibleText.push(current.textContent ?? "")
+    current = walker.nextNode()
+  }
+
+  return normalizeText(visibleText.join(" "))
+}
+
 function scoreRequiredSelector(
   fragment: DocumentFragment | null,
   selector: string,
@@ -257,6 +398,229 @@ function scorePreservedAttribute(
     actual ?? "<missing>",
     output,
   )
+}
+
+function roundScore(score: number): number {
+  return Math.round(clampScore(score) * 1_000_000) / 1_000_000
+}
+
+function clampScore(score: number): number {
+  if (!Number.isFinite(score)) return 0
+  if (score < 0) return 0
+  if (score > 1) return 1
+  return score
+}
+
+function characterNgramCounts(text: string, size: number): Map<string, number> {
+  const chars = Array.from(text)
+  const counts = new Map<string, number>()
+  if (chars.length < size) return counts
+
+  for (let index = 0; index <= chars.length - size; index += 1) {
+    const gram = chars.slice(index, index + size).join("")
+    counts.set(gram, (counts.get(gram) ?? 0) + 1)
+  }
+
+  return counts
+}
+
+function totalNgramCount(counts: ReadonlyMap<string, number>): number {
+  let total = 0
+  for (const count of counts.values()) total += count
+  return total
+}
+
+function overlapNgramCount(
+  candidate: ReadonlyMap<string, number>,
+  reference: ReadonlyMap<string, number>,
+): number {
+  let total = 0
+  for (const [gram, candidateCount] of candidate) {
+    total += Math.min(candidateCount, reference.get(gram) ?? 0)
+  }
+  return total
+}
+
+export function chrfSimilarity(candidate: string, reference: string): number {
+  const normalizedCandidate = normalizeText(candidate)
+  const normalizedReference = normalizeText(reference)
+
+  if (normalizedCandidate.length === 0) return 0
+  if (normalizedCandidate === normalizedReference) return 1
+
+  let overlap = 0
+  let candidateTotal = 0
+  let referenceTotal = 0
+
+  for (let size = 1; size <= CHRF_MAX_NGRAM; size += 1) {
+    const candidateCounts = characterNgramCounts(normalizedCandidate, size)
+    const referenceCounts = characterNgramCounts(normalizedReference, size)
+    overlap += overlapNgramCount(candidateCounts, referenceCounts)
+    candidateTotal += totalNgramCount(candidateCounts)
+    referenceTotal += totalNgramCount(referenceCounts)
+  }
+
+  if (candidateTotal === 0 || referenceTotal === 0 || overlap === 0) return 0
+
+  const precision = overlap / candidateTotal
+  const recall = overlap / referenceTotal
+  const betaSquared = CHRF_BETA * CHRF_BETA
+
+  return roundScore(
+    ((1 + betaSquared) * precision * recall) / (betaSquared * precision + recall),
+  )
+}
+
+function referenceTextFor(evalCase: WebGpuEvalCase, reference: WebGpuEvalReference): string | null {
+  if (evalCase.contentType === "dom") {
+    if (reference.html) return visibleTextFromHtml(reference.html)
+    if (reference.text) return reference.text
+    return null
+  }
+
+  if (reference.text) return reference.text
+  if (reference.html) return visibleTextFromHtml(reference.html)
+  return null
+}
+
+function exactOutputOptionMatches(evalCase: WebGpuEvalCase, output: string): boolean {
+  const options = evalCase.exactOutputOptions
+  if (!options) return false
+  const normalizedOutput = normalizeText(output)
+  return options.some((option) => normalizeText(option) === normalizedOutput)
+}
+
+export function scoreReferenceSimilarity(
+  evalCase: WebGpuEvalCase,
+  rawOutput: string,
+): number {
+  const normalizedOutput = normalizeText(rawOutput)
+  if (normalizedOutput.length === 0) return 0
+  if (exactOutputOptionMatches(evalCase, rawOutput)) return 1
+
+  const candidate =
+    evalCase.contentType === "dom" ? visibleTextFromHtml(rawOutput) : normalizedOutput
+  const references = evalCase.references
+    .map((reference) => referenceTextFor(evalCase, reference))
+    .filter(
+      (reference): reference is string =>
+        reference !== null && normalizeText(reference).length > 0,
+    )
+
+  if (references.length === 0) return 0
+
+  return roundScore(
+    Math.max(...references.map((reference) => chrfSimilarity(candidate, reference))),
+  )
+}
+
+function passedCheckRatio(checks: readonly WebGpuEvalCheck[]): number {
+  if (checks.length === 0) return 0
+  const passed = checks.filter((check) => check.pass).length
+  return passed / checks.length
+}
+
+function failedCheck(checks: readonly WebGpuEvalCheck[], name: string): boolean {
+  return checks.some((check) => check.name === name && !check.pass)
+}
+
+function hardFailureReasonFor(
+  evalCase: WebGpuEvalCase,
+  rawOutput: string,
+  normalizedOutput: string,
+  checks: readonly WebGpuEvalCheck[],
+): string | null {
+  if (failedCheck(checks, "non-empty-output")) return "empty-output"
+  if (failedCheck(checks, "no-prompt-echo")) return "prompt-echo"
+  if (failedCheck(checks, "no-explanation-wrapper")) return "explanation-wrapper"
+  if (evalCase.sourceShouldChange && sourceLooksCopied(evalCase.sourceText, rawOutput)) {
+    return "source-copied"
+  }
+  if (evalCase.targetLanguage === "ar" && !ARABIC_SCRIPT_PATTERN.test(normalizedOutput)) {
+    return "wrong-target-script"
+  }
+  return null
+}
+
+function buildCaseScoreBreakdown(
+  evalCase: WebGpuEvalCase,
+  rawOutput: string,
+  normalizedOutput: string,
+  checks: readonly WebGpuEvalCheck[],
+): WebGpuEvalCaseScoreBreakdown {
+  const hardFailureReason = hardFailureReasonFor(evalCase, rawOutput, normalizedOutput, checks)
+  const hardFailure = hardFailureReason !== null
+
+  return {
+    checkScore: hardFailure ? 0 : roundScore(passedCheckRatio(checks)),
+    referenceSimilarity: hardFailure ? 0 : scoreReferenceSimilarity(evalCase, rawOutput),
+    hardFailure,
+    hardFailureReason,
+  }
+}
+
+function caseScoreFromBreakdown(breakdown: WebGpuEvalCaseScoreBreakdown): number {
+  if (breakdown.hardFailure) return 0
+
+  return roundScore(
+    breakdown.checkScore * CASE_CHECK_SCORE_WEIGHT +
+      breakdown.referenceSimilarity * CASE_REFERENCE_SIMILARITY_WEIGHT,
+  )
+}
+
+export function scoreWebGpuEvalGenerationFailure(
+  errorMessage: string,
+): ScoredWebGpuEvalCase {
+  return scoreFailedEvalCase("", {
+    checkName: "generation-completed",
+    expected: "translation resolves",
+    errorMessage,
+    hardFailureReason: "generation-error",
+  })
+}
+
+export function scoreWebGpuEvalValidationFailure(
+  rawOutput: string,
+  errorMessage: string,
+): ScoredWebGpuEvalCase {
+  return scoreFailedEvalCase(rawOutput, {
+    checkName: "scoring-completed",
+    expected: "scoring completes",
+    errorMessage,
+    hardFailureReason: "validation-error",
+  })
+}
+
+function scoreFailedEvalCase(
+  rawOutput: string,
+  failure: {
+    readonly checkName: string
+    readonly expected: string
+    readonly errorMessage: string
+    readonly hardFailureReason: string
+  },
+): ScoredWebGpuEvalCase {
+  const checks = [
+    createCheck(
+      failure.checkName,
+      false,
+      failure.expected,
+      failure.errorMessage,
+    ),
+  ]
+
+  return {
+    normalizedOutput: normalizeText(rawOutput),
+    checks,
+    pass: false,
+    score: 0,
+    scoreBreakdown: {
+      checkScore: 0,
+      referenceSimilarity: 0,
+      hardFailure: true,
+      hardFailureReason: failure.hardFailureReason,
+    },
+  }
 }
 
 export function scoreWebGpuEvalCase(
@@ -366,10 +730,113 @@ export function scoreWebGpuEvalCase(
     checks.push(scorePreservedAttribute(htmlFragment, attribute, normalizedOutput))
   }
 
+  const scoreBreakdown = buildCaseScoreBreakdown(
+    evalCase,
+    rawOutput,
+    normalizedOutput,
+    checks,
+  )
+
   return {
     normalizedOutput,
     checks,
     pass: checks.every((check) => check.pass),
+    score: caseScoreFromBreakdown(scoreBreakdown),
+    scoreBreakdown,
+  }
+}
+
+export type WebGpuEvalModelScoreCase = {
+  readonly category: string
+  readonly checks: readonly WebGpuEvalCheck[]
+  readonly pass: boolean
+  readonly scoreBreakdown: WebGpuEvalCaseScoreBreakdown
+}
+
+function incrementCounter(counter: Record<string, number>, key: string): void {
+  counter[key] = (counter[key] ?? 0) + 1
+}
+
+function failuresByCategory(
+  cases: readonly WebGpuEvalModelScoreCase[],
+): Readonly<Record<string, number>> {
+  const failures: Record<string, number> = {}
+
+  for (const evalCase of cases) {
+    if (evalCase.pass) continue
+    incrementCounter(failures, evalCase.category)
+  }
+
+  return failures
+}
+
+function failuresByCheck(
+  cases: readonly WebGpuEvalModelScoreCase[],
+): Readonly<Record<string, number>> {
+  const failures: Record<string, number> = {}
+
+  for (const evalCase of cases) {
+    for (const check of evalCase.checks) {
+      if (check.pass) continue
+      incrementCounter(failures, check.name)
+    }
+  }
+
+  return failures
+}
+
+function average(values: readonly number[]): number {
+  if (values.length === 0) return 0
+  return values.reduce((sum, value) => sum + value, 0) / values.length
+}
+
+export function scoreWebGpuEvalModel(
+  cases: readonly WebGpuEvalModelScoreCase[],
+  failureReason: string | null = null,
+): WebGpuEvalModelScoreSummary {
+  if (failureReason !== null) {
+    return {
+      score: 0,
+      scoreBreakdown: {
+        weightedCheckScore: 0,
+        passedCaseRatio: 0,
+        referenceSimilarity: 0,
+        hardFailureCount: 0,
+        failureReason,
+      },
+      failuresByCategory: {},
+      failuresByCheck: {},
+    }
+  }
+
+  const weightedCheckScore = roundScore(
+    average(cases.map((evalCase) => evalCase.scoreBreakdown.checkScore)),
+  )
+  const passedCaseRatio = roundScore(
+    cases.length === 0 ? 0 : cases.filter((evalCase) => evalCase.pass).length / cases.length,
+  )
+  const referenceSimilarity = roundScore(
+    average(cases.map((evalCase) => evalCase.scoreBreakdown.referenceSimilarity)),
+  )
+  const hardFailureCount = cases.filter(
+    (evalCase) => evalCase.scoreBreakdown.hardFailure,
+  ).length
+
+  return {
+    score: roundScore(
+      weightedCheckScore * MODEL_CHECK_SCORE_WEIGHT +
+        passedCaseRatio * MODEL_PASSED_CASE_RATIO_WEIGHT +
+        referenceSimilarity * MODEL_REFERENCE_SIMILARITY_WEIGHT,
+    ),
+    scoreBreakdown: {
+      weightedCheckScore,
+      passedCaseRatio,
+      referenceSimilarity,
+      hardFailureCount,
+      failureReason: null,
+    },
+    failuresByCategory: failuresByCategory(cases),
+    failuresByCheck: failuresByCheck(cases),
   }
 }
 
