@@ -50,6 +50,8 @@ type WebGpuEvalRequest = {
 
 type WebGpuEvalCaseResult = {
   readonly id: string
+  readonly split: WebGpuEvalCase["split"]
+  readonly category: string
   readonly sourceText: string
   readonly sourceLanguage: "en"
   readonly targetLanguage: WebGpuEvalCase["targetLanguage"]
@@ -224,6 +226,8 @@ function createFailedCase(
 ): WebGpuEvalCaseResult {
   return {
     id: evalCase.id,
+    split: evalCase.split,
+    category: evalCase.category,
     sourceText: evalCase.sourceText,
     sourceLanguage: evalCase.sourceLanguage,
     targetLanguage: evalCase.targetLanguage,
@@ -234,7 +238,7 @@ function createFailedCase(
       {
         name: "generation-completed",
         pass: false,
-        expected: "translateText resolves",
+        expected: "translation resolves",
         actual: error.message,
       },
     ],
@@ -242,6 +246,33 @@ function createFailedCase(
     translateMs,
     error,
   }
+}
+
+async function translateDomEvalCase(
+  core: ReturnType<typeof createBabulfish>,
+  evalCase: WebGpuEvalCase,
+  signal: AbortSignal,
+): Promise<string> {
+  const scope = document.createElement("div")
+  const root = document.createElement("div")
+  root.setAttribute("data-webgpu-eval-root", "")
+  root.innerHTML = evalCase.sourceText
+  scope.append(root)
+
+  await core.translateTo(evalCase.targetLanguage, { root: scope, signal })
+  return root.innerHTML
+}
+
+function translateEvalCase(
+  core: ReturnType<typeof createBabulfish>,
+  evalCase: WebGpuEvalCase,
+  signal: AbortSignal,
+): Promise<string> {
+  if (evalCase.contentType === "dom") {
+    return translateDomEvalCase(core, evalCase, signal)
+  }
+
+  return core.translateText(evalCase.sourceText, evalCase.targetLanguage, { signal })
 }
 
 async function runEvalCase(
@@ -253,8 +284,7 @@ async function runEvalCase(
 
   try {
     const rawOutput = await withAbortableTimeout(
-      (signal) =>
-        core.translateText(evalCase.sourceText, evalCase.targetLanguage, { signal }),
+      (signal) => translateEvalCase(core, evalCase, signal),
       `case ${evalCase.id}`,
       timeoutMs,
     )
@@ -262,6 +292,8 @@ async function runEvalCase(
 
     return {
       id: evalCase.id,
+      split: evalCase.split,
+      category: evalCase.category,
       sourceText: evalCase.sourceText,
       sourceLanguage: evalCase.sourceLanguage,
       targetLanguage: evalCase.targetLanguage,
@@ -359,7 +391,6 @@ async function runModelEval({
     for (const evalCase of WEBGPU_EVAL_CORPUS) {
       const result = await runEvalCase(core, evalCase, caseTimeoutMs)
       cases.push(result)
-      if (result.error) break
     }
 
     return {

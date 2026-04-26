@@ -21,11 +21,15 @@ pnpm eval:webgpu -- --model translategemma-4
 pnpm eval:webgpu -- --output-dir .evals/manual-webgpu-run
 ```
 
-The runner starts the vanilla Vite demo with COOP/COEP headers, launches Chromium through Playwright, requires WebGPU, loads one model, runs the fixed corpus through `createBabulfish().loadModel()` and `translateText()`, then writes:
+The runner starts the vanilla Vite demo with COOP/COEP headers, launches Chromium through Playwright, requires WebGPU, loads one model, runs the JSON corpus in `evals/translation/`, then writes:
 
 ```text
 .evals/web-gpu-<timestamp>/<model-name>.json
 ```
+
+Text and Markdown cases run through `translateText()`. DOM cases run through `translateTo(..., { root })` against an isolated per-case fixture so selector and attribute preservation checks exercise the DOM path.
+
+The corpus currently contains 38 cases: 23 `dev` and 15 `holdout`.
 
 Install the Playwright browser if Chromium is missing:
 
@@ -50,7 +54,10 @@ Sample artifact shape:
     "cases": [
       {
         "id": "plain-es",
+        "split": "dev",
+        "category": "plain",
         "sourceText": "The browser translates this short sentence.",
+        "contentType": "text",
         "targetLanguage": "es",
         "rawOutput": "El navegador traduce esta breve frase.",
         "pass": true,

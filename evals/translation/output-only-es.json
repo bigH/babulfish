@@ -1,0 +1,31 @@
+{
+  "split": "dev",
+  "category": "output-only",
+  "sourceLanguage": "en",
+  "targetLanguage": "es",
+  "contentType": "text",
+  "source": {
+    "text": "Return only the translated words."
+  },
+  "references": [
+    {
+      "quality": "primary",
+      "text": "Devuelve solo las palabras traducidas."
+    }
+  ],
+  "checks": {
+    "sourceShouldChange": true,
+    "expectedPatterns": [
+      "(?i)\\b(devuelve|solo|solamente|palabras|traducid[ao]s)\\b"
+    ],
+    "forbiddenPatterns": [
+      "(?i)<think>",
+      "(?i)</think>",
+      "```",
+      "(?i)^\\s*(translation|answer|reference)\\s*:",
+      "(?i)sourceLanguage",
+      "(?i)targetLanguage",
+      "(?i)system prompt"
+    ]
+  }
+}

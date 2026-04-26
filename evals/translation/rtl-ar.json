@@ -1,0 +1,31 @@
+{
+  "split": "dev",
+  "category": "rtl",
+  "sourceLanguage": "en",
+  "targetLanguage": "ar",
+  "contentType": "text",
+  "source": {
+    "text": "Translate this brief status message."
+  },
+  "references": [
+    {
+      "quality": "primary",
+      "text": "ترجم رسالة الحالة المختصرة هذه."
+    }
+  ],
+  "checks": {
+    "sourceShouldChange": true,
+    "expectedPatterns": [
+      "[\\u0600-\\u06FF]"
+    ],
+    "forbiddenPatterns": [
+      "(?i)<think>",
+      "(?i)</think>",
+      "```",
+      "(?i)^\\s*(translation|answer|reference)\\s*:",
+      "(?i)sourceLanguage",
+      "(?i)targetLanguage",
+      "(?i)system prompt"
+    ]
+  }
+}

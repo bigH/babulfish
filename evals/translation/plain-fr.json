@@ -1,0 +1,31 @@
+{
+  "split": "dev",
+  "category": "plain",
+  "sourceLanguage": "en",
+  "targetLanguage": "fr",
+  "contentType": "text",
+  "source": {
+    "text": "The browser translates this short sentence."
+  },
+  "references": [
+    {
+      "quality": "primary",
+      "text": "Le navigateur traduit cette courte phrase."
+    }
+  ],
+  "checks": {
+    "sourceShouldChange": true,
+    "expectedPatterns": [
+      "(?i)\\b(navigateur|traduit|phrase|courte)\\b"
+    ],
+    "forbiddenPatterns": [
+      "(?i)<think>",
+      "(?i)</think>",
+      "```",
+      "(?i)^\\s*(translation|answer|reference)\\s*:",
+      "(?i)sourceLanguage",
+      "(?i)targetLanguage",
+      "(?i)system prompt"
+    ]
+  }
+}

@@ -1,3 +1,5 @@
+// @vitest-environment jsdom
+
 import { describe, expect, it } from "vitest"
 
 import {
@@ -9,6 +11,16 @@ import {
 type EvalCaseId = (typeof WEBGPU_EVAL_CORPUS)[number]["id"]
 
 const corpusById = new Map(WEBGPU_EVAL_CORPUS.map((evalCase) => [evalCase.id, evalCase]))
+const portedInlineCaseIds = [
+  "plain-es",
+  "plain-fr",
+  "markdown-es",
+  "brands-fr",
+  "ui-save-es",
+  "punctuation-fr",
+  "rtl-ar",
+  "output-only-es",
+] as const
 
 function requireCase(id: EvalCaseId) {
   const evalCase = corpusById.get(id)
@@ -17,6 +29,20 @@ function requireCase(id: EvalCaseId) {
 }
 
 describe("webgpu eval scorer", () => {
+  it("loads the JSON translation corpus plus the ported inline cases", () => {
+    expect(WEBGPU_EVAL_CORPUS).toHaveLength(38)
+    expect(corpusById.size).toBe(38)
+    expect(WEBGPU_EVAL_CORPUS.filter((evalCase) => evalCase.split === "dev")).toHaveLength(23)
+    expect(WEBGPU_EVAL_CORPUS.filter((evalCase) => evalCase.split === "holdout")).toHaveLength(15)
+    expect(WEBGPU_EVAL_CORPUS.filter((evalCase) => evalCase.contentType === "dom")).toHaveLength(6)
+  })
+
+  it("keeps the ported inline cases in the dev split", () => {
+    for (const id of portedInlineCaseIds) {
+      expect(requireCase(id).split).toBe("dev")
+    }
+  })
+
   it("accepts a direct Spanish translation without wrappers", () => {
     const result = scoreWebGpuEvalCase(
       requireCase("plain-es"),
@@ -68,6 +94,27 @@ describe("webgpu eval scorer", () => {
     const result = scoreWebGpuEvalCase(
       requireCase("rtl-ar"),
       "ترجم رسالة الحالة المختصرة هذه.",
+    )
+
+    expect(result.pass).toBe(true)
+  })
+
+  it("compiles JSON regex syntax and rejects forbidden wrapper patterns", () => {
+    const result = scoreWebGpuEvalCase(
+      requireCase("qwen3-es-plain-001"),
+      "Translation: El navegador traduce la pagina en segundo plano.",
+    )
+
+    expect(result.pass).toBe(false)
+    expect(result.checks.some((check) => check.name === "expected-pattern:1" && check.pass)).toBe(true)
+    expect(result.checks.some((check) => check.name.startsWith("forbidden-pattern:") && !check.pass))
+      .toBe(true)
+  })
+
+  it("checks DOM selectors and preserved attributes", () => {
+    const result = scoreWebGpuEvalCase(
+      requireCase("qwen3-es-dom-004"),
+      "<section><p>Habilite el soporte de <code>WebGPU</code> para renderizado avanzado. Consulte la <a href=\"/docs/runtime\">guia</a>.</p><p>Use <code>translateNode()</code> para manejar contenido.</p></section>",
     )
 
     expect(result.pass).toBe(true)

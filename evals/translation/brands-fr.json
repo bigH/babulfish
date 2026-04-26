@@ -1,0 +1,33 @@
+{
+  "split": "dev",
+  "category": "preservation",
+  "sourceLanguage": "en",
+  "targetLanguage": "fr",
+  "contentType": "text",
+  "source": {
+    "text": "Keep babulfish, TranslateGemma, and WebGPU unchanged in this sentence."
+  },
+  "references": [
+    {
+      "quality": "primary",
+      "text": "Gardez babulfish, TranslateGemma et WebGPU inchangés dans cette phrase."
+    }
+  ],
+  "checks": {
+    "sourceShouldChange": true,
+    "preservedSubstrings": [
+      "babulfish",
+      "TranslateGemma",
+      "WebGPU"
+    ],
+    "forbiddenPatterns": [
+      "(?i)<think>",
+      "(?i)</think>",
+      "```",
+      "(?i)^\\s*(translation|answer|reference)\\s*:",
+      "(?i)sourceLanguage",
+      "(?i)targetLanguage",
+      "(?i)system prompt"
+    ]
+  }
+}

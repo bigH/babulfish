@@ -1,0 +1,32 @@
+{
+  "split": "dev",
+  "category": "punctuation",
+  "sourceLanguage": "en",
+  "targetLanguage": "fr",
+  "contentType": "text",
+  "source": {
+    "text": "She said, \"Translate this now!\""
+  },
+  "references": [
+    {
+      "quality": "primary",
+      "text": "Elle a dit : \"Traduisez ceci maintenant !\""
+    }
+  ],
+  "checks": {
+    "sourceShouldChange": true,
+    "checkBalancedQuotes": true,
+    "expectedPatterns": [
+      "(?i)\\b(dit|traduire|traduisez|maintenant|ceci)\\b"
+    ],
+    "forbiddenPatterns": [
+      "(?i)<think>",
+      "(?i)</think>",
+      "```",
+      "(?i)^\\s*(translation|answer|reference)\\s*:",
+      "(?i)sourceLanguage",
+      "(?i)targetLanguage",
+      "(?i)system prompt"
+    ]
+  }
+}

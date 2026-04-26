@@ -1,25 +1,43 @@
+/// <reference types="vite/client" />
+
 export type WebGpuEvalModelId =
   | "qwen-2.5-0.5b"
   | "qwen-3-0.6b"
   | "gemma-3-1b-it"
   | "translategemma-4"
 
+export type WebGpuEvalContentType = "text" | "markdown" | "dom"
+export type WebGpuEvalSplit = "dev" | "holdout"
+
+type WebGpuEvalPatternCheck = {
+  readonly name: string
+  readonly pattern: RegExp
+  readonly note: string
+}
+
+type WebGpuEvalPreservedAttribute = {
+  readonly selector: string
+  readonly attribute: string
+  readonly value: string
+}
+
 export type WebGpuEvalCase = {
   readonly id: string
+  readonly split: WebGpuEvalSplit
+  readonly category: string
   readonly sourceText: string
   readonly sourceLanguage: "en"
   readonly targetLanguage: "es" | "fr" | "ar"
-  readonly contentType: "raw" | "markdown"
+  readonly contentType: WebGpuEvalContentType
   readonly preservedSubstrings?: readonly string[]
   readonly markdownMarkers?: readonly string[]
-  readonly expectedPatterns?: readonly {
-    readonly name: string
-    readonly pattern: RegExp
-    readonly note: string
-  }[]
+  readonly expectedPatterns?: readonly WebGpuEvalPatternCheck[]
+  readonly forbiddenPatterns?: readonly WebGpuEvalPatternCheck[]
   readonly exactOutputOptions?: readonly string[]
   readonly sourceShouldChange?: boolean
   readonly checkBalancedQuotes?: boolean
+  readonly requiredSelectors?: readonly string[]
+  readonly preservedAttributes?: readonly WebGpuEvalPreservedAttribute[]
 }
 
 export type WebGpuEvalCheck = {
@@ -51,111 +69,112 @@ export const WEBGPU_EVAL_MODEL_IDS = [
 
 export const DEFAULT_WEBGPU_EVAL_MODEL_ID: WebGpuEvalModelId = "qwen-2.5-0.5b"
 
-export const WEBGPU_EVAL_CORPUS = [
-  {
-    id: "plain-es",
-    sourceText: "The browser translates this short sentence.",
-    sourceLanguage: "en",
-    targetLanguage: "es",
-    contentType: "raw",
-    sourceShouldChange: true,
-    expectedPatterns: [
-      {
-        name: "spanish-smoke",
-        pattern: /\b(navegador|traduce|frase|oraci[oó]n|breve)\b/i,
-        note: "Spanish output should contain a plausible translated token.",
-      },
-    ],
-  },
-  {
-    id: "plain-fr",
-    sourceText: "The browser translates this short sentence.",
-    sourceLanguage: "en",
-    targetLanguage: "fr",
-    contentType: "raw",
-    sourceShouldChange: true,
-    expectedPatterns: [
-      {
-        name: "french-smoke",
-        pattern: /\b(navigateur|traduit|phrase|courte)\b/i,
-        note: "French output should contain a plausible translated token.",
-      },
-    ],
-  },
-  {
-    id: "markdown-es",
-    sourceText: "## Setup\n\nUse **babulfish** with `WebGPU` today.",
-    sourceLanguage: "en",
-    targetLanguage: "es",
-    contentType: "markdown",
-    preservedSubstrings: ["babulfish", "WebGPU"],
-    markdownMarkers: ["##", "**", "`"],
-    sourceShouldChange: true,
-  },
-  {
-    id: "brands-fr",
-    sourceText: "Keep babulfish, TranslateGemma, and WebGPU unchanged in this sentence.",
-    sourceLanguage: "en",
-    targetLanguage: "fr",
-    contentType: "raw",
-    preservedSubstrings: ["babulfish", "TranslateGemma", "WebGPU"],
-    sourceShouldChange: true,
-  },
-  {
-    id: "ui-save-es",
-    sourceText: "Save",
-    sourceLanguage: "en",
-    targetLanguage: "es",
-    contentType: "raw",
-    exactOutputOptions: ["Guardar", "Guarda"],
-  },
-  {
-    id: "punctuation-fr",
-    sourceText: "She said, \"Translate this now!\"",
-    sourceLanguage: "en",
-    targetLanguage: "fr",
-    contentType: "raw",
-    sourceShouldChange: true,
-    checkBalancedQuotes: true,
-    expectedPatterns: [
-      {
-        name: "french-quote-smoke",
-        pattern: /\b(dit|traduire|maintenant|ceci)\b/i,
-        note: "French output should translate the quoted sentence.",
-      },
-    ],
-  },
-  {
-    id: "rtl-ar",
-    sourceText: "Translate this brief status message.",
-    sourceLanguage: "en",
-    targetLanguage: "ar",
-    contentType: "raw",
-    sourceShouldChange: true,
-    expectedPatterns: [
-      {
-        name: "arabic-script",
-        pattern: /[\u0600-\u06FF]/,
-        note: "Arabic output should contain Arabic script.",
-      },
-    ],
-  },
-  {
-    id: "output-only-es",
-    sourceText: "Return only the translated words.",
-    sourceLanguage: "en",
-    targetLanguage: "es",
-    contentType: "raw",
-    sourceShouldChange: true,
-    expectedPatterns: [
-      {
-        name: "output-only-spanish-smoke",
-        pattern: /\b(devuelve|solo|solamente|palabras|traducid[ao]s)\b/i,
-        note: "Output-only case should still be a direct Spanish translation.",
-      },
-    ],
-  },
-] as const satisfies readonly WebGpuEvalCase[]
+type TranslationEvalJson = {
+  readonly split: WebGpuEvalSplit
+  readonly category: string
+  readonly sourceLanguage: "en"
+  readonly targetLanguage: WebGpuEvalCase["targetLanguage"]
+  readonly contentType: WebGpuEvalContentType
+  readonly source: {
+    readonly text?: string
+    readonly html?: string
+  }
+  readonly checks: {
+    readonly sourceShouldChange?: boolean
+    readonly expectedPatterns?: readonly string[]
+    readonly forbiddenPatterns?: readonly string[]
+    readonly preservedSubstrings?: readonly string[]
+    readonly markdownMarkers?: readonly string[]
+    readonly exactOutputOptions?: readonly string[]
+    readonly checkBalancedQuotes?: boolean
+    readonly requiredSelectors?: readonly string[]
+    readonly preservedAttributes?: readonly WebGpuEvalPreservedAttribute[]
+  }
+}
+
+const translationEvalModules = import.meta.glob<TranslationEvalJson>(
+  "../../../evals/translation/*.json",
+  { eager: true, import: "default" },
+)
+
+export const WEBGPU_EVAL_CORPUS = loadWebGpuEvalCorpus()
+
+function loadWebGpuEvalCorpus(): readonly WebGpuEvalCase[] {
+  const cases = Object.entries(translationEvalModules)
+    .map(([path, json]) => createEvalCase(path, json))
+    .sort((left, right) => left.id.localeCompare(right.id))
+
+  assertUniqueIds(cases)
+  return cases
+}
+
+function createEvalCase(path: string, json: TranslationEvalJson): WebGpuEvalCase {
+  const id = caseIdFromPath(path)
+  return {
+    id,
+    split: json.split,
+    category: json.category,
+    sourceText: sourceTextFor(json, id),
+    sourceLanguage: json.sourceLanguage,
+    targetLanguage: json.targetLanguage,
+    contentType: json.contentType,
+    sourceShouldChange: json.checks.sourceShouldChange,
+    preservedSubstrings: json.checks.preservedSubstrings,
+    markdownMarkers: json.checks.markdownMarkers,
+    expectedPatterns: compilePatterns("expected-pattern", json.checks.expectedPatterns),
+    forbiddenPatterns: compilePatterns("forbidden-pattern", json.checks.forbiddenPatterns),
+    exactOutputOptions: json.checks.exactOutputOptions,
+    checkBalancedQuotes: json.checks.checkBalancedQuotes,
+    requiredSelectors: json.checks.requiredSelectors,
+    preservedAttributes: json.checks.preservedAttributes,
+  }
+}
+
+function caseIdFromPath(path: string): string {
+  const filename = path.split("/").at(-1)
+  if (!filename?.endsWith(".json")) throw new Error(`Invalid eval corpus path: ${path}`)
+  return filename.slice(0, -".json".length)
+}
+
+function sourceTextFor(json: TranslationEvalJson, id: string): string {
+  if (json.contentType === "dom") {
+    if (!json.source.html) throw new Error(`DOM eval case ${id} is missing source.html`)
+    return json.source.html
+  }
+
+  if (!json.source.text) throw new Error(`Text eval case ${id} is missing source.text`)
+  return json.source.text
+}
+
+function compilePatterns(
+  namePrefix: "expected-pattern" | "forbidden-pattern",
+  patterns: readonly string[] = [],
+): readonly WebGpuEvalPatternCheck[] {
+  return patterns.map((rawPattern, index) => {
+    const { source, flags } = parseRegexSource(rawPattern)
+    return {
+      name: `${namePrefix}:${index + 1}`,
+      pattern: new RegExp(source, flags),
+      note: rawPattern,
+    }
+  })
+}
+
+function parseRegexSource(rawPattern: string): { readonly source: string; readonly flags: string } {
+  if (rawPattern.startsWith("(?i)")) {
+    return { source: rawPattern.slice("(?i)".length), flags: "i" }
+  }
+
+  return { source: rawPattern, flags: "" }
+}
+
+function assertUniqueIds(cases: readonly WebGpuEvalCase[]): void {
+  const seen = new Set<string>()
+  for (const evalCase of cases) {
+    if (seen.has(evalCase.id)) throw new Error(`Duplicate WebGPU eval case id: ${evalCase.id}`)
+    seen.add(evalCase.id)
+  }
+}
 
 function normalizeText(text: string): string {
   return text.replace(/\s+/g, " ").trim()
@@ -203,11 +222,49 @@ function scoreExactOutputOptions(
   )
 }
 
+function createHtmlFragment(html: string): DocumentFragment | null {
+  if (typeof document === "undefined") return null
+
+  const template = document.createElement("template")
+  template.innerHTML = html
+  return template.content
+}
+
+function scoreRequiredSelector(
+  fragment: DocumentFragment | null,
+  selector: string,
+  output: string,
+): WebGpuEvalCheck {
+  return createCheck(
+    `selector:${selector}`,
+    fragment !== null && fragment.querySelector(selector) !== null,
+    `HTML contains selector ${selector}`,
+    output,
+  )
+}
+
+function scorePreservedAttribute(
+  fragment: DocumentFragment | null,
+  expected: WebGpuEvalPreservedAttribute,
+  output: string,
+): WebGpuEvalCheck {
+  const actual = fragment?.querySelector(expected.selector)?.getAttribute(expected.attribute)
+
+  return createCheck(
+    `attribute:${expected.selector}[${expected.attribute}]`,
+    actual === expected.value,
+    expected.value,
+    actual ?? "<missing>",
+    output,
+  )
+}
+
 export function scoreWebGpuEvalCase(
   evalCase: WebGpuEvalCase,
   rawOutput: string,
 ): ScoredWebGpuEvalCase {
   const normalizedOutput = normalizeText(rawOutput)
+  const htmlFragment = evalCase.contentType === "dom" ? createHtmlFragment(rawOutput) : null
   const checks: WebGpuEvalCheck[] = [
     createCheck(
       "non-empty-output",
@@ -274,6 +331,18 @@ export function scoreWebGpuEvalCase(
     )
   }
 
+  for (const forbidden of evalCase.forbiddenPatterns ?? []) {
+    checks.push(
+      createCheck(
+        forbidden.name,
+        !forbidden.pattern.test(rawOutput),
+        `does not match ${forbidden.pattern}`,
+        normalizedOutput,
+        forbidden.note,
+      ),
+    )
+  }
+
   if (evalCase.exactOutputOptions) {
     checks.push(scoreExactOutputOptions(evalCase.exactOutputOptions, rawOutput))
   }
@@ -287,6 +356,14 @@ export function scoreWebGpuEvalCase(
         String(quoteCount(rawOutput)),
       ),
     )
+  }
+
+  for (const selector of evalCase.requiredSelectors ?? []) {
+    checks.push(scoreRequiredSelector(htmlFragment, selector, normalizedOutput))
+  }
+
+  for (const attribute of evalCase.preservedAttributes ?? []) {
+    checks.push(scorePreservedAttribute(htmlFragment, attribute, normalizedOutput))
   }
 
   return {

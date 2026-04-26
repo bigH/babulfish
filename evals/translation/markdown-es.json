@@ -1,0 +1,37 @@
+{
+  "split": "dev",
+  "category": "markdown",
+  "sourceLanguage": "en",
+  "targetLanguage": "es",
+  "contentType": "markdown",
+  "source": {
+    "text": "## Setup\n\nUse **babulfish** with `WebGPU` today."
+  },
+  "references": [
+    {
+      "quality": "primary",
+      "text": "## Configuración\n\nUsa **babulfish** con `WebGPU` hoy."
+    }
+  ],
+  "checks": {
+    "sourceShouldChange": true,
+    "preservedSubstrings": [
+      "babulfish",
+      "WebGPU"
+    ],
+    "markdownMarkers": [
+      "##",
+      "**",
+      "`"
+    ],
+    "forbiddenPatterns": [
+      "(?i)<think>",
+      "(?i)</think>",
+      "```",
+      "(?i)^\\s*(translation|answer|reference)\\s*:",
+      "(?i)sourceLanguage",
+      "(?i)targetLanguage",
+      "(?i)system prompt"
+    ]
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "split": "dev",
+  "category": "ui-label",
+  "sourceLanguage": "en",
+  "targetLanguage": "es",
+  "contentType": "text",
+  "source": {
+    "text": "Save"
+  },
+  "references": [
+    {
+      "quality": "primary",
+      "text": "Guardar"
+    }
+  ],
+  "checks": {
+    "exactOutputOptions": [
+      "Guardar",
+      "Guarda"
+    ],
+    "forbiddenPatterns": [
+      "(?i)<think>",
+      "(?i)</think>",
+      "```",
+      "(?i)^\\s*(translation|answer|reference)\\s*:",
+      "(?i)sourceLanguage",
+      "(?i)targetLanguage",
+      "(?i)system prompt"
+    ]
+  }
+}
