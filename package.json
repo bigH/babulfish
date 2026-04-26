@@ -4,7 +4,8 @@
   "type": "module",
   "scripts": {
     "build": "pnpm -r run build",
-    "test": "pnpm -r run test",
+    "test": "pnpm run test:scripts && pnpm -r run test",
+    "test:scripts": "node --test scripts/*.test.mjs",
     "lint": "pnpm -r run lint",
     "eval:webgpu": "node scripts/webgpu-eval.mjs",
     "consumer:smoke": "node scripts/consumer-smoke.mjs",
