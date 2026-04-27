@@ -205,15 +205,15 @@ run_codex_attempt() {
   return "$codex_status"
 }
 
-reset_candidate_adapter_patch() {
+reset_candidate_product_patch() {
   local patch_file="$1"
 
   [[ -s "$patch_file" ]] || return 0
   node "$HELPER" ensure-reset-scope ||
-    stop_for_driver "Reset would discard changes outside optimizer-owned adapter/docs paths."
+    stop_for_driver "Reset would discard changes outside optimizer-owned product/docs paths."
 
   git apply -R "$patch_file" ||
-    stop_for_driver "Could not reverse rejected adapter patch $patch_file."
+    stop_for_driver "Could not reverse rejected product patch $patch_file."
 }
 
 create_inner_worktree() {
@@ -260,10 +260,9 @@ ensure_inner_head_unchanged() {
 
 ensure_inner_attempt_scope() {
   local inner_repo="$1"
-  local inner_helper="$inner_repo/scripts/auto-optimize-helper.mjs"
   local scope_error="$TMP_ROOT/inner-scope.err"
 
-  if ! node "$inner_helper" ensure-reset-scope 2> "$scope_error"; then
+  if ! node "$HELPER" ensure-reset-scope "$inner_repo" 2> "$scope_error"; then
     git -C "$inner_repo" status --short > "$TMP_ROOT/inner-scope-status.log" || true
     remove_inner_worktree "$inner_repo"
     stop_for_driver "$(cat "$scope_error") See $TMP_ROOT/inner-scope-status.log"
@@ -273,26 +272,53 @@ ensure_inner_attempt_scope() {
 create_inner_patches() {
   local inner_repo="$1"
   local base_sha="$2"
-  local adapter_patch="$3"
+  local product_patch="$3"
   local docs_patch="$4"
 
-  git -C "$inner_repo" add -N -- packages/core/src/engine/adapters/ docs/optimization/ >/dev/null 2>&1 || true
-  git -C "$inner_repo" diff --binary "$base_sha" -- packages/core/src/engine/adapters/ > "$adapter_patch"
+  git -C "$inner_repo" add -N -- . >/dev/null 2>&1 || true
+  git -C "$inner_repo" diff --binary "$base_sha" -- . ':(exclude)docs/optimization/**' > "$product_patch"
   git -C "$inner_repo" diff --binary "$base_sha" -- docs/optimization/ > "$docs_patch"
 }
 
 import_inner_patches() {
   local base_sha="$1"
-  local adapter_patch="$2"
+  local product_patch="$2"
   local docs_patch="$3"
-  local import_adapter="$4"
+  local import_product="$4"
 
   ensure_main_clean_before_import "$base_sha"
-  if [[ "$import_adapter" == "yes" && -s "$adapter_patch" ]]; then
-    git -C "$REPO" apply "$adapter_patch"
+  if [[ "$import_product" == "yes" && -s "$product_patch" ]]; then
+    git -C "$REPO" apply --check "$product_patch" ||
+      stop_for_driver "Candidate product patch cannot be applied cleanly: $product_patch"
+  fi
+  if [[ -s "$docs_patch" ]]; then
+    git -C "$REPO" apply --check "$docs_patch" ||
+      stop_for_driver "Candidate docs patch cannot be applied cleanly: $docs_patch"
+  fi
+  if [[ "$import_product" == "yes" && -s "$product_patch" ]]; then
+    git -C "$REPO" apply "$product_patch"
   fi
   if [[ -s "$docs_patch" ]]; then
     git -C "$REPO" apply "$docs_patch"
+  fi
+  node "$HELPER" ensure-reset-scope ||
+    stop_for_driver "Imported candidate has changes outside optimizer-owned product/docs paths."
+}
+
+ensure_product_changes_reset() {
+  local cached_patch="$TMP_ROOT/main-product-after-reset-cached.patch"
+  local current_patch="$TMP_ROOT/main-product-after-reset.patch"
+
+  git -C "$REPO" diff --cached --binary -- . ':(exclude)docs/optimization/**' > "$cached_patch"
+  if [[ -s "$cached_patch" ]]; then
+    stop_for_driver "Staged product changes remain after candidate reset. See $cached_patch"
+  fi
+
+  git -C "$REPO" add -N -- . >/dev/null 2>&1 || true
+  git -C "$REPO" diff --binary -- . ':(exclude)docs/optimization/**' > "$current_patch"
+
+  if [[ -s "$current_patch" ]]; then
+    stop_for_driver "Product changes remain after candidate reset. See $current_patch"
   fi
 }
 
@@ -326,13 +352,13 @@ ensure_main_candidate_unchanged() {
   fi
 
   node "$HELPER" ensure-reset-scope ||
-    stop_for_driver "Main worktree has changes outside optimizer-owned adapter/docs paths."
+    stop_for_driver "Main worktree has changes outside optimizer-owned product/docs paths."
 
-  git -C "$REPO" add -N -- packages/core/src/engine/adapters/ >/dev/null 2>&1 || true
-  git -C "$REPO" diff --binary "$base_sha" -- packages/core/src/engine/adapters/ > "$current_patch"
+  git -C "$REPO" add -N -- . >/dev/null 2>&1 || true
+  git -C "$REPO" diff --binary "$base_sha" -- . ':(exclude)docs/optimization/**' > "$current_patch"
 
   if ! cmp -s "$expected_patch" "$current_patch"; then
-    stop_for_driver "Main adapter diff changed after candidate import. See $expected_patch and $current_patch"
+    stop_for_driver "Main product diff changed after candidate import. See $expected_patch and $current_patch"
   fi
 }
 
@@ -349,19 +375,54 @@ write_inner_prompt() {
     cat <<EOF
 You are the inner Codex optimizer for /Users/hiren/dev/babulfish.
 You are running in an isolated temporary worktree at ${inner_repo}. Run commands there, not in /Users/hiren/dev/babulfish directly.
-The outer harness will import adapter diffs plus docs/optimization notes back to the real repo.
+The outer harness will import product diffs plus docs/optimization notes back to the real repo.
 The Codex CLI is running in yolo/bypass mode so you can run arbitrary commands; stay inside the guardrails below.
 
-Goal: make exactly one small prompt/input improvement for the selected WebGPU eval model only.
+Goal: improve translation quality through one real babulfish product change for the selected WebGPU eval model.
 
 Autonomous loop rules:
 - This is iteration ${iteration}/${total_iterations}. Try exactly one idea, then stop.
-- You may read any repo file, but you may edit only files under packages/core/src/engine/adapters/ and docs/optimization/.
+- You may modify babulfish product code broadly when the change is a real product improvement.
+- Allowed examples include packages/core/src/**, packages/react/src/**, packages/styles/src/**, packages/babulfish/src/**, packages/demo-shared/src/**, packages/demo-vanilla/src/** except WebGPU eval files, packages/demo-webcomponent/src/**, packages/demo/app/**, package README files, and product behavior tests.
+- You may move responsibilities around, refactor, add prompt/input handling, add post-processing, improve model-specific logic, or change public package code when justified.
+- Preserve existing capabilities unless an explicit, intentional behavior change is covered by tests.
+- Tests may be added or updated for intentional product behavior. Do not weaken, delete, skip, or neuter tests.
 - Append exactly one line to docs/optimization/${selected_model}-log.md for this iteration. Include failure_modes=..., hypotheses=..., selected=..., change=..., eval=..., result=....
 - Write exactly one short terminal blurb to ${report_file}. One line only: change + reasoning.
-- Do not edit tests, eval scripts, package manifests, or any other source files.
 - Do not ask the human whether to continue for worse score, crash, timeout, or no idea worked.
 - If an assumption guardrail is false, print BLOCKED: <reason> and stop.
+
+Hard no-touch files and directories:
+- scripts/webgpu-eval.mjs
+- packages/demo-vanilla/src/webgpu-eval.ts
+- packages/demo-vanilla/src/webgpu-eval-scorer.ts
+- packages/demo-vanilla/webgpu-eval.html
+- evals/translation/**/*.json
+- .evals/**
+- docs/webgpu-evals.md
+- package.json
+- packages/*/package.json
+- pnpm-lock.yaml
+- pnpm-workspace.yaml
+- .github/workflows/**
+- eslint.config.js
+- tsconfig.base.json
+- packages/*/tsconfig.json
+- packages/*/vitest.config.ts
+- packages/*/vite.config.ts
+- packages/*/tsup.config.ts
+- packages/demo/next.config.ts
+- scripts/consumer-smoke.mjs
+- packages/demo/scripts/smoke.mjs
+- scripts/auto-optimize.sh
+- scripts/auto-optimize-helper.mjs
+- scripts/auto-optimize-helper.test.mjs
+Fresh eval artifacts may be generated only by the required eval command; never manually edit or commit .evals files.
+
+Anti-cheat rules:
+- Do not hardcode eval case IDs, source strings, expected outputs, reference translations, artifact paths, or model scores.
+- Do not modify eval scoring, eval corpus, live eval harness, validation machinery, package scripts, package manifests, or lockfiles.
+- Do not make changes whose only purpose is to satisfy the current eval artifact rather than improve product behavior.
 
 Selected model: ${selected_model}
 Harness iteration: ${iteration}/${total_iterations}
@@ -375,27 +436,27 @@ EOF
 
 Required workflow:
 1. Collect eval evidence from the baseline artifact above. Identify the concrete failure modes.
-2. Generate at least three hypotheses for selected-model-only prompt/input changes that could improve those failure modes.
+2. Generate at least three hypotheses for product changes that could improve those failure modes while preserving existing capabilities.
 3. Select one hypothesis. Explain why it is the best bet and list the attack plan.
-4. Make one small selected-model-only change by editing packages/core/src/engine/adapters/ only.
+4. Make one focused product change. Prefer the smallest durable change that improves the product, but do not artificially confine yourself to adapter files.
 5. Run the full babulfish test suite from the temporary repo root:
    pnpm test
-   If any test fails, use the failure to revise only the selected-model adapter change when the fix is still selected-model-only. If the failure cannot be fixed within the allowed adapter scope, restore your adapter edits, keep the docs/optimization log line, write the failure reason to the report file, and exit cleanly. Do not edit tests.
+   If any test fails, use the failure to revise the product change. If the failure cannot be fixed without violating the hard no-touch rules, restore your product edits, keep the docs/optimization log line, write the failure reason to the report file, and exit cleanly.
 6. Run the target headed eval into a fresh .evals/web-gpu-* output dir:
    pnpm eval:webgpu -- --model <selected-model> --headed --output-dir <fresh-dir>
 7. Compare the new artifact's model.score to the baseline above.
-8. If improved: leave adapter changes in the working tree and summarize score/artifact.
-9. If not improved: restore only adapter edits you made, keep the docs/optimization log line, and exit cleanly.
+8. If improved: leave product changes in the working tree and summarize score/artifact.
+9. If not improved: restore only product edits you made, keep the docs/optimization log line, and exit cleanly.
 
 Model-specific constraints:
-- Qwen and Gemma chat models currently inherit ChatModelBaseAdapter.buildSystemPrompt(). If optimizing one of them, first add a model-specific buildSystemPrompt override if needed, then tune only that model. Do not edit shared chat prompt behavior for one model.
-- TranslateGemma uses structured input, not a normal chat system prompt. Do not force fake prompt changes. Only make a clean model-specific input-surface improvement with tests; if improvement needs architecture changes, print BLOCKED.
-- Prompt changes must affect the selected model only.
+- Qwen and Gemma chat models currently inherit ChatModelBaseAdapter.buildSystemPrompt(). If a change should be model-specific, split or override cleanly instead of smuggling model conditionals into shared behavior.
+- TranslateGemma uses structured input, not a normal chat system prompt. Do not force fake prompt changes; improve its real input/output surface or shared product logic when that is the right fix.
+- Shared changes are allowed when they are real product improvements and existing capabilities remain preserved by tests and verification.
 
 Do not:
-- Edit shared prompt behavior unless you first split it into model-specific prompt builders.
-- Edit any path outside packages/core/src/engine/adapters/ and docs/optimization/.
+- Edit hard no-touch paths listed above.
 - Modify eval scoring, corpus, or live eval harness.
+- Weaken tests or validation to make a candidate pass.
 - Delete historical .evals.
 - Commit. The outer harness owns verification and commits.
 EOF
@@ -405,7 +466,7 @@ EOF
 changed_paths_for_commit() {
   local pathspec_file="$1"
   node "$HELPER" commit-paths > "$pathspec_file" ||
-    stop_for_driver "Changed files are outside optimizer-owned adapter/docs paths."
+    stop_for_driver "Changed files are outside optimizer-owned product/docs paths."
   [[ -s "$pathspec_file" ]]
 }
 
@@ -499,7 +560,7 @@ for ((iteration = 1; iteration <= ITERATIONS; iteration += 1)); do
   STDOUT_LOG="$TMP_ROOT/iteration-${iteration}.stdout.jsonl"
   STDERR_LOG="$TMP_ROOT/iteration-${iteration}.stderr.log"
   REPORT_FILE="$TMP_ROOT/iteration-${iteration}.report.txt"
-  CANDIDATE_PATCH="$TMP_ROOT/iteration-${iteration}.adapter.patch"
+  CANDIDATE_PATCH="$TMP_ROOT/iteration-${iteration}.product.patch"
   DOCS_PATCH="$TMP_ROOT/iteration-${iteration}.docs.patch"
 
   create_inner_worktree "$ATTEMPT_BASE_SHA" "$iteration" "1"
@@ -531,21 +592,22 @@ for ((iteration = 1; iteration <= ITERATIONS; iteration += 1)); do
 
   print_change_blurb "$REPORT_FILE" "$STDOUT_LOG"
   printf '\n'
-  print_patch_diff "$CANDIDATE_PATCH" "(no adapter diff)"
+  print_patch_diff "$CANDIDATE_PATCH" "(no product diff)"
   printf '\n'
 
   if [[ "$CODEX_STATUS" -ne 0 ]]; then
     SCORE_LINE="no improvement (codex exited ${CODEX_STATUS})"
     import_inner_patches "$ATTEMPT_BASE_SHA" "$CANDIDATE_PATCH" "$DOCS_PATCH" "no"
   elif [[ ! -s "$CANDIDATE_PATCH" ]]; then
-    SCORE_LINE="no improvement (no adapter diff)"
+    SCORE_LINE="no improvement (no product diff)"
     import_inner_patches "$ATTEMPT_BASE_SHA" "$CANDIDATE_PATCH" "$DOCS_PATCH" "no"
   else
     import_inner_patches "$ATTEMPT_BASE_SHA" "$CANDIDATE_PATCH" "$DOCS_PATCH" "yes"
 
     if ! pnpm test; then
       SCORE_LINE="no improvement (tests failed)"
-      reset_candidate_adapter_patch "$CANDIDATE_PATCH"
+      reset_candidate_product_patch "$CANDIDATE_PATCH"
+      ensure_product_changes_reset
     else
       VERIFY_DIR="$REPO/.evals/web-gpu-$(timestamp)-auto-verify-${SELECTED_MODEL}-${iteration}-$$"
       run_eval_set "$VERIFY_DIR"
@@ -558,13 +620,15 @@ for ((iteration = 1; iteration <= ITERATIONS; iteration += 1)); do
       COMPARE_STATUS="$(node "$HELPER" compare-status "$COMPARE_JSON")"
 
       if [[ "$COMPARE_STATUS" == "stop" ]]; then
-        reset_candidate_adapter_patch "$CANDIDATE_PATCH"
+        reset_candidate_product_patch "$CANDIDATE_PATCH"
+        ensure_product_changes_reset
         stop_for_driver "Verification could not prove the contract. See $COMPARE_JSON"
       fi
 
       if [[ "$COMPARE_STATUS" != "pass" ]]; then
         SCORE_LINE="no improvement ($(node "$HELPER" compare-reasons "$COMPARE_JSON"))"
-        reset_candidate_adapter_patch "$CANDIDATE_PATCH"
+        reset_candidate_product_patch "$CANDIDATE_PATCH"
+        ensure_product_changes_reset
       else
         NEW_SCORE="$(node "$HELPER" compare-new-score "$COMPARE_JSON")"
         SCORE_LINE="$(node "$HELPER" compare-score-improvement "$COMPARE_JSON")"

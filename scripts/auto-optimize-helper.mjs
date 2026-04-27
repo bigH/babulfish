@@ -18,6 +18,42 @@ export const EXPECTED_CASE_COUNT = 38
 
 const scriptPath = fileURLToPath(import.meta.url)
 const repoRoot = path.resolve(path.dirname(scriptPath), "..")
+const docsOptimizationPrefix = "docs/optimization/"
+const productSourcePrefixes = Object.freeze([
+  "packages/core/src/",
+  "packages/react/src/",
+  "packages/styles/src/",
+  "packages/babulfish/src/",
+  "packages/demo-shared/src/",
+  "packages/demo-vanilla/src/",
+  "packages/demo-webcomponent/src/",
+  "packages/demo/app/",
+])
+const hardBlockedExactPaths = new Set([
+  "scripts/webgpu-eval.mjs",
+  "packages/demo-vanilla/src/webgpu-eval.ts",
+  "packages/demo-vanilla/src/webgpu-eval-scorer.ts",
+  "packages/demo-vanilla/webgpu-eval.html",
+  "docs/webgpu-evals.md",
+  "package.json",
+  "pnpm-lock.yaml",
+  "pnpm-workspace.yaml",
+  "eslint.config.js",
+  "tsconfig.base.json",
+  "packages/demo/next.config.ts",
+  "scripts/consumer-smoke.mjs",
+  "packages/demo/scripts/smoke.mjs",
+  "scripts/auto-optimize.sh",
+  "scripts/auto-optimize-helper.mjs",
+  "scripts/auto-optimize-helper.test.mjs",
+])
+const hardBlockedPackageFiles = new Set([
+  "package.json",
+  "tsconfig.json",
+  "vitest.config.ts",
+  "vite.config.ts",
+  "tsup.config.ts",
+])
 
 class NeedsFreshArtifactsError extends Error {
   constructor(message) {
@@ -33,6 +69,41 @@ function fail(message, exitCode = 1) {
 
 function normalizeRelativePath(filePath, root = repoRoot) {
   return path.relative(root, path.resolve(root, filePath)).split(path.sep).join("/")
+}
+
+function normalizeAttemptPath(filePath) {
+  return String(filePath).replaceAll("\\", "/").replace(/^\.\//, "")
+}
+
+function isPackageFile(filePath, fileName) {
+  const parts = filePath.split("/")
+  return parts.length === 3 && parts[0] === "packages" && parts[2] === fileName
+}
+
+function isPackageReadme(filePath) {
+  return isPackageFile(filePath, "README.md")
+}
+
+function isPackageValidationFile(filePath) {
+  const parts = filePath.split("/")
+  return (
+    parts.length === 3 &&
+    parts[0] === "packages" &&
+    hardBlockedPackageFiles.has(parts[2])
+  )
+}
+
+export function isBlockedAttemptPath(filePath) {
+  const normalized = normalizeAttemptPath(filePath)
+  return (
+    hardBlockedExactPaths.has(normalized) ||
+    normalized === ".evals" ||
+    normalized.startsWith(".evals/") ||
+    normalized === ".github/workflows" ||
+    normalized.startsWith(".github/workflows/") ||
+    (normalized.startsWith("evals/translation/") && normalized.endsWith(".json")) ||
+    isPackageValidationFile(normalized)
+  )
 }
 
 function artifactNameForModel(modelId) {
@@ -519,37 +590,37 @@ function gitStatusRecords(root = repoRoot) {
 }
 
 export function isAllowedAttemptPath(filePath) {
-  if (filePath.startsWith("docs/optimization/") && filePath.endsWith(".md")) {
+  const normalized = normalizeAttemptPath(filePath)
+  if (isBlockedAttemptPath(normalized)) return false
+
+  if (normalized.startsWith(docsOptimizationPrefix) && normalized.endsWith(".md")) {
     return true
   }
 
   return (
-    filePath.startsWith("packages/core/src/engine/adapters/") &&
-    filePath.endsWith(".ts") &&
-    !filePath.includes("/__tests__/") &&
-    !filePath.endsWith(".test.ts") &&
-    !filePath.endsWith(".spec.ts")
+    productSourcePrefixes.some((prefix) => normalized.startsWith(prefix)) ||
+    isPackageReadme(normalized)
   )
 }
 
-function statusPaths() {
-  return gitStatusRecords().flatMap((record) =>
+function statusPaths(root = repoRoot) {
+  return gitStatusRecords(root).flatMap((record) =>
     record.sourcePath ? [record.path, record.sourcePath] : [record.path],
   )
 }
 
-function ensureAttemptScope() {
-  const invalid = statusPaths().filter((filePath) => !isAllowedAttemptPath(filePath))
+function ensureAttemptScope(root = repoRoot) {
+  const invalid = statusPaths(root).filter((filePath) => !isAllowedAttemptPath(filePath))
   if (invalid.length > 0) {
     throw new Error(
-      `Working tree has changes outside optimizer-owned adapter/docs paths: ${invalid.join(", ")}.`,
+      `Working tree has changes outside optimizer-owned product/docs paths: ${invalid.join(", ")}.`,
     )
   }
 }
 
-function attemptPaths() {
-  ensureAttemptScope()
-  return statusPaths().filter(isAllowedAttemptPath)
+function attemptPaths(root = repoRoot) {
+  ensureAttemptScope(root)
+  return statusPaths(root).filter(isAllowedAttemptPath)
 }
 
 async function updateLastGoodScores(selectedModel, snapshotPath, commitSha, root = repoRoot) {
@@ -600,6 +671,10 @@ function printPromptSummary(selectedModel, snapshot) {
   console.log(`Baseline scoreBreakdown: ${JSON.stringify(model.scoreBreakdown)}`)
 }
 
+function optionalRoot(rootArg) {
+  return rootArg ? path.resolve(rootArg) : repoRoot
+}
+
 async function main(argv) {
   const command = argv[0]
 
@@ -644,11 +719,11 @@ async function main(argv) {
     if (!selected) throw new Error("Comparison has no selected model summary.")
     console.log(selected.artifact)
   } else if (command === "candidate-count") {
-    console.log(attemptPaths().length)
+    console.log(attemptPaths(optionalRoot(argv[1])).length)
   } else if (command === "ensure-reset-scope") {
-    ensureAttemptScope()
+    ensureAttemptScope(optionalRoot(argv[1]))
   } else if (command === "commit-paths") {
-    const paths = attemptPaths()
+    const paths = attemptPaths(optionalRoot(argv[1]))
     process.stdout.write(paths.join("\0"))
     if (paths.length > 0) process.stdout.write("\0")
   } else if (command === "update-last-good") {

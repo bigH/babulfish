@@ -267,26 +267,117 @@ describe("auto optimizer helper", () => {
     assert.match(prompt, /lowest scoring failed cases:/)
   })
 
-  it("allows only production adapter source paths for optimizer attempts", () => {
-    assert.equal(isAllowedAttemptPath("packages/core/src/engine/adapters/chat.ts"), true)
-    assert.equal(
-      isAllowedAttemptPath("packages/core/src/engine/adapters/models/qwen-3-0-6b.ts"),
-      true,
-    )
-    assert.equal(
-      isAllowedAttemptPath("packages/core/src/engine/__tests__/translation-adapters.test.ts"),
-      false,
-    )
-    assert.equal(
-      isAllowedAttemptPath("packages/core/src/engine/adapters/chat.test.ts"),
-      false,
-    )
-    assert.equal(
-      isAllowedAttemptPath("packages/core/src/engine/adapters/__tests__/chat.ts"),
-      false,
-    )
-    assert.equal(isAllowedAttemptPath("package.json"), false)
-    assert.equal(isAllowedAttemptPath("docs/optimization/qwen-3-0.6b-log.md"), true)
-    assert.equal(isAllowedAttemptPath("docs/optimization/nested/qwen-3-0.6b-log.md"), true)
+  it("allows product source paths for optimizer attempts", () => {
+    const paths = [
+      "packages/core/src/engine/adapters/chat.ts",
+      "packages/core/src/dom/translator.ts",
+      "packages/react/src/provider.tsx",
+      "packages/styles/src/babulfish.css",
+      "packages/babulfish/src/index.ts",
+      "packages/demo-shared/src/runtime-selection.ts",
+      "packages/demo-vanilla/src/main.ts",
+      "packages/demo-webcomponent/src/babulfish-translator.ts",
+      "packages/demo/app/page.tsx",
+      "packages/core/README.md",
+      "packages/react/README.md",
+      "docs/optimization/qwen-3-0.6b-log.md",
+      "docs/optimization/nested/qwen-3-0.6b-log.md",
+    ]
+
+    for (const filePath of paths) {
+      assert.equal(isAllowedAttemptPath(filePath), true, filePath)
+    }
+  })
+
+  it("allows product test files for optimizer attempts", () => {
+    const paths = [
+      "packages/core/src/engine/__tests__/translation-adapters.test.ts",
+      "packages/core/src/engine/adapters/chat.test.ts",
+      "packages/react/src/__tests__/react.test.tsx",
+      "packages/demo/app/page.test.tsx",
+    ]
+
+    for (const filePath of paths) {
+      assert.equal(isAllowedAttemptPath(filePath), true, filePath)
+    }
+  })
+
+  it("blocks WebGPU eval target files for optimizer attempts", () => {
+    const paths = [
+      "scripts/webgpu-eval.mjs",
+      "packages/demo-vanilla/src/webgpu-eval.ts",
+      "packages/demo-vanilla/src/webgpu-eval-scorer.ts",
+      "packages/demo-vanilla/webgpu-eval.html",
+      "evals/translation/plain-es.json",
+      "evals/translation/nested/plain-es.json",
+      "docs/webgpu-evals.md",
+    ]
+
+    for (const filePath of paths) {
+      assert.equal(isAllowedAttemptPath(filePath), false, filePath)
+    }
+  })
+
+  it("blocks validation machinery for optimizer attempts", () => {
+    const paths = [
+      ".github/workflows/ci.yml",
+      "eslint.config.js",
+      "tsconfig.base.json",
+      "scripts/consumer-smoke.mjs",
+      "packages/demo/scripts/smoke.mjs",
+    ]
+
+    for (const filePath of paths) {
+      assert.equal(isAllowedAttemptPath(filePath), false, filePath)
+    }
+  })
+
+  it("blocks eval artifacts for optimizer attempts", () => {
+    const paths = [
+      ".evals/web-gpu-2026-04-26T07-01-21Z-headed-sequential/qwen-3-0.6b.json",
+      ".evals/auto-optimizer/last-good-scores.json",
+    ]
+
+    for (const filePath of paths) {
+      assert.equal(isAllowedAttemptPath(filePath), false, filePath)
+    }
+  })
+
+  it("blocks package manifests, config, and optimizer scripts", () => {
+    const paths = [
+      "package.json",
+      "packages/core/package.json",
+      "packages/react/package.json",
+      "pnpm-lock.yaml",
+      "pnpm-workspace.yaml",
+      "packages/core/tsconfig.json",
+      "packages/core/vitest.config.ts",
+      "packages/demo-vanilla/vite.config.ts",
+      "packages/react/tsup.config.ts",
+      "packages/demo/next.config.ts",
+      "scripts/auto-optimize.sh",
+      "scripts/auto-optimize-helper.mjs",
+      "scripts/auto-optimize-helper.test.mjs",
+    ]
+
+    for (const filePath of paths) {
+      assert.equal(isAllowedAttemptPath(filePath), false, filePath)
+    }
+  })
+
+  it("blocks non-product near misses for optimizer attempts", () => {
+    const paths = [
+      "docs/optimization/qwen-3-0.6b-log.txt",
+      "README.md",
+      "packages/core/docs/guide.md",
+      "packages/core/test/contract.test.ts",
+      "scripts/validation.test.ts",
+      "evals/harness.test.ts",
+      "scripts/other-tool.mjs",
+    ]
+
+    for (const filePath of paths) {
+      assert.equal(isAllowedAttemptPath(filePath), false, filePath)
+    }
   })
 })
