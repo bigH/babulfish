@@ -6,7 +6,7 @@ Run live browser/model evals explicitly from the repo root:
 pnpm eval:webgpu
 ```
 
-By default this runs `qwen-2.5-0.5b` only. Run every WebGPU eval model one at a time:
+By default this runs `qwen-3-0.6b` only. Run every WebGPU eval model one at a time:
 
 ```bash
 pnpm eval:webgpu -- --model all
@@ -81,9 +81,9 @@ Sample artifact shape:
   "pass": false,
   "browser": { "name": "chromium", "version": "143.0.7499.4" },
   "model": {
-    "modelId": "qwen-2.5-0.5b",
-    "resolvedModelId": "onnx-community/Qwen2.5-0.5B-Instruct",
-    "adapterId": "qwen-2.5-0.5b-chat",
+    "modelId": "qwen-3-0.6b",
+    "resolvedModelId": "onnx-community/Qwen3-0.6B-ONNX",
+    "adapterId": "qwen-3-0.6b-chat",
     "dtype": "q4f16",
     "device": "webgpu",
     "loadMs": 42131,

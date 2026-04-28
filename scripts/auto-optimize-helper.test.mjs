@@ -134,7 +134,7 @@ import crypto from "node:crypto"
 import fs from "node:fs"
 import path from "node:path"
 
-const allModels = ["qwen-2.5-0.5b", "qwen-3-0.6b", "gemma-3-1b-it", "translategemma-4"]
+const allModels = ["qwen-3-0.6b", "gemma-3-1b-it", "translategemma-4"]
 const command = process.argv[2]
 const args = process.argv.slice(3)
 const qwenScoresByIteration = new Map([
@@ -175,10 +175,9 @@ const verifyIteration = (outputDir) => {
   return match ? Number(match[1]) : 0
 }
 const scoreFor = (model, outputDir) => {
-  if (model === "qwen-2.5-0.5b") {
+  if (model === "qwen-3-0.6b") {
     return qwenScoresByIteration.get(verifyIteration(outputDir)) ?? 0.67
   }
-  if (model === "qwen-3-0.6b") return 0.5
   if (model === "gemma-3-1b-it") return 0.8
   return 0.9
 }
@@ -384,7 +383,7 @@ switch (command) {
     console.log(readJson(args[0]).reasons.join("; "))
     break
   case "commit-paths":
-    process.stdout.write("packages/core/src/engine/adapters/chat.ts\\0docs/optimization/qwen-2.5-0.5b-log.jsonl\\0")
+    process.stdout.write("packages/core/src/engine/adapters/chat.ts\\0docs/optimization/qwen-3-0.6b-log.jsonl\\0")
     break
   case "compare-new-score":
     console.log(readJson(args[0]).selected.newScore)
@@ -544,18 +543,17 @@ console.error("CODEX_STDERR")
 describe("auto optimizer helper", () => {
   it("accepts one concrete model id or all", () => {
     assert.deepEqual(parseRequestedModels("all"), [
-      "qwen-2.5-0.5b",
       "qwen-3-0.6b",
       "gemma-3-1b-it",
       "translategemma-4",
     ])
     assert.deepEqual(parseRequestedModels("gemma-3-1b-it"), ["gemma-3-1b-it"])
-    assert.throws(() => parseRequestedModels("qwen-2.5-0.5b,gemma-3-1b-it"), /concrete/)
+    assert.throws(() => parseRequestedModels("qwen-3-0.6b,gemma-3-1b-it"), /concrete/)
     assert.throws(() => parseRequestedModels("unknown"), /Unknown WebGPU eval model/)
   })
 
   it("validates successful and load-failure artifact shapes", () => {
-    const successful = summarizeArtifactObject(artifact("qwen-2.5-0.5b"), "qwen-2.5-0.5b")
+    const successful = summarizeArtifactObject(artifact("qwen-3-0.6b"), "qwen-3-0.6b")
     assert.equal(successful.score, 0.25)
     assert.equal(successful.totalCases, EXPECTED_CASE_COUNT)
 
@@ -595,106 +593,102 @@ describe("auto optimizer helper", () => {
 
   it("selects the lowest scoring model with deterministic tie-breaks", () => {
     const ranked = snapshot({
-      "qwen-2.5-0.5b": modelSummary("qwen-2.5-0.5b", 0.2),
-      "qwen-3-0.6b": modelSummary("qwen-3-0.6b", 0),
-      "gemma-3-1b-it": modelSummary("gemma-3-1b-it", 0.8),
+      "qwen-3-0.6b": modelSummary("qwen-3-0.6b", 0.2),
+      "gemma-3-1b-it": modelSummary("gemma-3-1b-it", 0),
       "translategemma-4": modelSummary("translategemma-4", 0.9),
     })
-    assert.equal(selectModelFromSnapshot("all", ranked), "qwen-3-0.6b")
+    assert.equal(selectModelFromSnapshot("all", ranked), "gemma-3-1b-it")
     assert.equal(selectModelFromSnapshot("gemma-3-1b-it", ranked), "gemma-3-1b-it")
 
     const tied = snapshot({
-      "qwen-2.5-0.5b": modelSummary("qwen-2.5-0.5b", 0, {
+      "qwen-3-0.6b": modelSummary("qwen-3-0.6b", 0, {
         scoreBreakdown: { hardFailureCount: 10 },
       }),
-      "qwen-3-0.6b": modelSummary("qwen-3-0.6b", 0, {
+      "gemma-3-1b-it": modelSummary("gemma-3-1b-it", 0, {
         scoreBreakdown: { hardFailureCount: 38 },
       }),
-      "gemma-3-1b-it": modelSummary("gemma-3-1b-it", 0.8),
       "translategemma-4": modelSummary("translategemma-4", 0.9),
     })
-    assert.equal(selectModelFromSnapshot("all", tied), "qwen-3-0.6b")
+    assert.equal(selectModelFromSnapshot("all", tied), "gemma-3-1b-it")
   })
 
   it("selects all from the active accepted snapshot", () => {
     const runStart = snapshot({
-      "qwen-2.5-0.5b": modelSummary("qwen-2.5-0.5b", 0),
-      "qwen-3-0.6b": modelSummary("qwen-3-0.6b", 0.5),
+      "qwen-3-0.6b": modelSummary("qwen-3-0.6b", 0),
       "gemma-3-1b-it": modelSummary("gemma-3-1b-it", 0.8),
       "translategemma-4": modelSummary("translategemma-4", 0.9),
     })
     const activeAccepted = snapshot({
-      "qwen-2.5-0.5b": modelSummary("qwen-2.5-0.5b", 0.66),
-      "qwen-3-0.6b": modelSummary("qwen-3-0.6b", 0.5),
-      "gemma-3-1b-it": modelSummary("gemma-3-1b-it", 0.8),
+      "qwen-3-0.6b": modelSummary("qwen-3-0.6b", 0.66),
+      "gemma-3-1b-it": modelSummary("gemma-3-1b-it", 0.5),
       "translategemma-4": modelSummary("translategemma-4", 0.9),
     })
 
-    assert.equal(selectModelFromSnapshot("all", runStart), "qwen-2.5-0.5b")
-    assert.equal(selectModelFromSnapshot("all", activeAccepted), "qwen-3-0.6b")
+    assert.equal(selectModelFromSnapshot("all", runStart), "qwen-3-0.6b")
+    assert.equal(selectModelFromSnapshot("all", activeAccepted), "gemma-3-1b-it")
   })
 
   it("compares selected improvement while tolerating non-selected eval drift", () => {
     const baseline = snapshot({
-      "qwen-2.5-0.5b": modelSummary("qwen-2.5-0.5b", 0.2),
+      "qwen-3-0.6b": modelSummary("qwen-3-0.6b", 0.2),
       "gemma-3-1b-it": modelSummary("gemma-3-1b-it", 0.8, {
         cases: casesWithFailedCase("case-01"),
       }),
     })
     const improved = snapshot({
-      "qwen-2.5-0.5b": modelSummary("qwen-2.5-0.5b", 0.3),
+      "qwen-3-0.6b": modelSummary("qwen-3-0.6b", 0.3),
       "gemma-3-1b-it": modelSummary("gemma-3-1b-it", 0.809),
     })
     assert.equal(
-      compareSnapshots("qwen-2.5-0.5b", baseline, improved, { verifyArtifactHashes: false }).status,
+      compareSnapshots("qwen-3-0.6b", baseline, improved, { verifyArtifactHashes: false }).status,
       "pass",
     )
 
     const worseSelected = snapshot({
-      "qwen-2.5-0.5b": modelSummary("qwen-2.5-0.5b", 0.2),
+      "qwen-3-0.6b": modelSummary("qwen-3-0.6b", 0.2),
       "gemma-3-1b-it": modelSummary("gemma-3-1b-it", 0.8),
     })
     assert.equal(
-      compareSnapshots("qwen-2.5-0.5b", baseline, worseSelected, { verifyArtifactHashes: false }).status,
+      compareSnapshots("qwen-3-0.6b", baseline, worseSelected, { verifyArtifactHashes: false }).status,
       "fail",
     )
 
     const toleratedNeighborDrift = snapshot({
-      "qwen-2.5-0.5b": modelSummary("qwen-2.5-0.5b", 0.3),
+      "qwen-3-0.6b": modelSummary("qwen-3-0.6b", 0.3),
       "gemma-3-1b-it": modelSummary("gemma-3-1b-it", 0.795, {
         cases: casesWithFailedCase("case-01"),
       }),
     })
     assert.equal(
-      compareSnapshots("qwen-2.5-0.5b", baseline, toleratedNeighborDrift, {
+      compareSnapshots("qwen-3-0.6b", baseline, toleratedNeighborDrift, {
         verifyArtifactHashes: false,
       }).status,
       "pass",
     )
 
     const regressedNeighborScore = snapshot({
-      "qwen-2.5-0.5b": modelSummary("qwen-2.5-0.5b", 0.3),
+      "qwen-3-0.6b": modelSummary("qwen-3-0.6b", 0.3),
       "gemma-3-1b-it": modelSummary("gemma-3-1b-it", 0.789, {
         cases: casesWithFailedCase("case-01"),
       }),
     })
-    const scoreRegression = compareSnapshots("qwen-2.5-0.5b", baseline, regressedNeighborScore, {
+    const scoreRegression = compareSnapshots("qwen-3-0.6b", baseline, regressedNeighborScore, {
       verifyArtifactHashes: false,
     })
     assert.equal(scoreRegression.status, "fail")
     assert.match(scoreRegression.reasons.join("\n"), /gemma-3-1b-it score regressed/)
 
     const stableBaseline = snapshot({
-      "qwen-2.5-0.5b": modelSummary("qwen-2.5-0.5b", 0.2),
+      "qwen-3-0.6b": modelSummary("qwen-3-0.6b", 0.2),
       "gemma-3-1b-it": modelSummary("gemma-3-1b-it", 0.8),
     })
     const introducedFailureNeighbor = snapshot({
-      "qwen-2.5-0.5b": modelSummary("qwen-2.5-0.5b", 0.3),
+      "qwen-3-0.6b": modelSummary("qwen-3-0.6b", 0.3),
       "gemma-3-1b-it": modelSummary("gemma-3-1b-it", 0.799, {
         cases: casesWithFailedCase("case-02"),
       }),
     })
-    const newFailure = compareSnapshots("qwen-2.5-0.5b", stableBaseline, introducedFailureNeighbor, {
+    const newFailure = compareSnapshots("qwen-3-0.6b", stableBaseline, introducedFailureNeighbor, {
       verifyArtifactHashes: false,
     })
     assert.equal(newFailure.status, "fail")
@@ -734,7 +728,7 @@ describe("auto optimizer helper", () => {
 
   it("rejects non-selected pass and hard-failure regressions", () => {
     const baseline = snapshot({
-      "qwen-2.5-0.5b": modelSummary("qwen-2.5-0.5b", 0.2),
+      "qwen-3-0.6b": modelSummary("qwen-3-0.6b", 0.2),
       "gemma-3-1b-it": {
         ...modelSummary("gemma-3-1b-it", 0.8),
         pass: true,
@@ -742,12 +736,12 @@ describe("auto optimizer helper", () => {
       },
     })
     const regressed = snapshot({
-      "qwen-2.5-0.5b": modelSummary("qwen-2.5-0.5b", 0.3),
+      "qwen-3-0.6b": modelSummary("qwen-3-0.6b", 0.3),
       "gemma-3-1b-it": modelSummary("gemma-3-1b-it", 0.8, {
         scoreBreakdown: { hardFailureCount: 1 },
       }),
     })
-    const comparison = compareSnapshots("qwen-2.5-0.5b", baseline, regressed, {
+    const comparison = compareSnapshots("qwen-3-0.6b", baseline, regressed, {
       verifyArtifactHashes: false,
     })
 
@@ -759,12 +753,12 @@ describe("auto optimizer helper", () => {
 
   it("formats score improvements for terminal output", () => {
     const comparison = compareSnapshots(
-      "qwen-2.5-0.5b",
+      "qwen-3-0.6b",
       snapshot({
-        "qwen-2.5-0.5b": modelSummary("qwen-2.5-0.5b", 0.212894),
+        "qwen-3-0.6b": modelSummary("qwen-3-0.6b", 0.212894),
       }),
       snapshot({
-        "qwen-2.5-0.5b": modelSummary("qwen-2.5-0.5b", 0.250001),
+        "qwen-3-0.6b": modelSummary("qwen-3-0.6b", 0.250001),
       }),
       { verifyArtifactHashes: false },
     )
@@ -815,8 +809,8 @@ describe("auto optimizer helper", () => {
     const stderrPath = path.join(runDir, "iteration-2.codex.stderr.log")
     const testPath = path.join(runDir, "iteration-2.test.log")
     const runSummaryPath = path.join(runDir, "iteration-2.summary.log")
-    const baselineEvalPath = path.join(runDir, "baseline.eval-qwen-2.5-0.5b.log")
-    const verifyEvalPath = path.join(runDir, "iteration-2.verify-eval-qwen-2.5-0.5b.log")
+    const baselineEvalPath = path.join(runDir, "baseline.eval-qwen-3-0.6b.log")
+    const verifyEvalPath = path.join(runDir, "iteration-2.verify-eval-qwen-3-0.6b.log")
 
     mkdirSync(runDir, { recursive: true })
     writeFileSync(
@@ -828,9 +822,9 @@ describe("auto optimizer helper", () => {
         "@@ -1 +1 @@",
         "-old",
         "+new",
-        "diff --git a/docs/optimization/qwen-2.5-0.5b-log.jsonl b/docs/optimization/qwen-2.5-0.5b-log.jsonl",
-        "--- a/docs/optimization/qwen-2.5-0.5b-log.jsonl",
-        "+++ b/docs/optimization/qwen-2.5-0.5b-log.jsonl",
+        "diff --git a/docs/optimization/qwen-3-0.6b-log.jsonl b/docs/optimization/qwen-3-0.6b-log.jsonl",
+        "--- a/docs/optimization/qwen-3-0.6b-log.jsonl",
+        "+++ b/docs/optimization/qwen-3-0.6b-log.jsonl",
       ].join("\n"),
     )
     writeFileSync(
@@ -839,20 +833,20 @@ describe("auto optimizer helper", () => {
     )
     writeFileSync(
       baselinePath,
-      `${JSON.stringify(snapshot({ "qwen-2.5-0.5b": modelSummary("qwen-2.5-0.5b", 0.66) }))}\n`,
+      `${JSON.stringify(snapshot({ "qwen-3-0.6b": modelSummary("qwen-3-0.6b", 0.66) }))}\n`,
     )
     writeFileSync(
       verifyPath,
-      `${JSON.stringify(snapshot({ "qwen-2.5-0.5b": modelSummary("qwen-2.5-0.5b", 0.53) }))}\n`,
+      `${JSON.stringify(snapshot({ "qwen-3-0.6b": modelSummary("qwen-3-0.6b", 0.53) }))}\n`,
     )
     writeFileSync(
       comparePath,
       `${JSON.stringify({
         status: "fail",
-        reasons: ["qwen-2.5-0.5b score did not improve: 0.66 -> 0.53."],
+        reasons: ["qwen-3-0.6b score did not improve: 0.66 -> 0.53."],
         stops: [],
         selected: {
-          model: "qwen-2.5-0.5b",
+          model: "qwen-3-0.6b",
           oldScore: 0.66,
           newScore: 0.53,
         },
@@ -871,9 +865,9 @@ describe("auto optimizer helper", () => {
 
     const record = buildFailedExperimentRecord(
       {
-        model: "qwen-2.5-0.5b",
+        model: "qwen-3-0.6b",
         iteration: 2,
-        result: "no improvement (qwen-2.5-0.5b score did not improve: 0.66 -> 0.53.)",
+        result: "no improvement (qwen-3-0.6b score did not improve: 0.66 -> 0.53.)",
         reportFile: reportPath,
         productPatch: patchPath,
         baselineSnapshot: baselinePath,
@@ -900,9 +894,9 @@ describe("auto optimizer helper", () => {
 
     const [saved] = readFailedExperiments(root)
     assert.equal(saved.schemaVersion, 1)
-    assert.equal(saved.model, "qwen-2.5-0.5b")
+    assert.equal(saved.model, "qwen-3-0.6b")
     assert.equal(saved.iteration, 2)
-    assert.equal(saved.rejectionReason, "qwen-2.5-0.5b score did not improve: 0.66 -> 0.53.")
+    assert.equal(saved.rejectionReason, "qwen-3-0.6b score did not improve: 0.66 -> 0.53.")
     assert.equal(saved.innerReportRaw.includes("failure_modes=wrapped answers"), true)
     assert.equal(saved.parsed.failure_modes, "wrapped answers, short outputs")
     assert.equal(saved.parsed.hypotheses, "strip wrapper, add examples")
@@ -915,12 +909,12 @@ describe("auto optimizer helper", () => {
     assert.equal(saved.productDiffHash, productDiffHashFromPatchText(readFileSync(patchPath, "utf8")))
     assert.equal(saved.logs.codex_stdout, ".evals/auto-optimizer/runs/run-1/iteration-2.codex.stdout.jsonl")
     assert.deepEqual(saved.logs.baseline_eval, [
-      ".evals/auto-optimizer/runs/run-1/baseline.eval-qwen-2.5-0.5b.log",
+      ".evals/auto-optimizer/runs/run-1/baseline.eval-qwen-3-0.6b.log",
     ])
 
     const failedBeforeCandidateEval = buildFailedExperimentRecord(
       {
-        model: "qwen-2.5-0.5b",
+        model: "qwen-3-0.6b",
         iteration: 3,
         result: "no improvement (tests failed)",
         reportFile: reportPath,
@@ -942,7 +936,7 @@ describe("auto optimizer helper", () => {
       [
         {
           schemaVersion: 1,
-          model: "qwen-2.5-0.5b",
+          model: "qwen-3-0.6b",
           iteration: 4,
           result: "no improvement (tests failed)",
           rejectionReason: "tests failed",
@@ -955,7 +949,7 @@ describe("auto optimizer helper", () => {
           productDiffHash: "1234567890abcdef",
         },
       ],
-      "qwen-2.5-0.5b",
+      "qwen-3-0.6b",
     )
 
     assert.match(prompt, /Rejected approaches:/)
@@ -975,8 +969,8 @@ describe("auto optimizer helper", () => {
     const stdoutPath = path.join(runDir, "iteration-1.codex.stdout.jsonl")
     const stderrPath = path.join(runDir, "iteration-1.codex.stderr.log")
     const testPath = path.join(runDir, "iteration-1.test.log")
-    const baselineEvalPath = path.join(runDir, "baseline.eval-qwen-2.5-0.5b.log")
-    const verifyEvalPath = path.join(runDir, "iteration-1.verify-eval-qwen-2.5-0.5b.log")
+    const baselineEvalPath = path.join(runDir, "baseline.eval-qwen-3-0.6b.log")
+    const verifyEvalPath = path.join(runDir, "iteration-1.verify-eval-qwen-3-0.6b.log")
 
     mkdirSync(runDir, { recursive: true })
     writeFileSync(
@@ -985,11 +979,11 @@ describe("auto optimizer helper", () => {
     )
     writeFileSync(
       baselinePath,
-      `${JSON.stringify(snapshot({ "qwen-2.5-0.5b": modelSummary("qwen-2.5-0.5b", 0) }))}\n`,
+      `${JSON.stringify(snapshot({ "qwen-3-0.6b": modelSummary("qwen-3-0.6b", 0) }))}\n`,
     )
     writeFileSync(
       verifyPath,
-      `${JSON.stringify(snapshot({ "qwen-2.5-0.5b": modelSummary("qwen-2.5-0.5b", 0.66) }))}\n`,
+      `${JSON.stringify(snapshot({ "qwen-3-0.6b": modelSummary("qwen-3-0.6b", 0.66) }))}\n`,
     )
     writeFileSync(
       comparePath,
@@ -998,7 +992,7 @@ describe("auto optimizer helper", () => {
         reasons: [],
         stops: [],
         selected: {
-          model: "qwen-2.5-0.5b",
+          model: "qwen-3-0.6b",
           oldScore: 0,
           newScore: 0.66,
         },
@@ -1010,7 +1004,7 @@ describe("auto optimizer helper", () => {
 
     const record = buildAcceptedOptimizationRecord(
       {
-        model: "qwen-2.5-0.5b",
+        model: "qwen-3-0.6b",
         iteration: 1,
         result: "0.000000 -> 0.660000 (+0.660000)",
         reportFile: reportPath,
@@ -1028,23 +1022,23 @@ describe("auto optimizer helper", () => {
     appendAcceptedOptimizationLog(record, root)
 
     assert.equal(
-      existsSync(path.join(root, "docs", "optimization", "qwen-2.5-0.5b-log.md")),
+      existsSync(path.join(root, "docs", "optimization", "qwen-3-0.6b-log.md")),
       false,
     )
     const logLines = readFileSync(
-      path.join(root, "docs", "optimization", "qwen-2.5-0.5b-log.jsonl"),
+      path.join(root, "docs", "optimization", "qwen-3-0.6b-log.jsonl"),
       "utf8",
     ).trim().split("\n")
     assert.equal(logLines.length, 1)
     const saved = JSON.parse(logLines[0])
     assert.equal(saved.schemaVersion, 1)
-    assert.equal(saved.model, "qwen-2.5-0.5b")
+    assert.equal(saved.model, "qwen-3-0.6b")
     assert.equal(saved.parsed.selected, "strip wrapper")
     assert.equal(saved.scores.baseline, 0)
     assert.equal(saved.scores.candidate, 0.66)
     assert.equal(saved.scores.delta, 0.66)
     assert.deepEqual(saved.logs.verify_eval, [
-      ".evals/auto-optimizer/runs/run-1/iteration-1.verify-eval-qwen-2.5-0.5b.log",
+      ".evals/auto-optimizer/runs/run-1/iteration-1.verify-eval-qwen-3-0.6b.log",
     ])
   })
 
@@ -1055,7 +1049,7 @@ describe("auto optimizer helper", () => {
       {
         schemaVersion: 1,
         timestamp: "2026-04-28T00:00:00.000Z",
-        model: "qwen-2.5-0.5b",
+        model: "qwen-3-0.6b",
         iteration: 1,
         result: "no improvement (tests failed)",
         rejectionReason: "tests failed",
@@ -1072,7 +1066,7 @@ describe("auto optimizer helper", () => {
       {
         schemaVersion: 1,
         timestamp: "2026-04-28T00:00:01.000Z",
-        model: "qwen-3-0.6b",
+        model: "gemma-3-1b-it",
         iteration: 2,
         result: "no improvement (tests failed)",
         rejectionReason: "tests failed",
@@ -1086,9 +1080,9 @@ describe("auto optimizer helper", () => {
       root,
     )
 
-    assert.equal(duplicateFailedExperimentForHash("qwen-2.5-0.5b", hash, root)?.iteration, 1)
-    assert.equal(duplicateFailedExperimentForHash("gemma-3-1b-it", hash, root), null)
-    assert.equal(recentFailedExperiments("qwen-3-0.6b", 1, root)[0].iteration, 2)
+    assert.equal(duplicateFailedExperimentForHash("qwen-3-0.6b", hash, root)?.iteration, 1)
+    assert.equal(duplicateFailedExperimentForHash("translategemma-4", hash, root), null)
+    assert.equal(recentFailedExperiments("gemma-3-1b-it", 1, root)[0].iteration, 2)
   })
 
   it("hashes product patches and extracts changed product files", () => {
@@ -1097,9 +1091,9 @@ describe("auto optimizer helper", () => {
       "similarity index 93%",
       "rename from packages/core/src/old.ts",
       "rename to packages/core/src/new.ts",
-      "diff --git a/docs/optimization/qwen-2.5-0.5b-log.jsonl b/docs/optimization/qwen-2.5-0.5b-log.jsonl",
-      "--- a/docs/optimization/qwen-2.5-0.5b-log.jsonl",
-      "+++ b/docs/optimization/qwen-2.5-0.5b-log.jsonl",
+      "diff --git a/docs/optimization/qwen-3-0.6b-log.jsonl b/docs/optimization/qwen-3-0.6b-log.jsonl",
+      "--- a/docs/optimization/qwen-3-0.6b-log.jsonl",
+      "+++ b/docs/optimization/qwen-3-0.6b-log.jsonl",
     ].join("\n")
 
     assert.equal(productDiffHashFromPatchText(""), null)
@@ -1113,43 +1107,43 @@ describe("auto optimizer helper", () => {
   it("stops when an accepted baseline artifact hash changes", () => {
     const root = mkdtempSync(path.join(tmpdir(), "auto-optimizer-hash-test-"))
     const artifactDir = path.join(root, ".evals", "web-gpu-hash-test")
-    const artifactFile = path.join(artifactDir, "qwen-2.5-0.5b.json")
+    const artifactFile = path.join(artifactDir, "qwen-3-0.6b.json")
     mkdirSync(artifactDir, { recursive: true })
     writeFileSync(
       artifactFile,
       `${JSON.stringify(
-        artifact("qwen-2.5-0.5b", {
+        artifact("qwen-3-0.6b", {
           model: { score: 0.2 },
         }),
       )}\n`,
     )
 
-    const baseline = createSnapshot("qwen-2.5-0.5b", artifactDir, root)
+    const baseline = createSnapshot("qwen-3-0.6b", artifactDir, root)
     const verification = {
       ...baseline,
       models: {
-        "qwen-2.5-0.5b": {
-          ...baseline.models["qwen-2.5-0.5b"],
+        "qwen-3-0.6b": {
+          ...baseline.models["qwen-3-0.6b"],
           score: 0.3,
         },
       },
     }
 
     assert.equal(
-      compareSnapshots("qwen-2.5-0.5b", baseline, verification, { repoRoot: root }).status,
+      compareSnapshots("qwen-3-0.6b", baseline, verification, { repoRoot: root }).status,
       "pass",
     )
 
     writeFileSync(
       artifactFile,
       `${JSON.stringify(
-        artifact("qwen-2.5-0.5b", {
+        artifact("qwen-3-0.6b", {
           model: { score: 0.2, cases: casesWithFailedCase("case-01") },
         }),
       )}\n`,
     )
 
-    const comparison = compareSnapshots("qwen-2.5-0.5b", baseline, verification, {
+    const comparison = compareSnapshots("qwen-3-0.6b", baseline, verification, {
       repoRoot: root,
     })
     assert.equal(comparison.status, "stop")
@@ -1163,19 +1157,19 @@ describe("auto optimizer helper", () => {
       snapshotPath,
       `${JSON.stringify(
         snapshot({
-          "qwen-2.5-0.5b": modelSummary("qwen-2.5-0.5b", 0.66),
+          "qwen-3-0.6b": modelSummary("qwen-3-0.6b", 0.66),
         }),
       )}\n`,
     )
 
-    await updateLastGoodScores("qwen-2.5-0.5b", snapshotPath, "abc123", root)
+    await updateLastGoodScores("qwen-3-0.6b", snapshotPath, "abc123", root)
 
     const lastGood = JSON.parse(
       readFileSync(path.join(root, ".evals", "auto-optimizer", "last-good-scores.json"), "utf8"),
     )
     assert.equal(lastGood.role, "bookkeeping-only")
     assert.equal(lastGood.acceptancePolicy, "active-baseline-snapshot")
-    assert.equal(lastGood.models["qwen-2.5-0.5b"].score, 0.66)
+    assert.equal(lastGood.models["qwen-3-0.6b"].score, 0.66)
   })
 
   it("builds a concise prompt evidence packet from a baseline artifact", () => {
@@ -1183,9 +1177,9 @@ describe("auto optimizer helper", () => {
     const artifactDir = path.join(root, ".evals", "web-gpu-test")
     mkdirSync(artifactDir, { recursive: true })
     writeFileSync(
-      path.join(artifactDir, "qwen-2.5-0.5b.json"),
+      path.join(artifactDir, "qwen-3-0.6b.json"),
       `${JSON.stringify(
-        artifact("qwen-2.5-0.5b", {
+        artifact("qwen-3-0.6b", {
           model: {
             score: 0.2,
             cases: [
@@ -1207,11 +1201,11 @@ describe("auto optimizer helper", () => {
     )
 
     const prompt = buildPromptEvidence(
-      "qwen-2.5-0.5b",
+      "qwen-3-0.6b",
       snapshot({
-        "qwen-2.5-0.5b": {
-          ...modelSummary("qwen-2.5-0.5b", 0.2),
-          artifact: ".evals/web-gpu-test/qwen-2.5-0.5b.json",
+        "qwen-3-0.6b": {
+          ...modelSummary("qwen-3-0.6b", 0.2),
+          artifact: ".evals/web-gpu-test/qwen-3-0.6b.json",
         },
       }),
       root,
@@ -1344,7 +1338,7 @@ describe("auto optimizer helper", () => {
     mkdirSync(path.join(root, "packages", "core", "src"), { recursive: true })
     mkdirSync(path.join(root, "docs", "optimization"), { recursive: true })
     writeFileSync(path.join(root, "packages", "core", "src", "change.ts"), "export {}\n")
-    writeFileSync(path.join(root, "docs", "optimization", "qwen-2.5-0.5b-log.jsonl"), "{}\n")
+    writeFileSync(path.join(root, "docs", "optimization", "qwen-3-0.6b-log.jsonl"), "{}\n")
     writeFileSync(path.join(root, "docs", "optimization", "failed-experiments.jsonl"), "{}\n")
 
     const init = spawnSync("git", ["init", "--quiet"], { cwd: root, encoding: "utf8" })
@@ -1357,7 +1351,7 @@ describe("auto optimizer helper", () => {
 
     const paths = result.stdout.split("\0").filter(Boolean).sort()
     assert.deepEqual(paths, [
-      "docs/optimization/qwen-2.5-0.5b-log.jsonl",
+      "docs/optimization/qwen-3-0.6b-log.jsonl",
       "packages/core/src/change.ts",
     ])
   })
@@ -1480,7 +1474,7 @@ describe("auto optimizer helper", () => {
 
     const result = spawnSync(
       "bash",
-      [optimizerScript, "qwen-2.5-0.5b", "--iterations", "1"],
+      [optimizerScript, "qwen-3-0.6b", "--iterations", "1"],
       {
         cwd: repo,
         env: {
@@ -1506,41 +1500,41 @@ describe("auto optimizer helper", () => {
     )
     assert.match(result.stdout, /optimizer tmpdir:/)
     assert.match(result.stdout, /optimizer logs:/)
-    assert.match(result.stdout, /baseline\.eval-qwen-2\.5-0\.5b\.log/)
+    assert.match(result.stdout, /baseline\.eval-qwen-3-0\.6b\.log/)
     assert.match(result.stdout, /iteration-1\.test\.log/)
-    assert.match(result.stdout, /iteration-1\.verify-eval-qwen-2\.5-0\.5b\.log/)
+    assert.match(result.stdout, /iteration-1\.verify-eval-qwen-3-0\.6b\.log/)
 
     const runLogDir = onlyRunLogDir(repo)
     const baselineLog = readFileSync(
-      path.join(runLogDir, "baseline.eval-qwen-2.5-0.5b.log"),
+      path.join(runLogDir, "baseline.eval-qwen-3-0.6b.log"),
       "utf8",
     )
     const testLog = readFileSync(path.join(runLogDir, "iteration-1.test.log"), "utf8")
     const verifyLog = readFileSync(
-      path.join(runLogDir, "iteration-1.verify-eval-qwen-2.5-0.5b.log"),
+      path.join(runLogDir, "iteration-1.verify-eval-qwen-3-0.6b.log"),
       "utf8",
     )
 
-    assert.match(baselineLog, /EVAL_STDOUT qwen-2\.5-0\.5b/)
-    assert.match(baselineLog, /EVAL_STDERR qwen-2\.5-0\.5b/)
+    assert.match(baselineLog, /EVAL_STDOUT qwen-3-0\.6b/)
+    assert.match(baselineLog, /EVAL_STDERR qwen-3-0\.6b/)
     assert.match(testLog, /TEST_STDOUT/)
     assert.match(testLog, /TEST_STDERR/)
-    assert.match(verifyLog, /EVAL_STDOUT qwen-2\.5-0\.5b/)
-    assert.match(verifyLog, /EVAL_STDERR qwen-2\.5-0\.5b/)
+    assert.match(verifyLog, /EVAL_STDOUT qwen-3-0\.6b/)
+    assert.match(verifyLog, /EVAL_STDERR qwen-3-0\.6b/)
 
     const [acceptedLog] = readFileSync(
-      path.join(repo, "docs", "optimization", "qwen-2.5-0.5b-log.jsonl"),
+      path.join(repo, "docs", "optimization", "qwen-3-0.6b-log.jsonl"),
       "utf8",
     ).trim().split("\n").map((line) => JSON.parse(line))
     assert.equal(acceptedLog.schemaVersion, 1)
-    assert.equal(acceptedLog.model, "qwen-2.5-0.5b")
+    assert.equal(acceptedLog.model, "qwen-3-0.6b")
     assert.equal(acceptedLog.scores.baseline, 0)
     assert.equal(acceptedLog.scores.candidate, 0.66)
     assert.match(acceptedLog.logs.test, /iteration-1\.test\.log/)
-    assert.match(acceptedLog.logs.baseline_eval.join(","), /baseline\.eval-qwen-2\.5-0\.5b\.log/)
-    assert.match(acceptedLog.logs.verify_eval.join(","), /iteration-1\.verify-eval-qwen-2\.5-0\.5b\.log/)
+    assert.match(acceptedLog.logs.baseline_eval.join(","), /baseline\.eval-qwen-3-0\.6b\.log/)
+    assert.match(acceptedLog.logs.verify_eval.join(","), /iteration-1\.verify-eval-qwen-3-0\.6b\.log/)
     assert.equal(
-      existsSync(path.join(repo, "docs", "optimization", "qwen-2.5-0.5b-log.md")),
+      existsSync(path.join(repo, "docs", "optimization", "qwen-3-0.6b-log.md")),
       false,
     )
     assert.equal(
@@ -1588,7 +1582,7 @@ describe("auto optimizer helper", () => {
 
     const result = spawnSync(
       "bash",
-      [optimizerScript, "qwen-2.5-0.5b", "--iterations", "3"],
+      [optimizerScript, "qwen-3-0.6b", "--iterations", "3"],
       {
         cwd: repo,
         env: {
@@ -1627,7 +1621,7 @@ describe("auto optimizer helper", () => {
     assert.match(secondSummary, /0\.66 -> 0\.53/)
 
     const acceptedLog = readFileSync(
-      path.join(repo, "docs", "optimization", "qwen-2.5-0.5b-log.jsonl"),
+      path.join(repo, "docs", "optimization", "qwen-3-0.6b-log.jsonl"),
       "utf8",
     ).trim().split("\n").map((line) => JSON.parse(line))
     assert.equal(acceptedLog.length, 2)
@@ -1637,7 +1631,7 @@ describe("auto optimizer helper", () => {
       false,
     )
     assert.equal(
-      existsSync(path.join(repo, "docs", "optimization", "qwen-2.5-0.5b-log.md")),
+      existsSync(path.join(repo, "docs", "optimization", "qwen-3-0.6b-log.md")),
       false,
     )
 
@@ -1655,7 +1649,7 @@ describe("auto optimizer helper", () => {
     assert.equal((commands.match(/git commit /g) ?? []).length, 2)
     assert.equal((commands.match(/helper update-last-good/g) ?? []).length, 2)
     assert.equal(commands.includes("run-start-baseline"), false)
-    assert.match(commands, /helper compare qwen-2\.5-0\.5b .*current-baseline\.json .*iteration-2-verify\.json/)
-    assert.match(commands, /helper compare qwen-2\.5-0\.5b .*current-baseline\.json .*iteration-3-verify\.json/)
+    assert.match(commands, /helper compare qwen-3-0\.6b .*current-baseline\.json .*iteration-2-verify\.json/)
+    assert.match(commands, /helper compare qwen-3-0\.6b .*current-baseline\.json .*iteration-3-verify\.json/)
   })
 })

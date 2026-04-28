@@ -273,10 +273,10 @@ describe("demo main helpers", () => {
     expect(
       formatRequestedModelIdentity(
         null,
-        "onnx-community/Qwen2.5-0.5B-Instruct",
+        "onnx-community/gemma-3-1b-it-ONNX",
         "translategemma-4",
       ),
-    ).toBe("onnx-community/Qwen2.5-0.5B-Instruct (legacy model-id)")
+    ).toBe("onnx-community/gemma-3-1b-it-ONNX (legacy model-id)")
   })
 
   it("delegates restore() for every translator host element", () => {

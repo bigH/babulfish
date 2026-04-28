@@ -9,7 +9,6 @@ import {
 } from "./config.js"
 import type { DevicePreference } from "./detect.js"
 import { gemma3ChatAdapter } from "./adapters/models/gemma-3-1b-it.js"
-import { qwen25ChatAdapter } from "./adapters/models/qwen-2-5-0-5b.js"
 import { qwen3ChatAdapter } from "./adapters/models/qwen-3-0-6b.js"
 import { translateGemmaAdapter } from "./adapters/models/translategemma-4.js"
 import type {
@@ -86,20 +85,6 @@ const BUILTIN_MODELS = Object.freeze({
     modelFileName: null,
     modelProfile: null,
     probe: "off",
-  }),
-  "qwen-2.5-0.5b": Object.freeze({
-    id: "qwen-2.5-0.5b",
-    label: "Qwen 2.5 0.5B Instruct",
-    modelId: "onnx-community/Qwen2.5-0.5B-Instruct",
-    adapter: qwen25ChatAdapter,
-    dtype: "q4f16",
-    device: "webgpu",
-    maxNewTokens: 256,
-    sourceLanguage: DEFAULT_SOURCE_LANGUAGE,
-    subfolder: "onnx",
-    modelFileName: "model",
-    modelProfile: unknownWebGPUModelProfile("qwen-2.5-0.5b"),
-    probe: "if-needed",
   }),
   "qwen-3-0.6b": Object.freeze({
     id: "qwen-3-0.6b",

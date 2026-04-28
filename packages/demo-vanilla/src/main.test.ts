@@ -114,7 +114,6 @@ describe("demo-vanilla main", () => {
 
     expect(Array.from(runtimeModel.options).map((option) => option.value)).toEqual([
       "translategemma-4",
-      "qwen-2.5-0.5b",
       "qwen-3-0.6b",
       "gemma-3-1b-it",
     ])

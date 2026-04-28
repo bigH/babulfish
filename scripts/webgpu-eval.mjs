@@ -9,7 +9,6 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".."
 const defaultOutputRoot = path.join(repoRoot, ".evals")
 const defaultEvalName = "web-gpu"
 const evalModelIds = [
-  "qwen-2.5-0.5b",
   "qwen-3-0.6b",
   "gemma-3-1b-it",
   "translategemma-4",
@@ -36,7 +35,7 @@ function usage() {
     "Usage: pnpm eval:webgpu [-- --model <id|all|a,b>] [--headed] [--output-dir <path>]",
     "",
     "Defaults:",
-    "  --model qwen-2.5-0.5b",
+    "  --model qwen-3-0.6b",
     "  --output-dir .evals/web-gpu-<timestamp>",
     "",
     `Valid models: ${evalModelIds.join(", ")}`,
@@ -56,7 +55,7 @@ function parsePositiveInteger(value, label) {
 
 function parseArgs(argv) {
   const options = {
-    modelArg: "qwen-2.5-0.5b",
+    modelArg: "qwen-3-0.6b",
     outputDir: null,
     headed: false,
     port: null,

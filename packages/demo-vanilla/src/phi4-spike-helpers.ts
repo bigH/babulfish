@@ -48,7 +48,7 @@ export const SPIKE_CANDIDATE_MODELS = [
     note:
       "Standard ONNX-community layout in onnx/. This spike intentionally uses the regular transformers.js ONNX path instead of any bespoke loader wiring.",
     suitabilityNote:
-      "Largest candidate of the three. Expect the heaviest browser-memory and download pressure.",
+      "Largest candidate in this spike. Expect the heaviest browser-memory and download pressure.",
     profiles: [
       {
         id: "webgpu-q4f16",
@@ -104,39 +104,6 @@ export const SPIKE_CANDIDATE_MODELS = [
         expectedDownloadBytes: 919096585,
         note:
           "CPU/WASM fallback through the standard ONNX q4 artifact. This is larger than the WebGPU q4f16 path and may be slow.",
-      },
-    ],
-  },
-  {
-    label: "Qwen2.5 0.5B Instruct",
-    modelId: "onnx-community/Qwen2.5-0.5B-Instruct",
-    defaultProfileId: "webgpu-q4f16",
-    note:
-      "Simplest repo layout of the three: standard ONNX files only, with no extra ORT runtime subfolder requirement for this spike.",
-    suitabilityNote:
-      "Smallest WebGPU q4f16 artifact of the set, so it is the lowest-friction first browser smoke candidate.",
-    profiles: [
-      {
-        id: "webgpu-q4f16",
-        label: "Recommended WebGPU q4f16",
-        requestedDevice: "webgpu",
-        dtypeSelector: "q4f16",
-        subfolder: "onnx",
-        modelFileName: "model",
-        expectedDownloadBytes: 483003582,
-        note:
-          "Likely the lightest practical WebGPU candidate in this spike. Good first check for end-to-end prompt execution.",
-      },
-      {
-        id: "wasm-q4",
-        label: "Fallback WASM q4",
-        requestedDevice: "wasm",
-        dtypeSelector: "q4",
-        subfolder: "onnx",
-        modelFileName: "model",
-        expectedDownloadBytes: 786156820,
-        note:
-          "CPU/WASM fallback for broader machine coverage. Smaller than Gemma/Qwen3 WASM q4, but still a substantial browser download.",
       },
     ],
   },

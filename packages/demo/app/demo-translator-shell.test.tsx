@@ -82,12 +82,12 @@ describe("DemoTranslatorShell", () => {
 
   it("hydrates the initial runtime selection without recoverable errors", async () => {
     const initialRuntimeState = resolveDemoRuntimeSelection({
-      modelId: "onnx-community/Qwen2.5-0.5B-Instruct",
+      modelId: "onnx-community/gemma-3-1b-it-ONNX",
     })
     window.history.replaceState(
       null,
       "",
-      "/?foo=bar&modelId=onnx-community%2FQwen2.5-0.5B-Instruct",
+      "/?foo=bar&modelId=onnx-community%2Fgemma-3-1b-it-ONNX",
     )
     const html = renderToString(
       <DemoTranslatorShell initialRuntimeState={initialRuntimeState}>
@@ -112,11 +112,11 @@ describe("DemoTranslatorShell", () => {
 
     expect(onRecoverableError).not.toHaveBeenCalled()
     expect(container.textContent).toContain(
-      "Qwen 2.5 0.5B Instruct (qwen-2.5-0.5b)",
+      "Gemma 3 1B IT (gemma-3-1b-it)",
     )
-    expect(container.textContent).toContain("onnx-community/Qwen2.5-0.5B-Instruct")
-    expect(container.textContent).toContain("qwen-2.5-0.5b-chat")
-    expect(window.location.search).toBe("?foo=bar&model=qwen-2.5-0.5b")
+    expect(container.textContent).toContain("onnx-community/gemma-3-1b-it-ONNX")
+    expect(container.textContent).toContain("gemma-3-1b-it-chat")
+    expect(window.location.search).toBe("?foo=bar&model=gemma-3-1b-it")
     expect(providerConfigs.at(-1)).toEqual({
       engine: toBabulfishEngineConfig(initialRuntimeState.selection),
       dom: {

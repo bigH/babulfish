@@ -52,9 +52,10 @@ For the full DOM config surface, read `DOMTranslatorConfig` from `@babulfish/cor
 `engine.model` selects a built-in model id or an explicit custom spec. String values are built-in ids only:
 
 - `"translategemma-4"` (default)
-- `"qwen-2.5-0.5b"`
 - `"qwen-3-0.6b"`
 - `"gemma-3-1b-it"`
+
+`qwen-2.5-0.5b` was removed from the first-party built-in catalog in `0.1.0`; use `qwen-3-0.6b` for the compact Qwen WebGPU path, or provide a custom spec if you still need that older repo.
 
 Use legacy `engine.modelId` for arbitrary Hugging Face repo ids when you still want the default TranslateGemma adapter. If both `engine.model` and `engine.modelId` are present, `modelId` overrides only the resolved repo id; adapter, file-location, dtype, and prompt behavior still come from `model`.
 

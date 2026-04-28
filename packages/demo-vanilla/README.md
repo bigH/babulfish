@@ -7,7 +7,7 @@ This package is not published to npm. It exists to prove the current DOM contrac
 
 - `createBabulfish()` works directly against plain DOM APIs.
 - Device, model spec, and quantization controls drive the shared URL-backed runtime resolver.
-- URLs use canonical `model=<spec-id>` values; legacy `modelId=<resolved-model-id>` links are accepted and rewritten through the shared resolver.
+- URLs use canonical `model=<spec-id>` values; known `modelId=<resolved-model-id>` links for the current catalog are accepted and rewritten through the shared resolver.
 - The demo passes the resolver-built engine config into `createBabulfish()`, so adapters come from the shared model registry instead of demo-specific branching.
 - Multiple configured `dom.roots` translate together while the status panel stays outside the translated scope.
 - `structuredText` claims supported inline-rich DOM as one logical unit.

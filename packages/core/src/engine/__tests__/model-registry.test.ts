@@ -39,11 +39,6 @@ describe("resolveTranslationModelConfig", () => {
 
   it.each([
     ["translategemma-4", "onnx-community/translategemma-text-4b-it-ONNX", "translategemma"],
-    [
-      "qwen-2.5-0.5b",
-      "onnx-community/Qwen2.5-0.5B-Instruct",
-      "qwen-2.5-0.5b-chat",
-    ],
     ["qwen-3-0.6b", "onnx-community/Qwen3-0.6B-ONNX", "qwen-3-0.6b-chat"],
     ["gemma-3-1b-it", "onnx-community/gemma-3-1b-it-ONNX", "gemma-3-1b-it-chat"],
   ] as const)("resolves built-in model %s", (model, modelId, adapterId) => {

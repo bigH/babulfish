@@ -285,14 +285,14 @@ describe("babulfish-translator", () => {
   })
 
   it("maps legacy model-id attrs through the shared resolver", () => {
-    el.setAttribute("model-id", "onnx-community/Qwen2.5-0.5B-Instruct")
+    el.setAttribute("model-id", "onnx-community/gemma-3-1b-it-ONNX")
 
     connect()
 
     expect(mockCreateBabulfish).toHaveBeenCalledWith({
       engine: {
         device: "webgpu",
-        model: "qwen-2.5-0.5b",
+        model: "gemma-3-1b-it",
         dtype: "q4f16",
       },
       dom: expect.any(Object),
@@ -301,7 +301,7 @@ describe("babulfish-translator", () => {
 
   it("lets canonical model attrs override legacy model-id attrs", () => {
     el.setAttribute("model", "qwen-3-0.6b")
-    el.setAttribute("model-id", "onnx-community/Qwen2.5-0.5B-Instruct")
+    el.setAttribute("model-id", "onnx-community/gemma-3-1b-it-ONNX")
 
     connect()
 

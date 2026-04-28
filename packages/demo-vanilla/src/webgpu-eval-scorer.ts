@@ -1,7 +1,6 @@
 /// <reference types="vite/client" />
 
 export type WebGpuEvalModelId =
-  | "qwen-2.5-0.5b"
   | "qwen-3-0.6b"
   | "gemma-3-1b-it"
   | "translategemma-4"
@@ -102,13 +101,12 @@ const MODEL_PASSED_CASE_RATIO_WEIGHT = 0.2
 const MODEL_REFERENCE_SIMILARITY_WEIGHT = 0.1
 
 export const WEBGPU_EVAL_MODEL_IDS = [
-  "qwen-2.5-0.5b",
   "qwen-3-0.6b",
   "gemma-3-1b-it",
   "translategemma-4",
 ] as const satisfies readonly WebGpuEvalModelId[]
 
-export const DEFAULT_WEBGPU_EVAL_MODEL_ID: WebGpuEvalModelId = "qwen-2.5-0.5b"
+export const DEFAULT_WEBGPU_EVAL_MODEL_ID: WebGpuEvalModelId = "qwen-3-0.6b"
 
 type TranslationEvalJson = {
   readonly split: WebGpuEvalSplit

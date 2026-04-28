@@ -5,7 +5,6 @@ import type { TranslationAdapter } from "./translation-adapter.js"
 
 export type BuiltinTranslationModelId =
   | "translategemma-4"
-  | "qwen-2.5-0.5b"
   | "qwen-3-0.6b"
   | "gemma-3-1b-it"
 

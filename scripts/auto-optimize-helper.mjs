@@ -15,7 +15,6 @@ import path from "node:path"
 import { fileURLToPath } from "node:url"
 
 export const WEBGPU_EVAL_MODEL_IDS = Object.freeze([
-  "qwen-2.5-0.5b",
   "qwen-3-0.6b",
   "gemma-3-1b-it",
   "translategemma-4",

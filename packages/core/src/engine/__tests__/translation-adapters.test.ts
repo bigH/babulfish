@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest"
 
 import { ChatModelBaseAdapter } from "../adapters/chat.js"
 import { gemma3ChatAdapter } from "../adapters/models/gemma-3-1b-it.js"
-import { qwen25ChatAdapter } from "../adapters/models/qwen-2-5-0-5b.js"
 import { qwen3ChatAdapter } from "../adapters/models/qwen-3-0-6b.js"
 import { translateGemmaAdapter } from "../adapters/models/translategemma-4.js"
 import { TranslateModelBaseAdapter } from "../adapters/translate.js"
@@ -36,11 +35,6 @@ const QWEN3_CHAT_MODEL_OPTIONS = {
 const PRESERVE_TOKEN_PATTERN = /\u27EAbf-preserve:[^\u27EB]+\u27EB/gu
 const CHAT_ADAPTER_FIXTURES = [
   [
-    "qwen-2.5-0.5b-chat",
-    qwen25ChatAdapter,
-    "You are a translation engine. Translate from en to es. Output only the translation.",
-  ],
-  [
     "qwen-3-0.6b-chat",
     qwen3ChatAdapter,
     "You are a translation engine. Translate from en to es. Output only the translation.",
@@ -67,19 +61,6 @@ const BUILT_IN_PRESERVATION_FIXTURES = [
         extract: (token) =>
           translateGemmaAdapter.extractText(PRESERVE_REQUEST, options, [
             { generated_text: [{ role: "assistant", content: `Hola ${token}` }] },
-          ]),
-      }
-    },
-  ],
-  [
-    "qwen-2.5-0.5b",
-    (options: TranslationOptions): PreservationRoundTrip => {
-      const invocation = qwen25ChatAdapter.buildInvocation(PRESERVE_REQUEST, options)
-      return {
-        inputText: invocation.modelInput[1].content,
-        extract: (token) =>
-          qwen25ChatAdapter.extractText(PRESERVE_REQUEST, options, [
-            { generated_text: `Hola ${token}` },
           ]),
       }
     },
@@ -400,7 +381,6 @@ describe("translateGemmaAdapter", () => {
 describe("chat adapters", () => {
   it("gives each built-in chat model its own adapter identity", () => {
     expect(CHAT_ADAPTER_FIXTURES.map(([id]) => id)).toEqual([
-      "qwen-2.5-0.5b-chat",
       "qwen-3-0.6b-chat",
       "gemma-3-1b-it-chat",
     ])
@@ -452,11 +432,9 @@ describe("chat adapters", () => {
   })
 
   it("keeps Qwen3 tokenizer kwargs out of other chat adapters", () => {
-    for (const adapter of [qwen25ChatAdapter, gemma3ChatAdapter]) {
-      expect(adapter.buildInvocation(REQUEST, OPTIONS).modelOptions).toEqual(
-        BASE_CHAT_MODEL_OPTIONS,
-      )
-    }
+    expect(gemma3ChatAdapter.buildInvocation(REQUEST, OPTIONS).modelOptions).toEqual(
+      BASE_CHAT_MODEL_OPTIONS,
+    )
   })
 
   it("adds markdown and exact substring preservation instructions when requested", () => {
@@ -517,7 +495,7 @@ describe("chat adapters", () => {
 
   it("rejects unsupported content before invocation", () => {
     expect(
-      qwen25ChatAdapter.validateOptions({
+      gemma3ChatAdapter.validateOptions({
         max_new_tokens: 64,
         content_type: "html",
       }).errors,
@@ -526,7 +504,7 @@ describe("chat adapters", () => {
 
   it("extracts generated text strings and final assistant chat content", () => {
     expect(
-      qwen25ChatAdapter.extractText(REQUEST, OPTIONS, [{ generated_text: " hola " }]),
+      gemma3ChatAdapter.extractText(REQUEST, OPTIONS, [{ generated_text: " hola " }]),
     ).toEqual({ text: "hola" })
 
     expect(

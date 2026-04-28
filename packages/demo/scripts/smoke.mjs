@@ -232,15 +232,15 @@ async function main() {
       )
     }
 
-    const legacyUrl = `${url}?modelId=onnx-community%2FQwen2.5-0.5B-Instruct`
+    const legacyUrl = `${url}?modelId=onnx-community%2Fgemma-3-1b-it-ONNX`
     const legacyResponse = await fetch(legacyUrl, {
       signal: AbortSignal.timeout(2_000),
     })
     const legacyHtml = await legacyResponse.text()
     const missingLegacyMarkers = [
-      "Qwen 2.5 0.5B Instruct (qwen-2.5-0.5b)",
-      "onnx-community/Qwen2.5-0.5B-Instruct",
-      "qwen-2.5-0.5b-chat",
+      "Gemma 3 1B IT (gemma-3-1b-it)",
+      "onnx-community/gemma-3-1b-it-ONNX",
+      "gemma-3-1b-it-chat",
     ].filter((marker) => !legacyHtml.includes(marker))
 
     if (missingLegacyMarkers.length > 0) {

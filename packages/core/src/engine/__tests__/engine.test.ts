@@ -323,7 +323,7 @@ describe("translate", () => {
       },
     ])
 
-    const engine = createEngine({ model: "qwen-2.5-0.5b" })
+    const engine = createEngine({ model: "gemma-3-1b-it" })
     await engine.load()
 
     await expect(engine.translate("hello", "es")).resolves.toBe("segundo")

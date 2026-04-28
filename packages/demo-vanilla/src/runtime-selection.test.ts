@@ -45,24 +45,24 @@ describe("demo runtime selection", () => {
 
   it("reads legacy modelId links when exactly one built-in matches", () => {
     const resolved = resolveDemoRuntimeSelection({
-      modelId: "onnx-community/Qwen2.5-0.5B-Instruct",
+      modelId: "onnx-community/gemma-3-1b-it-ONNX",
     })
 
     expect(resolved.repairs).toEqual([])
-    expect(resolved.selection.model.id).toBe("qwen-2.5-0.5b")
+    expect(resolved.selection.model.id).toBe("gemma-3-1b-it")
     expect(resolved.selection.model.resolvedModelId).toBe(
-      "onnx-community/Qwen2.5-0.5B-Instruct",
+      "onnx-community/gemma-3-1b-it-ONNX",
     )
 
     expect(createDemoRuntimeSearchParams(resolved).toString()).toBe(
-      "model=qwen-2.5-0.5b",
+      "model=gemma-3-1b-it",
     )
   })
 
   it("lets canonical model override disagreeing legacy modelId", () => {
     const resolved = resolveDemoRuntimeSelection({
       model: "qwen-3-0.6b",
-      modelId: "onnx-community/Qwen2.5-0.5B-Instruct",
+      modelId: "onnx-community/gemma-3-1b-it-ONNX",
     })
 
     expect(resolved.selection.model.id).toBe("qwen-3-0.6b")
@@ -72,7 +72,7 @@ describe("demo runtime selection", () => {
 
     const params = mergeDemoRuntimeSearchParams(
       new URLSearchParams(
-        "foo=bar&modelId=onnx-community%2FQwen2.5-0.5B-Instruct&model=qwen-2.5-0.5b",
+        "foo=bar&modelId=onnx-community%2Fgemma-3-1b-it-ONNX&model=gemma-3-1b-it",
       ),
       resolved,
     )

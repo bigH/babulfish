@@ -35,10 +35,10 @@ describe("Home", () => {
       foo: "bar",
       model: [
         "qwen-3-0.6b",
-        "qwen-2.5-0.5b",
+        "gemma-3-1b-it",
       ],
       modelId: [
-        "onnx-community/Qwen2.5-0.5B-Instruct",
+        "onnx-community/translategemma-text-4b-it-ONNX",
         "onnx-community/gemma-3-1b-it-ONNX",
       ],
       device: "webgpu",
@@ -56,8 +56,8 @@ describe("Home", () => {
         new URLSearchParams([
           ["foo", "bar"],
           ["model", "qwen-3-0.6b"],
-          ["model", "qwen-2.5-0.5b"],
-          ["modelId", "onnx-community/Qwen2.5-0.5B-Instruct"],
+          ["model", "gemma-3-1b-it"],
+          ["modelId", "onnx-community/translategemma-text-4b-it-ONNX"],
           ["modelId", "onnx-community/gemma-3-1b-it-ONNX"],
           ["device", "webgpu"],
           ["dtype", "q4f16"],

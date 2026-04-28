@@ -23,7 +23,7 @@ The status line reports the requested model identity, canonical model spec id, r
 | Attribute | Type | Description |
 |---|---|---|
 | `device` | `"auto" \| "wasm" \| "webgpu"` | Requested runtime preference for the demo-local catalog selection |
-| `model` | `"translategemma-4" \| "qwen-2.5-0.5b" \| "qwen-3-0.6b" \| "gemma-3-1b-it"` | Canonical demo model spec id |
+| `model` | `"translategemma-4" \| "qwen-3-0.6b" \| "gemma-3-1b-it"` | Canonical demo model spec id |
 | `model-id` | `string` | Legacy compatibility resolved model id; ignored when `model` is present |
 | `dtype` | `"q4" \| "q4f16" \| "q8" \| "fp16" \| "fp32"` | Requested quantization / core `dtype` |
 | `target-lang` | `string` | When the model is ready, setting this triggers `core.translateTo(value)` |
@@ -42,7 +42,7 @@ The status line reports the requested model identity, canonical model spec id, r
 
 Changing `device`, `model`, `model-id`, or `dtype` recreates the element's core instance only when the effective shared runtime key changes. Effective runtime changes clear `target-lang`; raw attr changes that resolve to the same model/device/dtype do not. Host controls write canonical `model`, `device`, and `dtype` attrs and remove stale `model-id` attrs from managed elements. Matching normalized selections keep shared-runtime behavior possible; divergent normalized selections can split runtime keys. This element contract is demo code, not package contract.
 
-The host page mirrors the shared demo query contract: canonical runtime params are `model`, `device`, and `dtype`; legacy `modelId` deep links still read through the shared resolver and are stripped on the next canonical URL sync.
+The host page mirrors the shared demo query contract: canonical runtime params are `model`, `device`, and `dtype`; known `modelId` deep links for the current catalog still read through the shared resolver and are stripped on the next canonical URL sync.
 
 ## Run
 
