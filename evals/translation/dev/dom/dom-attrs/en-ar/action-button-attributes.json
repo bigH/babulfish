@@ -1,0 +1,52 @@
+{
+  "split": "dev",
+  "category": "dom-attrs",
+  "sourceLanguage": "en",
+  "targetLanguage": "ar",
+  "contentType": "dom",
+  "source": {
+    "html": "<button id=\"save-button\" data-action=\"save\" title=\"Save changes\" aria-label=\"Save changes\">Save</button>"
+  },
+  "references": [
+    {
+      "quality": "primary",
+      "html": "<button id=\"save-button\" data-action=\"save\" title=\"حفظ التغييرات\" aria-label=\"حفظ التغييرات\">حفظ</button>",
+      "notes": "Product-derived dev reference for Arabic translated button attributes."
+    }
+  ],
+  "checks": {
+    "sourceShouldChange": true,
+    "domVisibleText": [
+      { "selector": "button", "text": "حفظ" }
+    ],
+    "preservedAttributes": [
+      { "selector": "button", "attribute": "id", "value": "save-button" },
+      { "selector": "button", "attribute": "data-action", "value": "save" }
+    ],
+    "translatedAttributes": [
+      { "selector": "button", "attribute": "title", "expectedPattern": "(حفظ|التغييرات)" },
+      { "selector": "button", "attribute": "aria-label", "expectedPattern": "(حفظ|التغييرات)" }
+    ],
+    "domExecutableSafety": true
+  },
+  "runner": {
+    "dom": {
+      "translateAttributes": ["title", "aria-label"]
+    }
+  },
+  "provenance": {
+    "sourceClass": "product_derived_rewrite",
+    "authorId": "team-evals",
+    "createdAt": "2026-04-28",
+    "sourceOrigin": "private-product-screen BF-DOM-ACTIONS",
+    "derivedFrom": "rewritten from first-party action button into synthetic eval content",
+    "publicExposure": "private",
+    "reviewStatus": "technical_reviewed",
+    "referenceTranslatorId": "evals-translator-ar",
+    "referenceReviewerId": "evals-reviewer-ar",
+    "referenceReviewDate": "2026-04-28",
+    "technicalReviewerId": "team-evals",
+    "technicalReviewDate": "2026-04-28",
+    "notes": "Dev DOM attrs case for translated title and aria-label plus preserved IDs."
+  }
+}

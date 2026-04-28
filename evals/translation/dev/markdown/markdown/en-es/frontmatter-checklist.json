@@ -1,0 +1,46 @@
+{
+  "split": "dev",
+  "category": "markdown",
+  "sourceLanguage": "en",
+  "targetLanguage": "es",
+  "contentType": "markdown",
+  "source": {
+    "text": "---\ntitle: Runtime checklist\nowner: evals\n---\n\n# Release checklist\n\n- [ ] Verify `WebGPU`.\n  - [ ] Confirm `/docs/runtime`."
+  },
+  "references": [
+    {
+      "quality": "primary",
+      "text": "---\ntitle: Lista de verificación del entorno\nowner: evals\n---\n\n# Lista de verificación de la versión\n\n- [ ] Verifique `WebGPU`.\n  - [ ] Confirme `/docs/runtime`.",
+      "notes": "First-party dev reference for frontmatter and nested checklist structure."
+    }
+  ],
+  "checks": {
+    "sourceShouldChange": true,
+    "preservedSubstringCounts": [
+      { "value": "WebGPU" },
+      { "value": "/docs/runtime" }
+    ],
+    "markdownStructure": {
+      "headings": [{ "level": 1, "count": 1 }],
+      "unorderedListItems": 2,
+      "minListDepth": 2,
+      "inlineCode": { "count": 1, "texts": ["WebGPU"] },
+      "frontmatter": { "keys": ["title", "owner"] }
+    }
+  },
+  "provenance": {
+    "sourceClass": "first_party_authored",
+    "authorId": "team-evals",
+    "createdAt": "2026-04-28",
+    "sourceOrigin": "private-eval-spec BF-EVAL-MD-004",
+    "derivedFrom": null,
+    "publicExposure": "private",
+    "reviewStatus": "technical_reviewed",
+    "referenceTranslatorId": "evals-translator-es",
+    "referenceReviewerId": "evals-reviewer-es",
+    "referenceReviewDate": "2026-04-28",
+    "technicalReviewerId": "team-evals",
+    "technicalReviewDate": "2026-04-28",
+    "notes": "Dev markdown case authored for frontmatter and nested list preservation."
+  }
+}
