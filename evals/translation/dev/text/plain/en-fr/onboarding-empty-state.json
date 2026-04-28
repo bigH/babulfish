@@ -1,0 +1,36 @@
+{
+  "split": "dev",
+  "category": "plain",
+  "sourceLanguage": "en",
+  "targetLanguage": "fr",
+  "contentType": "text",
+  "source": {
+    "text": "No pages have been translated yet. Start with the dashboard."
+  },
+  "references": [
+    {
+      "quality": "primary",
+      "text": "Aucune page n'a encore été traduite. Commencez par le tableau de bord.",
+      "notes": "First-party dev reference for plain onboarding copy."
+    }
+  ],
+  "checks": {
+    "sourceShouldChange": true,
+    "expectedPatterns": ["(?i)\\b(page|tableau de bord|traduite)\\b"]
+  },
+  "provenance": {
+    "sourceClass": "first_party_authored",
+    "authorId": "team-evals",
+    "createdAt": "2026-04-28",
+    "sourceOrigin": "private-eval-spec BF-EVAL-TXT-002",
+    "derivedFrom": null,
+    "publicExposure": "private",
+    "reviewStatus": "technical_reviewed",
+    "referenceTranslatorId": "evals-translator-fr",
+    "referenceReviewerId": "evals-reviewer-fr",
+    "referenceReviewDate": "2026-04-28",
+    "technicalReviewerId": "team-evals",
+    "technicalReviewDate": "2026-04-28",
+    "notes": "Dev plain-text case authored for phase-1 basics coverage."
+  }
+}

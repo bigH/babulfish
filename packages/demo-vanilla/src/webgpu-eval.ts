@@ -1,4 +1,9 @@
-import { createBabulfish } from "@babulfish/core"
+import {
+  createBabulfish,
+  isWellFormedMarkdown,
+  renderInlineMarkdownToHtml,
+  type BabulfishConfig,
+} from "@babulfish/core"
 
 import {
   getDemoModelSpecById,
@@ -6,15 +11,27 @@ import {
 } from "../../demo-shared/src/runtime-selection.js"
 import {
   WEBGPU_EVAL_CORPUS,
+  createWebGpuEvalRunMetadata,
+  filterWebGpuEvalCorpus,
+  normalizeWebGpuEvalSelection,
+  scoreWebGpuEvalCleanHeadline,
   scoreWebGpuEvalGenerationFailure,
   scoreWebGpuEvalCase,
   scoreWebGpuEvalModel,
   scoreWebGpuEvalValidationFailure,
+  summarizeWebGpuEvalScoreGroups,
+  summarizeWebGpuEvalCaseGroups,
   type WebGpuEvalCaseScoreBreakdown,
   type WebGpuEvalCase,
+  type WebGpuEvalCaseGroupSummary,
+  type WebGpuEvalCleanHeadlineScoreSummary,
   type WebGpuEvalCheck,
+  type WebGpuEvalDomRunnerConfig,
   type WebGpuEvalModelId,
   type WebGpuEvalModelScoreBreakdown,
+  type WebGpuEvalRunMetadata,
+  type WebGpuEvalSelection,
+  type WebGpuEvalScoreGroupSummary,
 } from "./webgpu-eval-scorer.js"
 
 type WebGpuEvalDevice = {
@@ -51,6 +68,8 @@ type WebGpuEvalRequest = {
   readonly modelId: WebGpuEvalModelId
   readonly loadTimeoutMs: number
   readonly caseTimeoutMs: number
+  readonly filters?: WebGpuEvalSelection
+  readonly runMetadata?: Partial<WebGpuEvalRunMetadata>
 }
 
 type WebGpuEvalCaseResult = {
@@ -58,9 +77,10 @@ type WebGpuEvalCaseResult = {
   readonly split: WebGpuEvalCase["split"]
   readonly category: string
   readonly sourceText: string
-  readonly sourceLanguage: "en"
+  readonly sourceLanguage: WebGpuEvalCase["sourceLanguage"]
   readonly targetLanguage: WebGpuEvalCase["targetLanguage"]
   readonly contentType: WebGpuEvalCase["contentType"]
+  readonly sourceClass?: WebGpuEvalCase["sourceClass"]
   readonly rawOutput: string
   readonly normalizedOutput: string
   readonly checks: readonly WebGpuEvalCheck[]
@@ -85,8 +105,12 @@ export type WebGpuEvalModelResult = {
   readonly pass: boolean
   readonly score: number
   readonly scoreBreakdown: WebGpuEvalModelScoreBreakdown
+  readonly cleanHeadlineScore: WebGpuEvalCleanHeadlineScoreSummary
   readonly failuresByCategory: Readonly<Record<string, number>>
   readonly failuresByCheck: Readonly<Record<string, number>>
+  readonly caseGroupSummaries: readonly WebGpuEvalCaseGroupSummary[]
+  readonly scoreGroupSummaries: readonly WebGpuEvalScoreGroupSummary[]
+  readonly runMetadata: WebGpuEvalRunMetadata | null
   readonly error: SerializedError | null
   readonly environment: WebGpuEnvironment
 }
@@ -245,6 +269,7 @@ function createGenerationFailedCase(
     sourceLanguage: evalCase.sourceLanguage,
     targetLanguage: evalCase.targetLanguage,
     contentType: evalCase.contentType,
+    sourceClass: evalCase.sourceClass,
     rawOutput: "",
     normalizedOutput: scored.normalizedOutput,
     checks: scored.checks,
@@ -272,6 +297,7 @@ function createValidationFailedCase(
     sourceLanguage: evalCase.sourceLanguage,
     targetLanguage: evalCase.targetLanguage,
     contentType: evalCase.contentType,
+    sourceClass: evalCase.sourceClass,
     rawOutput,
     normalizedOutput: scored.normalizedOutput,
     checks: scored.checks,
@@ -281,6 +307,67 @@ function createValidationFailedCase(
     translateMs,
     error,
   }
+}
+
+const DEFAULT_WEBGPU_EVAL_DOM_PRESERVE_MATCHERS = [
+  "babulfish",
+  "TranslateGemma",
+  "WebGPU",
+] as const
+
+function shouldSkipForPatterns(
+  patterns: NonNullable<WebGpuEvalDomRunnerConfig["skipTextPatterns"]>,
+): NonNullable<NonNullable<BabulfishConfig["dom"]>["shouldSkip"]> | undefined {
+  if (patterns.length === 0) return undefined
+
+  return (text, defaultSkip) =>
+    defaultSkip(text) || patterns.some(({ pattern }) => pattern.test(text))
+}
+
+function createDomConfig(
+  config: WebGpuEvalDomRunnerConfig | undefined,
+): NonNullable<BabulfishConfig["dom"]> {
+  const skipTextPatterns = config?.skipTextPatterns ?? []
+
+  return {
+    roots: ["[data-webgpu-eval-root]"],
+    preserve: {
+      matchers: [
+        ...DEFAULT_WEBGPU_EVAL_DOM_PRESERVE_MATCHERS,
+        ...(config?.preserveMatchers ?? []),
+      ],
+    },
+    ...(config?.richText
+      ? {
+          richText: {
+            ...config.richText,
+            render: renderInlineMarkdownToHtml,
+            validate: isWellFormedMarkdown,
+          },
+        }
+      : {}),
+    ...(config?.structuredText ? { structuredText: config.structuredText } : {}),
+    ...(config?.linkedBy ? { linkedBy: config.linkedBy } : {}),
+    ...(config?.translateAttributes ? { translateAttributes: [...config.translateAttributes] } : {}),
+    ...(config?.skipTags ? { skipTags: [...config.skipTags] } : {}),
+    ...(skipTextPatterns.length > 0
+      ? { shouldSkip: shouldSkipForPatterns(skipTextPatterns) }
+      : {}),
+  }
+}
+
+function createEvalCore(
+  spec: WebGpuEvalDemoModelSpec,
+  domConfig: NonNullable<BabulfishConfig["dom"]>,
+): ReturnType<typeof createBabulfish> {
+  return createBabulfish({
+    engine: {
+      model: spec.id,
+      device: "webgpu",
+      dtype: spec.defaultDType,
+    },
+    dom: domConfig,
+  })
 }
 
 async function translateDomEvalCase(
@@ -295,15 +382,26 @@ async function translateDomEvalCase(
   scope.append(root)
 
   await core.translateTo(evalCase.targetLanguage, { root: scope, signal })
-  return root.innerHTML
+  return root.outerHTML
 }
 
-function translateEvalCase(
+async function translateEvalCase(
   core: ReturnType<typeof createBabulfish>,
+  spec: WebGpuEvalDemoModelSpec,
   evalCase: WebGpuEvalCase,
   signal: AbortSignal,
 ): Promise<string> {
   if (evalCase.contentType === "dom") {
+    if (evalCase.domRunnerConfig) {
+      const caseCore = createEvalCore(spec, createDomConfig(evalCase.domRunnerConfig))
+      try {
+        await caseCore.loadModel({ signal })
+        return await translateDomEvalCase(caseCore, evalCase, signal)
+      } finally {
+        await caseCore.dispose()
+      }
+    }
+
     return translateDomEvalCase(core, evalCase, signal)
   }
 
@@ -312,6 +410,7 @@ function translateEvalCase(
 
 async function runEvalCase(
   core: ReturnType<typeof createBabulfish>,
+  spec: WebGpuEvalDemoModelSpec,
   evalCase: WebGpuEvalCase,
   timeoutMs: number,
 ): Promise<WebGpuEvalCaseResult> {
@@ -320,7 +419,7 @@ async function runEvalCase(
 
   try {
     rawOutput = await withAbortableTimeout(
-      (signal) => translateEvalCase(core, evalCase, signal),
+      (signal) => translateEvalCase(core, spec, evalCase, signal),
       `case ${evalCase.id}`,
       timeoutMs,
     )
@@ -343,6 +442,7 @@ async function runEvalCase(
       sourceLanguage: evalCase.sourceLanguage,
       targetLanguage: evalCase.targetLanguage,
       contentType: evalCase.contentType,
+      sourceClass: evalCase.sourceClass,
       rawOutput,
       normalizedOutput: scored.normalizedOutput,
       checks: scored.checks,
@@ -367,8 +467,10 @@ function createLoadFailureResult(
   environment: WebGpuEnvironment,
   loadMs: number | null,
   error: SerializedError,
+  runMetadata: WebGpuEvalRunMetadata | null,
 ): WebGpuEvalModelResult {
   const scoreSummary = scoreWebGpuEvalModel([], `${error.class}: ${error.message}`)
+  const cleanHeadlineScore = scoreWebGpuEvalCleanHeadline([])
 
   return {
     modelId: spec.id,
@@ -384,8 +486,12 @@ function createLoadFailureResult(
     pass: false,
     score: scoreSummary.score,
     scoreBreakdown: scoreSummary.scoreBreakdown,
+    cleanHeadlineScore,
     failuresByCategory: scoreSummary.failuresByCategory,
     failuresByCheck: scoreSummary.failuresByCheck,
+    caseGroupSummaries: [],
+    scoreGroupSummaries: [],
+    runMetadata,
     error,
     environment,
   }
@@ -395,9 +501,32 @@ async function runModelEval({
   modelId,
   loadTimeoutMs,
   caseTimeoutMs,
+  filters,
+  runMetadata: requestRunMetadata,
 }: WebGpuEvalRequest): Promise<WebGpuEvalModelResult> {
   const spec = requireModelSpec(modelId)
+  const selectedFilters = normalizeWebGpuEvalSelection(filters)
   let environment = getWebGpuEnvironmentBase()
+  let runMetadata: WebGpuEvalRunMetadata
+  try {
+    runMetadata = createWebGpuEvalRunMetadata({
+      runner: requestRunMetadata?.runner ?? "webgpu-eval-browser",
+      timestamp: requestRunMetadata?.timestamp,
+      modelId: spec.id,
+      filters: selectedFilters,
+      reason: requestRunMetadata?.reason,
+      referencesExposed: requestRunMetadata?.referencesExposed,
+    })
+  } catch (error) {
+    return createLoadFailureResult(
+      spec,
+      environment,
+      null,
+      serializeError("load", error),
+      null,
+    )
+  }
+
   try {
     environment = await inspectWebGpuEnvironment()
     assertEnvironmentSupportsModel(spec, environment)
@@ -407,6 +536,7 @@ async function runModelEval({
       environment,
       null,
       serializeError("environment", error),
+      runMetadata,
     )
   }
 
@@ -416,12 +546,7 @@ async function runModelEval({
       device: "webgpu",
       dtype: spec.defaultDType,
     },
-    dom: {
-      roots: ["[data-webgpu-eval-root]"],
-      preserve: {
-        matchers: ["babulfish", "TranslateGemma", "WebGPU"],
-      },
-    },
+    dom: createDomConfig(undefined),
   })
   const loadStart = performance.now()
   let loadMs: number | null = null
@@ -441,12 +566,20 @@ async function runModelEval({
       )
     }
 
+    const selectedCases = filterWebGpuEvalCorpus(WEBGPU_EVAL_CORPUS, runMetadata.filters)
+    if (selectedCases.length === 0) {
+      throw new Error("No WebGPU eval cases matched the requested filters.")
+    }
+
     const cases: WebGpuEvalCaseResult[] = []
-    for (const evalCase of WEBGPU_EVAL_CORPUS) {
-      const result = await runEvalCase(core, evalCase, caseTimeoutMs)
+    for (const evalCase of selectedCases) {
+      const result = await runEvalCase(core, spec, evalCase, caseTimeoutMs)
       cases.push(result)
     }
     const scoreSummary = scoreWebGpuEvalModel(cases)
+    const caseGroupSummaries = summarizeWebGpuEvalCaseGroups(cases)
+    const scoreGroupSummaries = summarizeWebGpuEvalScoreGroups(cases)
+    const cleanHeadlineScore = scoreWebGpuEvalCleanHeadline(cases)
 
     return {
       modelId: spec.id,
@@ -462,8 +595,12 @@ async function runModelEval({
       pass: cases.every((evalCase) => evalCase.pass),
       score: scoreSummary.score,
       scoreBreakdown: scoreSummary.scoreBreakdown,
+      cleanHeadlineScore,
       failuresByCategory: scoreSummary.failuresByCategory,
       failuresByCheck: scoreSummary.failuresByCheck,
+      caseGroupSummaries,
+      scoreGroupSummaries,
+      runMetadata,
       error: null,
       environment,
     }
@@ -473,6 +610,7 @@ async function runModelEval({
       environment,
       loadMs,
       serializeError("load", error),
+      runMetadata,
     )
   } finally {
     await core.dispose()

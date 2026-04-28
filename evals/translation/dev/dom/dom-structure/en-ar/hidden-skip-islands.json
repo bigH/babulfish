@@ -1,0 +1,52 @@
+{
+  "split": "dev",
+  "category": "dom-structure",
+  "sourceLanguage": "en",
+  "targetLanguage": "ar",
+  "contentType": "dom",
+  "source": {
+    "html": "<section><p>Show the deployment summary.</p><span hidden>Internal token A-17</span><span aria-hidden=\"true\">Decorative label</span><pre>pnpm test -- --runInBand</pre><code>API_KEY</code></section>"
+  },
+  "references": [
+    {
+      "quality": "primary",
+      "html": "<section><p>اعرض ملخص النشر.</p><span hidden>Internal token A-17</span><span aria-hidden=\"true\">Decorative label</span><pre>pnpm test -- --runInBand</pre><code>API_KEY</code></section>",
+      "notes": "Synthetic dev reference for Arabic hidden and skipped DOM islands."
+    }
+  ],
+  "checks": {
+    "sourceShouldChange": true,
+    "domSelectorCounts": [
+      { "selector": "span", "count": 2 },
+      { "selector": "pre", "count": 1 },
+      { "selector": "code", "count": 1 }
+    ],
+    "domVisibleText": [
+      { "selector": "p", "pattern": "(ملخص|النشر)" }
+    ],
+    "domHiddenText": [
+      { "selector": "[hidden]" },
+      { "selector": "[aria-hidden=\"true\"]" }
+    ],
+    "domSkippedText": [
+      { "selector": "pre" },
+      { "selector": "code" }
+    ],
+    "domExecutableSafety": true
+  },
+  "provenance": {
+    "sourceClass": "synthetic_template",
+    "authorId": "team-evals",
+    "createdAt": "2026-04-28",
+    "sourceOrigin": "private-eval-template BF-EVAL-DOM-003",
+    "derivedFrom": "template: visible deployment text plus hidden and skipped technical islands",
+    "publicExposure": "private",
+    "reviewStatus": "technical_reviewed",
+    "referenceTranslatorId": "evals-translator-ar",
+    "referenceReviewerId": "evals-reviewer-ar",
+    "referenceReviewDate": "2026-04-28",
+    "technicalReviewerId": "team-evals",
+    "technicalReviewDate": "2026-04-28",
+    "notes": "Dev DOM case for hidden text exclusion and skip islands."
+  }
+}

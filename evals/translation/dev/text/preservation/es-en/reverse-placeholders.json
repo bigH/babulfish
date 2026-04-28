@@ -1,0 +1,41 @@
+{
+  "split": "dev",
+  "category": "preservation",
+  "sourceLanguage": "es",
+  "targetLanguage": "en",
+  "contentType": "text",
+  "source": {
+    "text": "Confirma que {{workspaceName}} use /admin/models y mantenga SKU-BF-77."
+  },
+  "references": [
+    {
+      "quality": "primary",
+      "text": "Confirm that {{workspaceName}} uses /admin/models and keeps SKU-BF-77.",
+      "notes": "Synthetic dev reference for reverse preservation smoke coverage."
+    }
+  ],
+  "checks": {
+    "sourceShouldChange": true,
+    "expectedPatterns": ["(?i)\\b(confirm|uses|keeps)\\b"],
+    "preservedSubstringCounts": [
+      { "value": "{{workspaceName}}" },
+      { "value": "/admin/models" },
+      { "value": "SKU-BF-77" }
+    ]
+  },
+  "provenance": {
+    "sourceClass": "synthetic_template",
+    "authorId": "team-evals",
+    "createdAt": "2026-04-28",
+    "sourceOrigin": "private-eval-template BF-EVAL-PRES-007",
+    "derivedFrom": "template: reverse-language preservation smoke with placeholder, route, and SKU",
+    "publicExposure": "private",
+    "reviewStatus": "technical_reviewed",
+    "referenceTranslatorId": "evals-translator-en",
+    "referenceReviewerId": "evals-reviewer-en",
+    "referenceReviewDate": "2026-04-28",
+    "technicalReviewerId": "team-evals",
+    "technicalReviewDate": "2026-04-28",
+    "notes": "Dev reverse preservation case for phase-1 language matrix."
+  }
+}

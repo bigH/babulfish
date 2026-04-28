@@ -1,0 +1,48 @@
+{
+  "split": "dev",
+  "category": "dom-rtl",
+  "sourceLanguage": "en",
+  "targetLanguage": "ar",
+  "contentType": "dom",
+  "source": {
+    "html": "<section><h2>Status</h2><p>The runtime is ready for Arabic pages.</p><a href=\"/docs/rtl\">RTL guide</a></section>"
+  },
+  "references": [
+    {
+      "quality": "primary",
+      "html": "<section><h2>الحالة</h2><p>بيئة التشغيل جاهزة للصفحات العربية.</p><a href=\"/docs/rtl\">دليل RTL</a></section>",
+      "notes": "Product-derived dev reference for Arabic DOM direction behavior."
+    }
+  ],
+  "checks": {
+    "sourceShouldChange": true,
+    "domSelectorCounts": [
+      { "selector": "section", "count": 1 },
+      { "selector": "a", "count": 1 }
+    ],
+    "domVisibleText": [
+      { "selector": "h2", "text": "الحالة" },
+      { "selector": "p", "pattern": "(جاهزة|العربية)" }
+    ],
+    "preservedAttributes": [
+      { "selector": "a", "attribute": "href", "value": "/docs/rtl" }
+    ],
+    "domRootDir": { "dir": "rtl" },
+    "domExecutableSafety": true
+  },
+  "provenance": {
+    "sourceClass": "product_derived_rewrite",
+    "authorId": "team-evals",
+    "createdAt": "2026-04-28",
+    "sourceOrigin": "private-product-screen BF-DOM-RTL",
+    "derivedFrom": "rewritten from first-party RTL readiness panel into synthetic eval content",
+    "publicExposure": "private",
+    "reviewStatus": "technical_reviewed",
+    "referenceTranslatorId": "evals-translator-ar",
+    "referenceReviewerId": "evals-reviewer-ar",
+    "referenceReviewDate": "2026-04-28",
+    "technicalReviewerId": "team-evals",
+    "technicalReviewDate": "2026-04-28",
+    "notes": "Dev DOM RTL case for root direction, visible text, and preserved href."
+  }
+}

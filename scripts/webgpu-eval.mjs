@@ -3,7 +3,7 @@ import { spawn } from "node:child_process"
 import { mkdir, writeFile } from "node:fs/promises"
 import net from "node:net"
 import path from "node:path"
-import { fileURLToPath } from "node:url"
+import { fileURLToPath, pathToFileURL } from "node:url"
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const defaultOutputRoot = path.join(repoRoot, ".evals")
@@ -12,6 +12,18 @@ const evalModelIds = [
   "qwen-3-0.6b",
   "gemma-3-1b-it",
   "translategemma-4",
+]
+const evalSplits = ["dev", "holdout", "holdout-clean", "calibration-public"]
+const defaultLocalSplits = ["dev", "holdout"]
+const evalContentTypes = ["text", "markdown", "dom"]
+const evalLanguages = ["en", "es", "fr", "ar", "de", "ja", "hi"]
+const evalSourceClasses = [
+  "first_party_authored",
+  "product_derived_rewrite",
+  "synthetic_template",
+  "public_benchmark",
+  "public_web",
+  "unknown",
 ]
 
 function filenameTimestamp(date = new Date()) {
@@ -32,11 +44,26 @@ function artifactPathForModel(outputDir, modelId) {
 
 function usage() {
   return [
-    "Usage: pnpm eval:webgpu [-- --model <id|all|a,b>] [--headed] [--output-dir <path>]",
+    "Usage: pnpm eval:webgpu [-- --model <id|all|a,b>] [--headed] [--output-dir <path>] [filters]",
     "",
     "Defaults:",
     "  --model qwen-3-0.6b",
     "  --output-dir .evals/web-gpu-<timestamp>",
+    "  --split dev,holdout",
+    "  holdout-clean and calibration-public run only when explicitly selected",
+    "",
+    "Filters:",
+    "  --split dev,holdout",
+    "  --category markdown,dom-attrs",
+    "  --content-type text,markdown,dom",
+    "  --source-language en",
+    "  --target-language es,fr",
+    "  --language-pair en-es,en-fr",
+    "  --source-class first_party_authored",
+    "",
+    "Holdout metadata:",
+    "  --holdout-reason \"release gate\"",
+    "  --references-exposed",
     "",
     `Valid models: ${evalModelIds.join(", ")}`,
     "",
@@ -53,7 +80,7 @@ function parsePositiveInteger(value, label) {
   return parsed
 }
 
-function parseArgs(argv) {
+export function parseArgs(argv) {
   const options = {
     modelArg: "qwen-3-0.6b",
     outputDir: null,
@@ -63,7 +90,11 @@ function parseArgs(argv) {
     caseTimeoutMs: 180_000,
     browserTimeoutMs: 1_200_000,
     executablePath: null,
+    holdoutReason: null,
+    referencesExposed: false,
+    filters: {},
   }
+  let splitSpecified = false
 
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index]
@@ -120,9 +151,56 @@ function parseArgs(argv) {
       options.executablePath = nextValue()
     } else if (arg.startsWith("--executable-path=")) {
       options.executablePath = arg.slice("--executable-path=".length)
+    } else if (arg === "--holdout-reason") {
+      options.holdoutReason = nextValue()
+    } else if (arg.startsWith("--holdout-reason=")) {
+      options.holdoutReason = arg.slice("--holdout-reason=".length)
+    } else if (arg === "--references-exposed") {
+      options.referencesExposed = true
+    } else if (arg === "--split") {
+      splitSpecified = true
+      options.filters.split = parseEnumList(nextValue(), evalSplits, "--split")
+    } else if (arg.startsWith("--split=")) {
+      splitSpecified = true
+      options.filters.split = parseEnumList(arg.slice("--split=".length), evalSplits, "--split")
+    } else if (arg === "--category") {
+      options.filters.category = parseStringList(nextValue(), "--category")
+    } else if (arg.startsWith("--category=")) {
+      options.filters.category = parseStringList(arg.slice("--category=".length), "--category")
+    } else if (arg === "--content-type") {
+      options.filters.contentType = parseEnumList(nextValue(), evalContentTypes, "--content-type")
+    } else if (arg.startsWith("--content-type=")) {
+      options.filters.contentType = parseEnumList(arg.slice("--content-type=".length), evalContentTypes, "--content-type")
+    } else if (arg === "--source-language") {
+      options.filters.sourceLanguage = parseEnumList(nextValue(), evalLanguages, "--source-language")
+    } else if (arg.startsWith("--source-language=")) {
+      options.filters.sourceLanguage = parseEnumList(arg.slice("--source-language=".length), evalLanguages, "--source-language")
+    } else if (arg === "--target-language") {
+      options.filters.targetLanguage = parseEnumList(nextValue(), evalLanguages, "--target-language")
+    } else if (arg.startsWith("--target-language=")) {
+      options.filters.targetLanguage = parseEnumList(arg.slice("--target-language=".length), evalLanguages, "--target-language")
+    } else if (arg === "--language-pair") {
+      options.filters.languagePair = parseLanguagePairs(nextValue())
+    } else if (arg.startsWith("--language-pair=")) {
+      options.filters.languagePair = parseLanguagePairs(arg.slice("--language-pair=".length))
+    } else if (arg === "--source-class") {
+      options.filters.sourceClass = parseEnumList(nextValue(), evalSourceClasses, "--source-class")
+    } else if (arg.startsWith("--source-class=")) {
+      options.filters.sourceClass = parseEnumList(arg.slice("--source-class=".length), evalSourceClasses, "--source-class")
     } else {
       throw new Error(`Unknown argument ${arg}.\n\n${usage()}`)
     }
+  }
+
+  if (!splitSpecified) {
+    options.filters.split = defaultLocalSplits
+  }
+
+  if (
+    options.filters.split.includes("holdout-clean") &&
+    (!options.holdoutReason || options.holdoutReason.trim().length === 0)
+  ) {
+    throw new Error("--split holdout-clean requires --holdout-reason.")
   }
 
   return {
@@ -130,6 +208,35 @@ function parseArgs(argv) {
     outputDir: options.outputDir ?? createDefaultOutputDir(),
     models: parseModels(options.modelArg),
   }
+}
+
+function parseStringList(value, label) {
+  const values = value.split(",").map((item) => item.trim()).filter(Boolean)
+  if (values.length === 0) throw new Error(`${label} must include at least one value.`)
+  return [...new Set(values)]
+}
+
+function parseEnumList(value, allowedValues, label) {
+  const values = parseStringList(value, label)
+  const unknown = values.filter((item) => !allowedValues.includes(item))
+  if (unknown.length > 0) {
+    throw new Error(`${label} has unknown value(s): ${unknown.join(", ")}. Valid values: ${allowedValues.join(", ")}.`)
+  }
+  return values
+}
+
+function parseLanguagePairs(value) {
+  const pairs = parseStringList(value, "--language-pair")
+  const invalid = pairs.filter((pair) => {
+    const [source, target, extra] = pair.split("-")
+    return !source || !target || extra !== undefined ||
+      !evalLanguages.includes(source) ||
+      !evalLanguages.includes(target)
+  })
+  if (invalid.length > 0) {
+    throw new Error(`--language-pair has invalid value(s): ${invalid.join(", ")}. Expected values like en-es.`)
+  }
+  return pairs
 }
 
 function parseModels(modelArg) {
@@ -300,6 +407,17 @@ async function launchBrowser(options) {
   }
 }
 
+export function createRunMetadata(modelId, options) {
+  return {
+    runner: "webgpu-eval-cli",
+    timestamp: new Date().toISOString(),
+    modelId,
+    filters: options.filters,
+    reason: options.holdoutReason,
+    referencesExposed: options.referencesExposed,
+  }
+}
+
 async function runModelInPage(browser, url, modelId, options) {
   const context = await browser.newContext()
   const page = await context.newPage()
@@ -319,6 +437,8 @@ async function runModelInPage(browser, url, modelId, options) {
         modelId,
         loadTimeoutMs: options.loadTimeoutMs,
         caseTimeoutMs: options.caseTimeoutMs,
+        filters: options.filters,
+        runMetadata: createRunMetadata(modelId, options),
       },
     )
 
@@ -347,6 +467,9 @@ function createBaseResult(options, port) {
       caseTimeoutMs: options.caseTimeoutMs,
       browserTimeoutMs: options.browserTimeoutMs,
       executablePath: options.executablePath,
+      filters: options.filters,
+      holdoutReason: options.holdoutReason,
+      referencesExposed: options.referencesExposed,
     },
     server: {
       url: `http://127.0.0.1:${port}/webgpu-eval.html`,
@@ -368,7 +491,24 @@ function createBaseResult(options, port) {
   }
 }
 
-function failedModelFromError(modelId, error) {
+function failedModelFromError(modelId, error, options = null) {
+  const cleanHeadlineScore = {
+    score: 0,
+    scoreBreakdown: {
+      weightedCheckScore: 0,
+      passedCaseRatio: 0,
+      referenceSimilarity: 0,
+      hardFailureCount: 0,
+      failureReason: null,
+    },
+    failuresByCategory: {},
+    failuresByCheck: {},
+    pass: false,
+    includedCases: 0,
+    excludedCases: 0,
+    excludedCaseIds: [],
+  }
+
   return {
     modelId,
     resolvedModelId: "",
@@ -391,6 +531,10 @@ function failedModelFromError(modelId, error) {
     },
     failuresByCategory: {},
     failuresByCheck: {},
+    cleanHeadlineScore,
+    caseGroupSummaries: [],
+    scoreGroupSummaries: [],
+    runMetadata: options ? createRunMetadata(modelId, options) : null,
     error,
     environment: {
       userAgent: "",
@@ -441,11 +585,24 @@ async function writeArtifacts(outputDir, result) {
   return artifactPaths
 }
 
-function summarizeResult(result, artifactPaths) {
+export function formatResultSummary(result, artifactPaths) {
   const relativeArtifacts = artifactPaths.map((artifactPath) =>
     path.relative(repoRoot, artifactPath),
   )
+  const status = result.pass ? "PASS" : "FAIL"
+  const modelCount = result.models.length
+  const scores = result.models
+    .map((model) => {
+      const raw = Number(model.score ?? 0).toFixed(3)
+      const clean = Number(model.cleanHeadlineScore?.score ?? 0).toFixed(3)
+      return `${model.modelId}=raw:${raw}/clean:${clean}`
+    })
+    .join(", ")
 
+  return `${status} WebGPU eval: ${modelCount} model(s). Scores: ${scores}. Artifacts: ${relativeArtifacts.join(", ")}`
+}
+
+function summarizeResult(result, artifactPaths) {
   for (const model of result.models) {
     if (model.error) {
       console.error(
@@ -466,20 +623,23 @@ function summarizeResult(result, artifactPaths) {
         console.error(`  - ${check.name}: expected ${check.expected}; actual ${check.actual}`)
       }
     }
+
+    const failedGroups = model.caseGroupSummaries.filter((group) => group.failed > 0)
+    for (const group of failedGroups) {
+      console.error(
+        `[${model.modelId}/${group.split}/${group.contentType}/${group.category}/${group.languagePair}/${group.sourceClass}] ` +
+          `${group.failed}/${group.total} failed; checks: ${Object.entries(group.failuresByCheck)
+            .map(([name, count]) => `${name}=${count}`)
+            .join(", ") || "none"}`,
+      )
+    }
   }
 
   for (const error of result.errors) {
     console.error(`[${error.class}] ${error.message}`)
   }
 
-  const status = result.pass ? "PASS" : "FAIL"
-  const modelCount = result.models.length
-  const scores = result.models
-    .map((model) => `${model.modelId}=${Number(model.score ?? 0).toFixed(3)}`)
-    .join(", ")
-  console.log(
-    `${status} WebGPU eval: ${modelCount} model(s). Scores: ${scores}. Artifacts: ${relativeArtifacts.join(", ")}`,
-  )
+  console.log(formatResultSummary(result, artifactPaths))
 }
 
 async function stopServer(server) {
@@ -534,7 +694,7 @@ async function main() {
         result.models.push(modelResult)
         if (modelResult.error?.class === "environment") break
       } catch (error) {
-        result.models.push(failedModelFromError(modelId, serializeError("environment", error)))
+        result.models.push(failedModelFromError(modelId, serializeError("environment", error), options))
         break
       }
     }
@@ -542,7 +702,7 @@ async function main() {
     const serializedError = serializeError("environment", error)
     result.errors.push(serializedError)
     if (result.models.length === 0 && options.models[0]) {
-      result.models.push(failedModelFromError(options.models[0], serializedError))
+      result.models.push(failedModelFromError(options.models[0], serializedError, options))
     }
   } finally {
     if (browser) await browser.close().catch(() => {})
@@ -572,4 +732,6 @@ async function main() {
   process.exitCode = result.pass ? 0 : 1
 }
 
-await main()
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  await main()
+}

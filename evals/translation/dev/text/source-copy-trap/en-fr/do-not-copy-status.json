@@ -1,0 +1,37 @@
+{
+  "split": "dev",
+  "category": "source-copy-trap",
+  "sourceLanguage": "en",
+  "targetLanguage": "fr",
+  "contentType": "text",
+  "source": {
+    "text": "Translate this status, do not copy it: The worker queue is paused for maintenance."
+  },
+  "references": [
+    {
+      "quality": "primary",
+      "text": "Traduisez cet état, ne le copiez pas : la file des workers est suspendue pour maintenance.",
+      "notes": "First-party dev reference for source-copy trap behavior."
+    }
+  ],
+  "checks": {
+    "sourceShouldChange": true,
+    "expectedPatterns": ["(?i)\\b(file|suspendue|maintenance)\\b"],
+    "forbiddenPatterns": ["The worker queue is paused for maintenance"]
+  },
+  "provenance": {
+    "sourceClass": "first_party_authored",
+    "authorId": "team-evals",
+    "createdAt": "2026-04-28",
+    "sourceOrigin": "private-eval-spec BF-EVAL-SCT-002",
+    "derivedFrom": null,
+    "publicExposure": "private",
+    "reviewStatus": "technical_reviewed",
+    "referenceTranslatorId": "evals-translator-fr",
+    "referenceReviewerId": "evals-reviewer-fr",
+    "referenceReviewDate": "2026-04-28",
+    "technicalReviewerId": "team-evals",
+    "technicalReviewDate": "2026-04-28",
+    "notes": "Dev source-copy trap with narrow literal forbidden source phrase."
+  }
+}
