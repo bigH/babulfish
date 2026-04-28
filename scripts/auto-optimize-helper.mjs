@@ -663,7 +663,7 @@ function attemptPaths(root = repoRoot) {
   return statusPaths(root).filter(isAllowedAttemptPath)
 }
 
-async function updateLastGoodScores(selectedModel, snapshotPath, commitSha, root = repoRoot) {
+export async function updateLastGoodScores(selectedModel, snapshotPath, commitSha, root = repoRoot) {
   const snapshot = readSnapshot(snapshotPath)
   const model = snapshot.models[selectedModel]
   if (!model) throw new Error(`Snapshot is missing ${selectedModel}.`)
@@ -679,6 +679,8 @@ async function updateLastGoodScores(selectedModel, snapshotPath, commitSha, root
     schemaVersion: 1,
     updatedAt,
     source: "auto-optimizer",
+    role: "bookkeeping-only",
+    acceptancePolicy: "active-baseline-snapshot",
     artifactsDir: snapshot.artifactsDir,
     models: {
       ...(isRecord(existing.models) ? existing.models : {}),
@@ -704,11 +706,11 @@ function printPromptSummary(selectedModel, snapshot) {
   if (!model) throw new Error(`Snapshot is missing ${selectedModel}.`)
 
   console.log(`Requested models: ${snapshot.modelsRequested.join(", ")}`)
-  console.log(`Baseline artifact dir: ${snapshot.artifactsDir}`)
+  console.log(`Current accepted artifact dir: ${snapshot.artifactsDir}`)
   console.log(`Selected model: ${selectedModel}`)
-  console.log(`Baseline score: ${model.score}`)
-  console.log(`Baseline artifact: ${model.artifact}`)
-  console.log(`Baseline scoreBreakdown: ${JSON.stringify(model.scoreBreakdown)}`)
+  console.log(`Current accepted score: ${model.score}`)
+  console.log(`Current accepted artifact: ${model.artifact}`)
+  console.log(`Current accepted scoreBreakdown: ${JSON.stringify(model.scoreBreakdown)}`)
 }
 
 function optionalRoot(rootArg) {

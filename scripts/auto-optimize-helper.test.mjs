@@ -9,12 +9,14 @@ import {
   EXPECTED_CASE_COUNT,
   buildPromptEvidence,
   compareSnapshots,
+  createSnapshot,
   formatCompareReasons,
   formatScoreImprovement,
   isAllowedAttemptPath,
   parseRequestedModels,
   selectModelFromSnapshot,
   summarizeArtifactObject,
+  updateLastGoodScores,
 } from "./auto-optimize-helper.mjs"
 
 const scoreBreakdown = (overrides = {}) => ({
@@ -112,6 +114,12 @@ import path from "node:path"
 const allModels = ["qwen-2.5-0.5b", "qwen-3-0.6b", "gemma-3-1b-it", "translategemma-4"]
 const command = process.argv[2]
 const args = process.argv.slice(3)
+const qwenScoresByIteration = new Map([
+  [0, 0],
+  [1, 0.66],
+  [2, 0.53],
+  [3, 0.67],
+])
 
 if (process.env.MOCK_LOG) {
   fs.appendFileSync(process.env.MOCK_LOG, "helper " + command + " " + args.join(" ") + "\\n")
@@ -119,6 +127,71 @@ if (process.env.MOCK_LOG) {
 
 const requestedModels = (modelArg) => modelArg === "all" ? allModels : [modelArg]
 const artifactName = (model) => model.replaceAll("/", "-") + ".json"
+const readJson = (file) => JSON.parse(fs.readFileSync(file, "utf8"))
+const formatScore = (score) => Number(score).toFixed(6)
+const verifyIteration = (outputDir) => {
+  const match = path.basename(outputDir).match(/-auto-verify-.+-([0-9]+)-[0-9]+$/)
+  return match ? Number(match[1]) : 0
+}
+const scoreFor = (model, outputDir) => {
+  if (model === "qwen-2.5-0.5b") {
+    return qwenScoresByIteration.get(verifyIteration(outputDir)) ?? 0.67
+  }
+  if (model === "qwen-3-0.6b") return 0.5
+  if (model === "gemma-3-1b-it") return 0.8
+  return 0.9
+}
+const modelSummary = (model, outputDir) => {
+  const score = scoreFor(model, outputDir)
+  return {
+    score,
+    pass: score > 0.6,
+    modelPass: score > 0.6,
+    passedCases: Math.round(score * 38),
+    totalCases: 38,
+    hardFailureCount: 0,
+    scoreBreakdown: { weightedCheckScore: score },
+    failuresByCategory: {},
+    failuresByCheck: {},
+    error: null,
+    checkOutcomes: [],
+    artifact: ".evals/" + path.basename(outputDir) + "/" + artifactName(model),
+    artifactHash: "hash-" + model + "-" + score,
+  }
+}
+const selectModel = (modelArg, snapshot) => {
+  if (modelArg !== "all") return modelArg
+  return [...requestedModels(modelArg)].sort((left, right) => {
+    const leftModel = snapshot.models[left]
+    const rightModel = snapshot.models[right]
+    return (
+      leftModel.score - rightModel.score ||
+      rightModel.hardFailureCount - leftModel.hardFailureCount ||
+      leftModel.passedCases - rightModel.passedCases ||
+      left.localeCompare(right)
+    )
+  })[0]
+}
+const compare = (selectedModel, baseline, verification) => {
+  const oldScore = baseline.models[selectedModel].score
+  const newScore = verification.models[selectedModel].score
+  const improved = newScore > oldScore
+
+  return {
+    status: improved ? "pass" : "fail",
+    reasons: improved
+      ? []
+      : [selectedModel + " score did not improve: " + oldScore + " -> " + newScore + "."],
+    stops: [],
+    selected: {
+      model: selectedModel,
+      oldScore,
+      newScore,
+      artifact: verification.models[selectedModel].artifact,
+      scoreBreakdown: verification.models[selectedModel].scoreBreakdown,
+    },
+  }
+}
 
 switch (command) {
   case "models":
@@ -138,21 +211,7 @@ switch (command) {
     const [modelArg, outputDir] = args
     const models = Object.fromEntries(requestedModels(modelArg).map((model) => [
       model,
-      {
-        score: 0,
-        pass: false,
-        modelPass: false,
-        passedCases: 0,
-        totalCases: 38,
-        hardFailureCount: 0,
-        scoreBreakdown: {},
-        failuresByCategory: {},
-        failuresByCheck: {},
-        error: null,
-        checkOutcomes: [],
-        artifact: ".evals/" + path.basename(outputDir) + "/" + artifactName(model),
-        artifactHash: "hash-" + model,
-      },
+      modelSummary(model, outputDir),
     ]))
 
     console.log(JSON.stringify({
@@ -165,37 +224,46 @@ switch (command) {
     break
   }
   case "select-model":
-    console.log(args[0] === "all" ? allModels[0] : args[0])
+    console.log(selectModel(args[0], readJson(args[1])))
     break
   case "prompt-summary":
-    console.log("mock prompt summary")
+    console.log("Current accepted score: " + readJson(args[1]).models[args[0]].score)
     break
   case "prompt-evidence":
-    console.log("mock prompt evidence")
+    console.log("Failure evidence:\\n- score: " + readJson(args[1]).models[args[0]].score)
     break
   case "ensure-reset-scope":
     break
   case "compare":
-    console.log(JSON.stringify({
-      status: "fail",
-      reasons: ["mock no improvement"],
-      selected: { oldScore: 0, newScore: 0, scoreDelta: 0 },
-    }))
+    console.log(JSON.stringify(compare(args[0], readJson(args[1]), readJson(args[2]))))
     break
   case "compare-status":
-    console.log(JSON.parse(fs.readFileSync(args[0], "utf8")).status)
+    console.log(readJson(args[0]).status)
     break
   case "compare-reasons":
-    console.log("mock no improvement")
+    console.log(readJson(args[0]).reasons.join("; "))
     break
   case "commit-paths":
-    process.stdout.write("docs/optimization/qwen-2.5-0.5b-log.md\\0")
+    process.stdout.write("packages/core/src/engine/adapters/chat.ts\\0docs/optimization/qwen-2.5-0.5b-log.md\\0")
     break
   case "compare-new-score":
-    console.log("0")
+    console.log(readJson(args[0]).selected.newScore)
     break
-  case "compare-score-improvement":
-    console.log("0 -> 0")
+  case "compare-score-improvement": {
+    const selected = readJson(args[0]).selected
+    const delta = selected.newScore - selected.oldScore
+    const sign = delta >= 0 ? "+" : ""
+    console.log(
+      formatScore(selected.oldScore) + " -> " + formatScore(selected.newScore) +
+        " (" + sign + formatScore(delta) + ")",
+    )
+    break
+  }
+  case "compare-artifact":
+    console.log(readJson(args[0]).selected.artifact)
+    break
+  case "candidate-count":
+    console.log("1")
     break
   case "update-last-good":
     break
@@ -257,6 +325,15 @@ if (process.env.MOCK_LOG) {
 }
 
 const command = args[0]
+const statePath = process.env.MOCK_GIT_STATE
+const readState = () => {
+  if (!statePath || !fs.existsSync(statePath)) return { dirty: false }
+  return JSON.parse(fs.readFileSync(statePath, "utf8"))
+}
+const writeState = (state) => {
+  if (statePath) fs.writeFileSync(statePath, JSON.stringify(state))
+}
+const isInnerWorktree = cwd.includes("worktree-")
 
 if (command === "clone") {
   fs.mkdirSync(args[args.length - 1], { recursive: true })
@@ -269,14 +346,23 @@ if (command === "rev-parse") {
 }
 
 if (command === "diff") {
-  if (args.includes("--quiet")) process.exit(0)
-  if (cwd.includes("worktree-") && args.includes(":(exclude)docs/optimization/**")) {
+  if (args.includes("--quiet")) {
+    process.exit(!isInnerWorktree && readState().dirty && !args.includes("--cached") ? 1 : 0)
+  }
+  if (args.includes("--cached")) process.exit(0)
+  if (args.includes(":(exclude)docs/optimization/**") && (isInnerWorktree || readState().dirty)) {
     process.stdout.write("mock product patch\\n")
   }
   process.exit(0)
 }
 
+if (command === "apply" && !isInnerWorktree) {
+  writeState({ dirty: !args.includes("-R") })
+  process.exit(0)
+}
+
 if (command === "commit") {
+  writeState({ dirty: false })
   console.log("COMMIT_STDOUT")
   process.exit(0)
 }
@@ -377,6 +463,24 @@ describe("auto optimizer helper", () => {
     assert.equal(selectModelFromSnapshot("all", tied), "qwen-3-0.6b")
   })
 
+  it("selects all from the active accepted snapshot", () => {
+    const runStart = snapshot({
+      "qwen-2.5-0.5b": modelSummary("qwen-2.5-0.5b", 0),
+      "qwen-3-0.6b": modelSummary("qwen-3-0.6b", 0.5),
+      "gemma-3-1b-it": modelSummary("gemma-3-1b-it", 0.8),
+      "translategemma-4": modelSummary("translategemma-4", 0.9),
+    })
+    const activeAccepted = snapshot({
+      "qwen-2.5-0.5b": modelSummary("qwen-2.5-0.5b", 0.66),
+      "qwen-3-0.6b": modelSummary("qwen-3-0.6b", 0.5),
+      "gemma-3-1b-it": modelSummary("gemma-3-1b-it", 0.8),
+      "translategemma-4": modelSummary("translategemma-4", 0.9),
+    })
+
+    assert.equal(selectModelFromSnapshot("all", runStart), "qwen-2.5-0.5b")
+    assert.equal(selectModelFromSnapshot("all", activeAccepted), "qwen-3-0.6b")
+  })
+
   it("compares selected improvement while tolerating non-selected eval drift", () => {
     const baseline = snapshot({
       "qwen-2.5-0.5b": modelSummary("qwen-2.5-0.5b", 0.2),
@@ -445,6 +549,36 @@ describe("auto optimizer helper", () => {
     assert.match(newFailure.reasons.join("\n"), /case-02/)
   })
 
+  it("rejects a selected candidate below the active accepted score", () => {
+    const runStart = snapshot({
+      "qwen-3-0.6b": modelSummary("qwen-3-0.6b", 0),
+    })
+    const activeAccepted = snapshot({
+      "qwen-3-0.6b": modelSummary("qwen-3-0.6b", 0.66834),
+    })
+    const regressedCandidate = snapshot({
+      "qwen-3-0.6b": modelSummary("qwen-3-0.6b", 0.532156),
+    })
+
+    assert.equal(
+      compareSnapshots("qwen-3-0.6b", runStart, regressedCandidate, {
+        verifyArtifactHashes: false,
+      }).status,
+      "pass",
+      "documents the stale-baseline bug this harness must avoid",
+    )
+
+    const comparison = compareSnapshots("qwen-3-0.6b", activeAccepted, regressedCandidate, {
+      verifyArtifactHashes: false,
+    })
+
+    assert.equal(comparison.status, "fail")
+    assert.match(
+      comparison.reasons.join("\n"),
+      /qwen-3-0\.6b score did not improve: 0\.66834 -> 0\.532156\./,
+    )
+  })
+
   it("rejects non-selected pass and hard-failure regressions", () => {
     const baseline = snapshot({
       "qwen-2.5-0.5b": modelSummary("qwen-2.5-0.5b", 0.2),
@@ -496,6 +630,74 @@ describe("auto optimizer helper", () => {
       }),
       "selected score did not improve; baseline artifact changed",
     )
+  })
+
+  it("stops when an accepted baseline artifact hash changes", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "auto-optimizer-hash-test-"))
+    const artifactDir = path.join(root, ".evals", "web-gpu-hash-test")
+    const artifactFile = path.join(artifactDir, "qwen-2.5-0.5b.json")
+    mkdirSync(artifactDir, { recursive: true })
+    writeFileSync(
+      artifactFile,
+      `${JSON.stringify(
+        artifact("qwen-2.5-0.5b", {
+          model: { score: 0.2 },
+        }),
+      )}\n`,
+    )
+
+    const baseline = createSnapshot("qwen-2.5-0.5b", artifactDir, root)
+    const verification = {
+      ...baseline,
+      models: {
+        "qwen-2.5-0.5b": {
+          ...baseline.models["qwen-2.5-0.5b"],
+          score: 0.3,
+        },
+      },
+    }
+
+    assert.equal(
+      compareSnapshots("qwen-2.5-0.5b", baseline, verification, { repoRoot: root }).status,
+      "pass",
+    )
+
+    writeFileSync(
+      artifactFile,
+      `${JSON.stringify(
+        artifact("qwen-2.5-0.5b", {
+          model: { score: 0.2, cases: casesWithFailedCase("case-01") },
+        }),
+      )}\n`,
+    )
+
+    const comparison = compareSnapshots("qwen-2.5-0.5b", baseline, verification, {
+      repoRoot: root,
+    })
+    assert.equal(comparison.status, "stop")
+    assert.match(comparison.stops.join("\n"), /Baseline artifact was modified/)
+  })
+
+  it("marks last-good scores as bookkeeping rather than acceptance policy", async () => {
+    const root = mkdtempSync(path.join(tmpdir(), "auto-optimizer-last-good-test-"))
+    const snapshotPath = path.join(root, "snapshot.json")
+    writeFileSync(
+      snapshotPath,
+      `${JSON.stringify(
+        snapshot({
+          "qwen-2.5-0.5b": modelSummary("qwen-2.5-0.5b", 0.66),
+        }),
+      )}\n`,
+    )
+
+    await updateLastGoodScores("qwen-2.5-0.5b", snapshotPath, "abc123", root)
+
+    const lastGood = JSON.parse(
+      readFileSync(path.join(root, ".evals", "auto-optimizer", "last-good-scores.json"), "utf8"),
+    )
+    assert.equal(lastGood.role, "bookkeeping-only")
+    assert.equal(lastGood.acceptancePolicy, "active-baseline-snapshot")
+    assert.equal(lastGood.models["qwen-2.5-0.5b"].score, 0.66)
   })
 
   it("builds a concise prompt evidence packet from a baseline artifact", () => {
@@ -666,11 +868,11 @@ describe("auto optimizer helper", () => {
     assert.doesNotMatch(script, /\$REPO"\/packages\/\*\/node_modules/)
   })
 
-  it("creates a fresh run-start baseline instead of reusing latest artifacts", () => {
+  it("initializes the active baseline from a fresh run-start eval", () => {
     const script = readFileSync(new URL("./auto-optimize.sh", import.meta.url), "utf8")
 
-    assert.match(script, /BASELINE_JSON="\$TMP_ROOT\/run-start-baseline\.json"/)
-    assert.match(script, /create_baseline_snapshot "\$BASELINE_JSON" "\$BASELINE_EVAL_LOG_PREFIX"/)
+    assert.match(script, /ACTIVE_BASELINE_JSON="\$TMP_ROOT\/current-baseline\.json"/)
+    assert.match(script, /create_baseline_snapshot "\$ACTIVE_BASELINE_JSON" "\$BASELINE_EVAL_LOG_PREFIX"/)
     assert.match(script, /output_dir="\$REPO\/\.evals\/web-gpu-\$\(timestamp\)-auto-baseline-\$\$"/)
     assert.match(script, /run_eval_set "\$output_dir" "\$log_prefix"/)
     assert.doesNotMatch(script, /latest-snapshot/)
@@ -695,12 +897,15 @@ describe("auto optimizer helper", () => {
     assert.doesNotMatch(script, /run_with_log/)
   })
 
-  it("runs verification evals from the main working copy against the run-start baseline", () => {
+  it("runs selection, prompts, and comparison against the active baseline", () => {
     const script = readFileSync(new URL("./auto-optimize.sh", import.meta.url), "utf8")
 
+    assert.match(script, /SELECTED_MODEL="\$\(node "\$HELPER" select-model "\$MODEL_ARG" "\$ACTIVE_BASELINE_JSON"\)"/)
+    assert.match(script, /write_inner_prompt .*"\$ACTIVE_BASELINE_JSON"/)
     assert.match(script, /VERIFY_EVAL_LOG_PREFIX="\$RUN_LOG_DIR\/iteration-\$\{iteration\}\.verify-eval"/)
     assert.match(script, /cd "\$REPO"\n  run_eval_set "\$VERIFY_DIR" "\$VERIFY_EVAL_LOG_PREFIX"/)
-    assert.match(script, /node "\$HELPER" compare "\$SELECTED_MODEL" "\$BASELINE_JSON" "\$VERIFY_JSON"/)
+    assert.match(script, /node "\$HELPER" compare "\$SELECTED_MODEL" "\$ACTIVE_BASELINE_JSON" "\$VERIFY_JSON"/)
+    assert.match(script, /cp "\$VERIFY_JSON" "\$ACTIVE_BASELINE_JSON"/)
     assert.match(script, /CANDIDATE_CAN_IMPROVE="yes"/)
   })
 
@@ -713,7 +918,9 @@ describe("auto optimizer helper", () => {
     assert.match(script, /run_eval_set "\$VERIFY_DIR" "\$VERIFY_EVAL_LOG_PREFIX"/)
     assert.match(script, /ignoring inner docs patch; outer harness writes authoritative optimization log/)
     assert.match(script, /append_docs_note "\$SELECTED_MODEL" "\$iteration" "\$SCORE_LINE"/)
+    assert.match(script, /append_run_note "\$SELECTED_MODEL" "\$iteration" "\$SCORE_LINE"/)
     assert.match(script, /baseline_eval:%s verify_eval:%s/)
+    assert.doesNotMatch(script, /auto-optimize: \$\{SELECTED_MODEL\} no improvement/)
     assert.doesNotMatch(script, /Append exactly one line to docs\/optimization/)
   })
 
@@ -724,6 +931,7 @@ describe("auto optimizer helper", () => {
     const tmp = path.join(root, "tmp")
     const scriptsDir = path.join(repo, "scripts")
     const commandLog = path.join(root, "commands.log")
+    const gitState = path.join(root, "git-state.json")
     const optimizerScript = path.join(scriptsDir, "auto-optimize.sh")
 
     mkdirSync(scriptsDir, { recursive: true })
@@ -746,6 +954,7 @@ describe("auto optimizer helper", () => {
         env: {
           ...process.env,
           MOCK_LOG: commandLog,
+          MOCK_GIT_STATE: gitState,
           PATH: `${bin}${path.delimiter}${process.env.PATH ?? ""}`,
           TMPDIR: tmp,
         },
@@ -809,5 +1018,80 @@ describe("auto optimizer helper", () => {
     assert.ok(baselineIndex < codexIndex)
     assert.ok(codexIndex < testIndex)
     assert.ok(testIndex < verifyIndex)
+  })
+
+  it("keeps the active baseline at the last accepted score across failed iterations", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "auto-optimize-active-baseline-"))
+    const repo = path.join(root, "repo")
+    const bin = path.join(root, "bin")
+    const tmp = path.join(root, "tmp")
+    const scriptsDir = path.join(repo, "scripts")
+    const commandLog = path.join(root, "commands.log")
+    const gitState = path.join(root, "git-state.json")
+    const optimizerScript = path.join(scriptsDir, "auto-optimize.sh")
+
+    mkdirSync(scriptsDir, { recursive: true })
+    mkdirSync(bin, { recursive: true })
+    mkdirSync(tmp, { recursive: true })
+    writeExecutable(
+      optimizerScript,
+      readFileSync(new URL("./auto-optimize.sh", import.meta.url), "utf8"),
+    )
+    writeFileSync(path.join(scriptsDir, "auto-optimize-helper.mjs"), helperShim)
+    writeExecutable(path.join(bin, "pnpm"), pnpmShim)
+    writeExecutable(path.join(bin, "git"), gitShim)
+    writeExecutable(path.join(bin, "codex"), codexShim)
+
+    const result = spawnSync(
+      "bash",
+      [optimizerScript, "qwen-2.5-0.5b", "--iterations", "3"],
+      {
+        cwd: repo,
+        env: {
+          ...process.env,
+          MOCK_LOG: commandLog,
+          MOCK_GIT_STATE: gitState,
+          PATH: `${bin}${path.delimiter}${process.env.PATH ?? ""}`,
+          TMPDIR: tmp,
+        },
+        encoding: "utf8",
+      },
+    )
+
+    assert.equal(
+      result.status,
+      0,
+      `stdout:\n${result.stdout}\nstderr:\n${result.stderr}`,
+    )
+    assert.match(result.stdout, /0\.000000 -> 0\.660000 \(\+0\.660000\)/)
+    assert.match(result.stdout, /no improvement .*0\.66 -> 0\.53/)
+    assert.match(result.stdout, /0\.660000 -> 0\.670000 \(\+0\.010000\)/)
+
+    const tmpRoot = result.stdout.match(/optimizer tmpdir: (.+)/)?.[1]?.trim()
+    assert.ok(tmpRoot, result.stdout)
+    const secondPrompt = readFileSync(path.join(tmpRoot, "iteration-2.prompt.md"), "utf8")
+    const thirdPrompt = readFileSync(path.join(tmpRoot, "iteration-3.prompt.md"), "utf8")
+    assert.match(secondPrompt, /Current accepted score: 0\.66/)
+    assert.match(thirdPrompt, /Current accepted score: 0\.66/)
+    assert.doesNotMatch(thirdPrompt, /Current accepted score: 0\.53/)
+
+    const runLogDir = onlyRunLogDir(repo)
+    const secondSummary = readFileSync(path.join(runLogDir, "iteration-2.summary.log"), "utf8")
+    assert.match(secondSummary, /no improvement/)
+    assert.match(secondSummary, /0\.66 -> 0\.53/)
+
+    const docsLog = readFileSync(
+      path.join(repo, "docs", "optimization", "qwen-2.5-0.5b-log.md"),
+      "utf8",
+    )
+    assert.equal(docsLog.trim().split("\n").length, 2)
+    assert.doesNotMatch(docsLog, /0\.53/)
+
+    const commands = readFileSync(commandLog, "utf8")
+    assert.equal((commands.match(/git commit /g) ?? []).length, 2)
+    assert.equal((commands.match(/helper update-last-good/g) ?? []).length, 2)
+    assert.equal(commands.includes("run-start-baseline"), false)
+    assert.match(commands, /helper compare qwen-2\.5-0\.5b .*current-baseline\.json .*iteration-2-verify\.json/)
+    assert.match(commands, /helper compare qwen-2\.5-0\.5b .*current-baseline\.json .*iteration-3-verify\.json/)
   })
 })

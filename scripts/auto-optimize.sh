@@ -428,7 +428,7 @@ Anti-cheat rules:
 Selected model: ${selected_model}
 Harness iteration: ${iteration}/${total_iterations}
 
-Baseline:
+Current accepted baseline:
 EOF
     node "$HELPER" prompt-summary "$selected_model" "$baseline_file"
     printf '\n'
@@ -436,7 +436,7 @@ EOF
     cat <<'EOF'
 
 Required workflow:
-1. Collect eval evidence from the baseline artifact above. Identify the concrete failure modes.
+1. Collect eval evidence from the current accepted baseline artifact above. Identify the concrete failure modes.
 2. Generate at least three hypotheses for product changes that could improve those failure modes while preserving existing capabilities.
 3. Select one hypothesis. Explain why it is the best bet and list the attack plan.
 4. Make one focused product change. Prefer the smallest durable change that improves the product, but do not artificially confine yourself to adapter files.
@@ -445,7 +445,7 @@ Required workflow:
    If any test fails, use the failure to revise the product change. If the failure cannot be fixed without violating the hard no-touch rules, restore your product edits, write the failure reason to the report file, and exit cleanly.
 6. Run the target headed eval into a fresh .evals/web-gpu-* output dir:
    pnpm eval:webgpu -- --model <selected-model> --headed --output-dir <fresh-dir>
-7. Compare the new artifact's model.score to the baseline above.
+7. Compare the new artifact's model.score to the current accepted baseline above.
 8. If improved: leave product changes in the working tree and summarize score/artifact.
 9. If not improved: restore only product edits you made, write the result to the report file, and exit cleanly.
 
@@ -564,13 +564,43 @@ append_docs_note() {
     "$(eval_log_refs "$verify_eval_log_prefix")" >> "$REPO/docs/optimization/${selected_model}-log.md"
 }
 
-BASELINE_JSON="$TMP_ROOT/run-start-baseline.json"
+append_run_note() {
+  local selected_model="$1"
+  local iteration="$2"
+  local score_line="$3"
+  local report_file="$4"
+  local stdout_log="$5"
+  local stderr_log="$6"
+  local test_log="$7"
+  local baseline_eval_log_prefix="$8"
+  local verify_eval_log_prefix="$9"
+  local run_note="$RUN_LOG_DIR/iteration-${iteration}.summary.log"
+  local report
+  report="$(one_line_file "$report_file" "no report")"
+
+  printf '%s iteration=%s model=%s result="%s" summary="%s" logs="codex_stderr:%s codex_stdout:%s test:%s baseline_eval:%s verify_eval:%s"\n' \
+    "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" \
+    "$iteration" \
+    "$selected_model" \
+    "$score_line" \
+    "$report" \
+    "$(log_ref "$stderr_log")" \
+    "$(log_ref "$stdout_log")" \
+    "$(log_ref "$test_log")" \
+    "$(eval_log_refs "$baseline_eval_log_prefix")" \
+    "$(eval_log_refs "$verify_eval_log_prefix")" > "$run_note"
+}
+
+ACTIVE_BASELINE_JSON="$TMP_ROOT/current-baseline.json"
+ACTIVE_BASELINE_EVAL_LOG_PREFIX=""
 BASELINE_EVAL_LOG_PREFIX="$RUN_LOG_DIR/baseline.eval"
-create_baseline_snapshot "$BASELINE_JSON" "$BASELINE_EVAL_LOG_PREFIX"
+create_baseline_snapshot "$ACTIVE_BASELINE_JSON" "$BASELINE_EVAL_LOG_PREFIX"
+ACTIVE_BASELINE_EVAL_LOG_PREFIX="$BASELINE_EVAL_LOG_PREFIX"
 
 for ((iteration = 1; iteration <= ITERATIONS; iteration += 1)); do
-  SELECTED_MODEL="$(node "$HELPER" select-model "$MODEL_ARG" "$BASELINE_JSON")"
+  SELECTED_MODEL="$(node "$HELPER" select-model "$MODEL_ARG" "$ACTIVE_BASELINE_JSON")"
   ATTEMPT_BASE_SHA="$(git rev-parse HEAD)"
+  ITERATION_BASELINE_EVAL_LOG_PREFIX="$ACTIVE_BASELINE_EVAL_LOG_PREFIX"
 
   printf '====================== iteration %s/%s ======================\n' "$iteration" "$ITERATIONS"
   printf -- "- selected '%s'\n" "$SELECTED_MODEL"
@@ -588,7 +618,7 @@ for ((iteration = 1; iteration <= ITERATIONS; iteration += 1)); do
   DOCS_PATCH="$TMP_ROOT/iteration-${iteration}.docs.patch"
 
   create_inner_worktree "$ATTEMPT_BASE_SHA" "$iteration" "1"
-  write_inner_prompt "$PROMPT_FILE" "$INNER_REPO" "$SELECTED_MODEL" "$BASELINE_JSON" "$iteration" "$ITERATIONS" "$REPORT_FILE"
+  write_inner_prompt "$PROMPT_FILE" "$INNER_REPO" "$SELECTED_MODEL" "$ACTIVE_BASELINE_JSON" "$iteration" "$ITERATIONS" "$REPORT_FILE"
   printf -- "- codex running...\n"
   printf '    stderr: %s // stdout: %s\n' "$STDERR_LOG" "$STDOUT_LOG"
 
@@ -645,7 +675,7 @@ for ((iteration = 1; iteration <= ITERATIONS; iteration += 1)); do
     stop_for_driver "Verification artifacts could not be validated."
 
   COMPARE_JSON="$TMP_ROOT/iteration-${iteration}-compare.json"
-  node "$HELPER" compare "$SELECTED_MODEL" "$BASELINE_JSON" "$VERIFY_JSON" > "$COMPARE_JSON"
+  node "$HELPER" compare "$SELECTED_MODEL" "$ACTIVE_BASELINE_JSON" "$VERIFY_JSON" > "$COMPARE_JSON"
   COMPARE_STATUS="$(node "$HELPER" compare-status "$COMPARE_JSON")"
 
   if [[ "$COMPARE_STATUS" == "stop" ]]; then
@@ -667,22 +697,22 @@ for ((iteration = 1; iteration <= ITERATIONS; iteration += 1)); do
     fi
   fi
 
-  append_docs_note "$SELECTED_MODEL" "$iteration" "$SCORE_LINE" "$REPORT_FILE" "$STDOUT_LOG" "$STDERR_LOG" "$TEST_LOG" "$BASELINE_EVAL_LOG_PREFIX" "$VERIFY_EVAL_LOG_PREFIX"
-
-  PATHSPEC_FILE="$TMP_ROOT/iteration-${iteration}-commit-paths.nul"
-  if ! changed_paths_for_commit "$PATHSPEC_FILE"; then
-    stop_for_driver "No optimizer-owned files changed after iteration ${iteration}."
-  fi
+  append_run_note "$SELECTED_MODEL" "$iteration" "$SCORE_LINE" "$REPORT_FILE" "$STDOUT_LOG" "$STDERR_LOG" "$TEST_LOG" "$ITERATION_BASELINE_EVAL_LOG_PREFIX" "$VERIFY_EVAL_LOG_PREFIX"
 
   if [[ "$SCORE_LINE" == no\ improvement* ]]; then
-    git add --pathspec-from-file="$PATHSPEC_FILE" --pathspec-file-nul
-    git commit -m "auto-optimize: ${SELECTED_MODEL} no improvement" >/dev/null
-    COMMIT_SHA="$(git rev-parse --short HEAD)"
+    COMMIT_SHA=""
   else
+    append_docs_note "$SELECTED_MODEL" "$iteration" "$SCORE_LINE" "$REPORT_FILE" "$STDOUT_LOG" "$STDERR_LOG" "$TEST_LOG" "$ITERATION_BASELINE_EVAL_LOG_PREFIX" "$VERIFY_EVAL_LOG_PREFIX"
+    PATHSPEC_FILE="$TMP_ROOT/iteration-${iteration}-commit-paths.nul"
+    if ! changed_paths_for_commit "$PATHSPEC_FILE"; then
+      stop_for_driver "No optimizer-owned files changed after iteration ${iteration}."
+    fi
     ensure_main_candidate_unchanged "$ATTEMPT_BASE_SHA" "$CANDIDATE_PATCH"
     git add --pathspec-from-file="$PATHSPEC_FILE" --pathspec-file-nul
     git commit -m "auto-optimize: ${SELECTED_MODEL} ${NEW_SCORE}" >/dev/null
     COMMIT_SHA="$(git rev-parse --short HEAD)"
+    cp "$VERIFY_JSON" "$ACTIVE_BASELINE_JSON"
+    ACTIVE_BASELINE_EVAL_LOG_PREFIX="$VERIFY_EVAL_LOG_PREFIX"
     node "$HELPER" update-last-good "$SELECTED_MODEL" "$VERIFY_JSON" "$COMMIT_SHA"
   fi
 
