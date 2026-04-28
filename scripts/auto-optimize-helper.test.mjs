@@ -1826,6 +1826,25 @@ describe("auto optimizer helper", () => {
     assert.match(script, /update-last-good "\$SELECTED_MODEL" "\$ACTIVE_BASELINE_JSON" "\$COMMIT_SHA"/)
   })
 
+  it("tells inner Codex to leave rejected candidate edits for harness cleanup", () => {
+    const script = readFileSync(new URL("./auto-optimize.sh", import.meta.url), "utf8")
+
+    assert.doesNotMatch(script, /restore your product edits/)
+    assert.doesNotMatch(script, /restore only product edits/)
+    assert.match(
+      script,
+      /If any test fails[\s\S]*leave attempted product\/test edits in the temporary worktree/,
+    )
+    assert.match(
+      script,
+      /whether the eval improves, fails, crashes, times out, or regresses/,
+    )
+    assert.match(
+      script,
+      /Do not revert or restore candidate product\/test edits because tests failed or eval did not improve; the outer harness will import, evaluate, and clean rejected patches\./,
+    )
+  })
+
   it("checks failed-memory duplicates before expensive verification work", () => {
     const script = readFileSync(new URL("./auto-optimize.sh", import.meta.url), "utf8")
     const duplicateIndex = script.indexOf("failed-memory-duplicate")

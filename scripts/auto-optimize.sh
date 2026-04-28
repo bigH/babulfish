@@ -565,12 +565,12 @@ Required workflow:
 4. Make one focused product change. Prefer the smallest durable change that improves the product, but do not artificially confine yourself to adapter files.
 5. Run the full babulfish test suite from the temporary repo root:
    pnpm test
-   If any test fails, use the failure to revise the product change. If the failure cannot be fixed without violating the hard no-touch rules, restore your product edits, write the failure reason to the report file, and exit cleanly.
+   If any test fails, use the failure to revise the product change. If the failure cannot be fixed without violating the hard no-touch rules, leave attempted product/test edits in the temporary worktree, write the failure reason to the report file, and exit cleanly.
 6. Run the target headed eval into a fresh .evals/web-gpu-* output dir:
    pnpm eval:webgpu -- --model <selected-model> --headed --output-dir <fresh-dir>
 7. Compare the new artifact's model.score to the current accepted baseline above.
-8. If improved: leave product changes in the working tree and summarize score/artifact.
-9. If not improved: restore only product edits you made, write the result to the report file, and exit cleanly.
+8. Leave attempted product/test edits in the temporary worktree whether the eval improves, fails, crashes, times out, or regresses.
+9. Write the one-line report and exit cleanly. Do not revert or restore candidate product/test edits because tests failed or eval did not improve; the outer harness will import, evaluate, and clean rejected patches.
 
 Model-specific constraints:
 - Qwen and Gemma chat models currently inherit ChatModelBaseAdapter.buildSystemPrompt(). If a change should be model-specific, split or override cleanly instead of smuggling model conditionals into shared behavior.
