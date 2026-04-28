@@ -1,5 +1,5 @@
 import assert from "node:assert/strict"
-import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs"
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { describe, it } from "node:test"
@@ -441,5 +441,27 @@ describe("auto optimizer helper", () => {
     for (const filePath of paths) {
       assert.equal(isAllowedAttemptPath(filePath), false, filePath)
     }
+  })
+
+  it("keeps auto optimizer inner dependencies isolated", () => {
+    const script = readFileSync(new URL("./auto-optimize.sh", import.meta.url), "utf8")
+
+    assert.match(script, /install_inner_dependencies/)
+    assert.match(script, /pnpm --dir "\$inner_repo" install --frozen-lockfile/)
+    assert.doesNotMatch(script, /ln -s "\$source_dir"/)
+    assert.doesNotMatch(script, /\$REPO"\/packages\/\*\/node_modules/)
+  })
+
+  it("keeps outer loop logs and optimization result authoritative", () => {
+    const script = readFileSync(new URL("./auto-optimize.sh", import.meta.url), "utf8")
+
+    assert.match(script, /RUN_LOG_DIR="\$REPO\/\.evals\/auto-optimizer\/runs\//)
+    assert.match(script, /run_with_log "\$TEST_LOG" pnpm test/)
+    assert.match(script, /if run_with_log "\$eval_log" pnpm eval:webgpu/)
+    assert.match(script, /eval_status=\$\?/)
+    assert.match(script, /run_eval_set "\$VERIFY_DIR" "\$VERIFY_EVAL_LOG_PREFIX"/)
+    assert.match(script, /ignoring inner docs patch; outer harness writes authoritative optimization log/)
+    assert.match(script, /append_docs_note "\$SELECTED_MODEL" "\$iteration" "\$SCORE_LINE"/)
+    assert.doesNotMatch(script, /Append exactly one line to docs\/optimization/)
   })
 })

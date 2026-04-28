@@ -5,6 +5,7 @@ REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 HELPER="$REPO/scripts/auto-optimize-helper.mjs"
 TMP_BASE="$(cd "${TMPDIR:-/tmp}" && pwd -P)"
 TMP_ROOT="$TMP_BASE/auto-optimize-$(date -u +"%Y%m%dT%H%M%SZ")-$$"
+RUN_LOG_DIR="$REPO/.evals/auto-optimizer/runs/$(basename "$TMP_ROOT")"
 INNER_WORKTREES=()
 CODEX_YOLO_ARGS=()
 
@@ -128,6 +129,7 @@ require_command codex
 configure_codex_yolo_args
 node "$HELPER" validate-options "$MODEL_ARG" "$ITERATIONS"
 mkdir -p "$TMP_ROOT"
+mkdir -p "$RUN_LOG_DIR"
 
 REQUESTED_MODELS=()
 while IFS= read -r model; do
@@ -143,16 +145,50 @@ if [[ -n "$PREEXISTING_UNTRACKED" ]]; then
   stop_for_driver "Untracked files exist before the optimizer starts: $PREEXISTING_UNTRACKED"
 fi
 
+run_with_log() {
+  local log_file="$1"
+  shift
+
+  set +e
+  "$@" 2>&1 | tee "$log_file"
+  local command_status=${PIPESTATUS[0]}
+  set -e
+  return "$command_status"
+}
+
+run_to_log() {
+  local log_file="$1"
+  shift
+
+  set +e
+  "$@" > "$log_file" 2>&1
+  local command_status=$?
+  set -e
+  return "$command_status"
+}
+
 run_eval_set() {
   local output_dir="$1"
+  local log_prefix="${2:-}"
   mkdir -p "$output_dir"
 
   for model in "${REQUESTED_MODELS[@]}"; do
     printf 'running headed WebGPU eval for %s -> %s\n' "$model" "$output_dir"
-    set +e
-    pnpm eval:webgpu -- --model "$model" --headed --output-dir "$output_dir"
-    local eval_status=$?
-    set -e
+    local eval_status
+    if [[ -n "$log_prefix" ]]; then
+      local eval_log="${log_prefix}-${model}.log"
+      printf '    output: %s\n' "$eval_log"
+      if run_with_log "$eval_log" pnpm eval:webgpu -- --model "$model" --headed --output-dir "$output_dir"; then
+        eval_status=0
+      else
+        eval_status=$?
+      fi
+    else
+      set +e
+      pnpm eval:webgpu -- --model "$model" --headed --output-dir "$output_dir"
+      eval_status=$?
+      set -e
+    fi
 
     if ! node "$HELPER" validate-artifact "$model" "$output_dir"; then
       stop_for_driver "WebGPU eval for $model exited $eval_status and did not produce a valid schemaVersion 1 artifact."
@@ -181,7 +217,7 @@ ensure_baseline_snapshot() {
   printf 'latest artifacts are missing or stale: %s\n' "$(cat "$latest_error")"
   local output_dir
   output_dir="$REPO/.evals/web-gpu-$(timestamp)-auto-${purpose}-$$"
-  run_eval_set "$output_dir"
+  run_eval_set "$output_dir" "$RUN_LOG_DIR/${purpose}.eval"
   node "$HELPER" snapshot "$MODEL_ARG" "$output_dir" > "$snapshot_file" ||
     stop_for_driver "Fresh headed eval artifacts could not be validated."
 }
@@ -221,11 +257,12 @@ create_inner_worktree() {
   local iteration="$2"
   local attempt_index="$3"
   INNER_REPO="$TMP_ROOT/worktree-${iteration}-${attempt_index}"
+  local install_log="$RUN_LOG_DIR/iteration-${iteration}-attempt-${attempt_index}.install.log"
 
   git clone --quiet --no-hardlinks "$REPO" "$INNER_REPO"
   git -C "$INNER_REPO" checkout --quiet --detach "$base_sha"
   INNER_WORKTREES+=("$INNER_REPO")
-  link_dependency_dirs "$INNER_REPO"
+  install_inner_dependencies "$INNER_REPO" "$install_log"
 }
 
 remove_inner_worktree() {
@@ -233,16 +270,13 @@ remove_inner_worktree() {
   rm -rf "$inner_repo"
 }
 
-link_dependency_dirs() {
+install_inner_dependencies() {
   local inner_repo="$1"
+  local install_log="$2"
 
-  for source_dir in "$REPO/node_modules" "$REPO"/packages/*/node_modules; do
-    [[ -d "$source_dir" ]] || continue
-    local relative_path="${source_dir#"$REPO"/}"
-    local target_dir="$inner_repo/$relative_path"
-    mkdir -p "$(dirname "$target_dir")"
-    ln -s "$source_dir" "$target_dir"
-  done
+  printf 'installing isolated dependencies -> %s\n' "$install_log"
+  run_to_log "$install_log" env CI=true pnpm --dir "$inner_repo" install --frozen-lockfile --prefer-offline --ignore-scripts ||
+    stop_for_driver "Inner dependency install failed. See $install_log"
 }
 
 ensure_inner_head_unchanged() {
@@ -291,15 +325,11 @@ import_inner_patches() {
     git -C "$REPO" apply --check "$product_patch" ||
       stop_for_driver "Candidate product patch cannot be applied cleanly: $product_patch"
   fi
-  if [[ -s "$docs_patch" ]]; then
-    git -C "$REPO" apply --check "$docs_patch" ||
-      stop_for_driver "Candidate docs patch cannot be applied cleanly: $docs_patch"
-  fi
   if [[ "$import_product" == "yes" && -s "$product_patch" ]]; then
     git -C "$REPO" apply "$product_patch"
   fi
   if [[ -s "$docs_patch" ]]; then
-    git -C "$REPO" apply "$docs_patch"
+    printf '    ignoring inner docs patch; outer harness writes authoritative optimization log: %s\n' "$docs_patch"
   fi
   node "$HELPER" ensure-reset-scope ||
     stop_for_driver "Imported candidate has changes outside optimizer-owned product/docs paths."
@@ -375,7 +405,7 @@ write_inner_prompt() {
     cat <<EOF
 You are the inner Codex optimizer for /Users/hiren/dev/babulfish.
 You are running in an isolated temporary worktree at ${inner_repo}. Run commands there, not in /Users/hiren/dev/babulfish directly.
-The outer harness will import product diffs plus docs/optimization notes back to the real repo.
+The outer harness will import product diffs back to the real repo and write the final docs/optimization note itself.
 The Codex CLI is running in yolo/bypass mode so you can run arbitrary commands; stay inside the guardrails below.
 
 Goal: improve translation quality through one real babulfish product change for the selected WebGPU eval model.
@@ -387,8 +417,8 @@ Autonomous loop rules:
 - You may move responsibilities around, refactor, add prompt/input handling, add post-processing, improve model-specific logic, or change public package code when justified.
 - Preserve existing capabilities unless an explicit, intentional behavior change is covered by tests.
 - Tests may be added or updated for intentional product behavior. Do not weaken, delete, skip, or neuter tests.
-- Append exactly one line to docs/optimization/${selected_model}-log.md for this iteration. Include failure_modes=..., hypotheses=..., selected=..., change=..., eval=..., result=....
-- Write exactly one short terminal blurb to ${report_file}. One line only: change + reasoning.
+- Do not edit docs/optimization. The outer harness owns final optimization logging.
+- Write exactly one short terminal blurb to ${report_file}. One line only. Include failure_modes=..., hypotheses=..., selected=..., change=..., eval=..., result=... using your best inner-run view.
 - Do not ask the human whether to continue for worse score, crash, timeout, or no idea worked.
 - If an assumption guardrail is false, print BLOCKED: <reason> and stop.
 
@@ -399,6 +429,7 @@ Hard no-touch files and directories:
 - packages/demo-vanilla/webgpu-eval.html
 - evals/translation/**/*.json
 - .evals/**
+- docs/optimization/**
 - docs/webgpu-evals.md
 - package.json
 - packages/*/package.json
@@ -441,12 +472,12 @@ Required workflow:
 4. Make one focused product change. Prefer the smallest durable change that improves the product, but do not artificially confine yourself to adapter files.
 5. Run the full babulfish test suite from the temporary repo root:
    pnpm test
-   If any test fails, use the failure to revise the product change. If the failure cannot be fixed without violating the hard no-touch rules, restore your product edits, keep the docs/optimization log line, write the failure reason to the report file, and exit cleanly.
+   If any test fails, use the failure to revise the product change. If the failure cannot be fixed without violating the hard no-touch rules, restore your product edits, write the failure reason to the report file, and exit cleanly.
 6. Run the target headed eval into a fresh .evals/web-gpu-* output dir:
    pnpm eval:webgpu -- --model <selected-model> --headed --output-dir <fresh-dir>
 7. Compare the new artifact's model.score to the baseline above.
 8. If improved: leave product changes in the working tree and summarize score/artifact.
-9. If not improved: restore only product edits you made, keep the docs/optimization log line, and exit cleanly.
+9. If not improved: restore only product edits you made, write the result to the report file, and exit cleanly.
 
 Model-specific constraints:
 - Qwen and Gemma chat models currently inherit ChatModelBaseAdapter.buildSystemPrompt(). If a change should be model-specific, split or override cleanly instead of smuggling model conditionals into shared behavior.
@@ -458,6 +489,7 @@ Do not:
 - Modify eval scoring, corpus, or live eval harness.
 - Weaken tests or validation to make a candidate pass.
 - Delete historical .evals.
+- Edit docs/optimization.
 - Commit. The outer harness owns verification and commits.
 EOF
   } > "$prompt_file"
@@ -511,37 +543,83 @@ print_change_blurb() {
   fi
 }
 
-docs_changed() {
-  ! git diff --quiet -- docs/optimization/ ||
-    [[ -n "$(git ls-files --others --exclude-standard docs/optimization/ 2>/dev/null || true)" ]]
+relative_log_path() {
+  local log_path="$1"
+  if [[ "$log_path" == "$REPO"/* ]]; then
+    printf '%s' "${log_path#"$REPO"/}"
+  else
+    printf '%s' "$log_path"
+  fi
 }
 
-ensure_docs_note() {
+log_ref() {
+  local log_path="$1"
+  if [[ -e "$log_path" ]]; then
+    relative_log_path "$log_path"
+  else
+    printf 'none'
+  fi
+}
+
+one_line_file() {
+  local file_path="$1"
+  local fallback="$2"
+
+  if [[ -s "$file_path" ]]; then
+    tr '\n' ' ' < "$file_path" | sed "s/[[:space:]]\\+/ /g; s/^ //; s/ $//; s/\"/'/g"
+  else
+    printf '%s' "$fallback"
+  fi
+}
+
+eval_log_refs() {
+  local log_prefix="$1"
+  local refs=()
+
+  if [[ -z "$log_prefix" ]]; then
+    printf 'none'
+    return
+  fi
+
+  for model in "${REQUESTED_MODELS[@]}"; do
+    local eval_log="${log_prefix}-${model}.log"
+    if [[ -s "$eval_log" ]]; then
+      refs+=("$(relative_log_path "$eval_log")")
+    fi
+  done
+
+  if [[ "${#refs[@]}" -eq 0 ]]; then
+    printf 'none'
+  else
+    local IFS=','
+    printf '%s' "${refs[*]}"
+  fi
+}
+
+append_docs_note() {
   local selected_model="$1"
   local iteration="$2"
   local score_line="$3"
   local report_file="$4"
   local stdout_log="$5"
   local stderr_log="$6"
-
-  if docs_changed; then
-    return
-  fi
+  local test_log="$7"
+  local eval_log_prefix="$8"
 
   mkdir -p "$REPO/docs/optimization"
-  local report="no report"
-  if [[ -s "$report_file" ]]; then
-    report="$(tr '\n' ' ' < "$report_file" | sed 's/[[:space:]]\+/ /g; s/^ //; s/ $//')"
-  fi
+  local report
+  report="$(one_line_file "$report_file" "no report")"
 
-  printf '%s iteration=%s model=%s score="%s" result="%s" logs="stderr:%s stdout:%s"\n' \
+  printf '%s iteration=%s model=%s result="%s" summary="%s" logs="codex_stderr:%s codex_stdout:%s test:%s eval:%s"\n' \
     "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" \
     "$iteration" \
     "$selected_model" \
     "$score_line" \
     "$report" \
-    "$stderr_log" \
-    "$stdout_log" >> "$REPO/docs/optimization/${selected_model}-log.md"
+    "$(log_ref "$stderr_log")" \
+    "$(log_ref "$stdout_log")" \
+    "$(log_ref "$test_log")" \
+    "$(eval_log_refs "$eval_log_prefix")" >> "$REPO/docs/optimization/${selected_model}-log.md"
 }
 
 for ((iteration = 1; iteration <= ITERATIONS; iteration += 1)); do
@@ -557,9 +635,11 @@ for ((iteration = 1; iteration <= ITERATIONS; iteration += 1)); do
   COMMIT_SHA=""
   SCORE_LINE="no improvement"
   PROMPT_FILE="$TMP_ROOT/iteration-${iteration}.prompt.md"
-  STDOUT_LOG="$TMP_ROOT/iteration-${iteration}.stdout.jsonl"
-  STDERR_LOG="$TMP_ROOT/iteration-${iteration}.stderr.log"
-  REPORT_FILE="$TMP_ROOT/iteration-${iteration}.report.txt"
+  STDOUT_LOG="$RUN_LOG_DIR/iteration-${iteration}.codex.stdout.jsonl"
+  STDERR_LOG="$RUN_LOG_DIR/iteration-${iteration}.codex.stderr.log"
+  REPORT_FILE="$RUN_LOG_DIR/iteration-${iteration}.report.txt"
+  TEST_LOG="$RUN_LOG_DIR/iteration-${iteration}.test.log"
+  VERIFY_EVAL_LOG_PREFIX=""
   CANDIDATE_PATCH="$TMP_ROOT/iteration-${iteration}.product.patch"
   DOCS_PATCH="$TMP_ROOT/iteration-${iteration}.docs.patch"
 
@@ -604,13 +684,16 @@ for ((iteration = 1; iteration <= ITERATIONS; iteration += 1)); do
   else
     import_inner_patches "$ATTEMPT_BASE_SHA" "$CANDIDATE_PATCH" "$DOCS_PATCH" "yes"
 
-    if ! pnpm test; then
+    printf -- "- tests running...\n"
+    printf '    output: %s\n' "$TEST_LOG"
+    if ! run_with_log "$TEST_LOG" pnpm test; then
       SCORE_LINE="no improvement (tests failed)"
       reset_candidate_product_patch "$CANDIDATE_PATCH"
       ensure_product_changes_reset
     else
       VERIFY_DIR="$REPO/.evals/web-gpu-$(timestamp)-auto-verify-${SELECTED_MODEL}-${iteration}-$$"
-      run_eval_set "$VERIFY_DIR"
+      VERIFY_EVAL_LOG_PREFIX="$RUN_LOG_DIR/iteration-${iteration}.verify-eval"
+      run_eval_set "$VERIFY_DIR" "$VERIFY_EVAL_LOG_PREFIX"
       VERIFY_JSON="$TMP_ROOT/iteration-${iteration}-verify.json"
       node "$HELPER" snapshot "$MODEL_ARG" "$VERIFY_DIR" > "$VERIFY_JSON" ||
         stop_for_driver "Verification artifacts could not be validated."
@@ -636,7 +719,7 @@ for ((iteration = 1; iteration <= ITERATIONS; iteration += 1)); do
     fi
   fi
 
-  ensure_docs_note "$SELECTED_MODEL" "$iteration" "$SCORE_LINE" "$REPORT_FILE" "$STDOUT_LOG" "$STDERR_LOG"
+  append_docs_note "$SELECTED_MODEL" "$iteration" "$SCORE_LINE" "$REPORT_FILE" "$STDOUT_LOG" "$STDERR_LOG" "$TEST_LOG" "$VERIFY_EVAL_LOG_PREFIX"
 
   PATHSPEC_FILE="$TMP_ROOT/iteration-${iteration}-commit-paths.nul"
   if ! changed_paths_for_commit "$PATHSPEC_FILE"; then
