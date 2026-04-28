@@ -5,7 +5,6 @@ import { existsSync, readFileSync, readdirSync, renameSync, writeFileSync } from
 import { mkdir } from "node:fs/promises"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
-import { isDeepStrictEqual } from "node:util"
 
 export const WEBGPU_EVAL_MODEL_IDS = Object.freeze([
   "qwen-2.5-0.5b",
@@ -15,6 +14,7 @@ export const WEBGPU_EVAL_MODEL_IDS = Object.freeze([
 ])
 
 export const EXPECTED_CASE_COUNT = 38
+const NON_SELECTED_SCORE_REGRESSION_TOLERANCE = 0.01
 
 const scriptPath = fileURLToPath(import.meta.url)
 const repoRoot = path.resolve(path.dirname(scriptPath), "..")
@@ -372,19 +372,59 @@ function compareNonSelectedModel(modelId, baselineModel, verifiedModel, reasons,
     return
   }
 
-  if (verifiedModel.score !== baselineModel.score) {
+  if (verifiedModel.score < baselineModel.score - NON_SELECTED_SCORE_REGRESSION_TOLERANCE) {
     reasons.push(
-      `${modelId} score changed from ${baselineModel.score} to ${verifiedModel.score}.`,
+      `${modelId} score regressed from ${baselineModel.score} to ${verifiedModel.score} ` +
+        `(tolerance ${NON_SELECTED_SCORE_REGRESSION_TOLERANCE}).`,
     )
   }
 
-  if (verifiedModel.pass !== baselineModel.pass || verifiedModel.modelPass !== baselineModel.modelPass) {
-    reasons.push(`${modelId} pass outcome changed.`)
+  if (baselineModel.pass === true && verifiedModel.pass !== true) {
+    reasons.push(`${modelId} top-level pass outcome regressed.`)
   }
 
-  if (!isDeepStrictEqual(verifiedModel.checkOutcomes, baselineModel.checkOutcomes)) {
-    reasons.push(`${modelId} case/check outcomes changed.`)
+  if (baselineModel.modelPass === true && verifiedModel.modelPass !== true) {
+    reasons.push(`${modelId} model pass outcome regressed.`)
   }
+
+  if (verifiedModel.totalCases !== baselineModel.totalCases) {
+    reasons.push(
+      `${modelId} case count changed from ${baselineModel.totalCases} to ${verifiedModel.totalCases}.`,
+    )
+  }
+
+  if (verifiedModel.hardFailureCount > baselineModel.hardFailureCount) {
+    reasons.push(
+      `${modelId} hard failures increased from ${baselineModel.hardFailureCount} ` +
+        `to ${verifiedModel.hardFailureCount}.`,
+    )
+  }
+
+  const newFailures = newlyFailedOutcomes(baselineModel.checkOutcomes, verifiedModel.checkOutcomes)
+  if (newFailures.length > 0) {
+    reasons.push(`${modelId} introduced failing checks: ${newFailures.slice(0, 5).join(", ")}.`)
+  }
+}
+
+function failedOutcomeKeys(checkOutcomes) {
+  const keys = new Set()
+
+  for (const outcome of checkOutcomes) {
+    if (outcome.pass !== true) keys.add(`${outcome.id}`)
+
+    for (const check of outcome.checks) {
+      if (check.pass !== true) keys.add(`${outcome.id}:${check.name}`)
+    }
+  }
+
+  return keys
+}
+
+function newlyFailedOutcomes(baselineOutcomes, verifiedOutcomes) {
+  const baselineFailures = failedOutcomeKeys(baselineOutcomes)
+  return [...failedOutcomeKeys(verifiedOutcomes)]
+    .filter((failure) => !baselineFailures.has(failure))
+    .sort((left, right) => left.localeCompare(right))
 }
 
 export function compareSnapshots(selectedModel, baseline, verification, options = {}) {

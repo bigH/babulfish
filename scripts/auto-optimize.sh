@@ -100,7 +100,6 @@ while [[ $# -gt 0 ]]; do
       ;;
     --max-attempts|--max-attempts=*)
       stop_for_driver "--max-attempts was removed. Use --iterations as the number of optimizer tries."
-      shift
       ;;
     --*)
       stop_for_driver "Unknown option $1."
@@ -180,7 +179,8 @@ ensure_baseline_snapshot() {
   fi
 
   printf 'latest artifacts are missing or stale: %s\n' "$(cat "$latest_error")"
-  local output_dir="$REPO/.evals/web-gpu-$(timestamp)-auto-${purpose}-$$"
+  local output_dir
+  output_dir="$REPO/.evals/web-gpu-$(timestamp)-auto-${purpose}-$$"
   run_eval_set "$output_dir"
   node "$HELPER" snapshot "$MODEL_ARG" "$output_dir" > "$snapshot_file" ||
     stop_for_driver "Fresh headed eval artifacts could not be validated."
@@ -194,7 +194,7 @@ run_codex_attempt() {
 
   set +e
   codex exec -C "$run_repo" -m "$CODEX_MODEL" \
-    -c model_reasoning_effort=\"$CODEX_EFFORT\" \
+    -c "model_reasoning_effort=\"$CODEX_EFFORT\"" \
     "${CODEX_YOLO_ARGS[@]}" \
     --json - < "$prompt_file" > "$stdout_log" 2> "$stderr_log" &
   local codex_pid=$!
@@ -480,7 +480,7 @@ print_patch_diff() {
   fi
 
   if command -v delta >/dev/null 2>&1; then
-    delta --paging=never < "$patch_file" | sed 's/^/    /'
+    delta --paging=never --color-only < "$patch_file" | sed 's/^/    /'
   else
     sed 's/^/    /' "$patch_file"
   fi
@@ -494,7 +494,7 @@ print_docs_diff() {
   fi
 
   if command -v delta >/dev/null 2>&1; then
-    git show --stat --patch "$commit_sha" -- docs/optimization/ | delta --paging=never | sed 's/^/    /'
+    git show --stat --patch "$commit_sha" -- docs/optimization/ | delta --paging=never --color-only | sed 's/^/    /'
   else
     git show --stat --patch "$commit_sha" -- docs/optimization/ | sed 's/^/    /'
   fi

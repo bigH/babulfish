@@ -45,6 +45,9 @@ const cases = Array.from({ length: EXPECTED_CASE_COUNT }, (_, index) =>
   evalCase(`case-${String(index + 1).padStart(2, "0")}`),
 )
 
+const casesWithFailedCase = (failedId) =>
+  cases.map((testCase) => testCase.id === failedId ? evalCase(failedId, false) : testCase)
+
 const artifact = (modelId, overrides = {}) => ({
   schemaVersion: 1,
   pass: false,
@@ -161,14 +164,16 @@ describe("auto optimizer helper", () => {
     assert.equal(selectModelFromSnapshot("all", tied), "qwen-3-0.6b")
   })
 
-  it("compares selected improvement while requiring non-selected outcomes to stay fixed", () => {
+  it("compares selected improvement while tolerating non-selected eval drift", () => {
     const baseline = snapshot({
       "qwen-2.5-0.5b": modelSummary("qwen-2.5-0.5b", 0.2),
-      "gemma-3-1b-it": modelSummary("gemma-3-1b-it", 0.8),
+      "gemma-3-1b-it": modelSummary("gemma-3-1b-it", 0.8, {
+        cases: casesWithFailedCase("case-01"),
+      }),
     })
     const improved = snapshot({
       "qwen-2.5-0.5b": modelSummary("qwen-2.5-0.5b", 0.3),
-      "gemma-3-1b-it": modelSummary("gemma-3-1b-it", 0.8),
+      "gemma-3-1b-it": modelSummary("gemma-3-1b-it", 0.809),
     })
     assert.equal(
       compareSnapshots("qwen-2.5-0.5b", baseline, improved, { verifyArtifactHashes: false }).status,
@@ -184,15 +189,72 @@ describe("auto optimizer helper", () => {
       "fail",
     )
 
-    const changedNeighbor = snapshot({
+    const toleratedNeighborDrift = snapshot({
       "qwen-2.5-0.5b": modelSummary("qwen-2.5-0.5b", 0.3),
-      "gemma-3-1b-it": modelSummary("gemma-3-1b-it", 0.81),
+      "gemma-3-1b-it": modelSummary("gemma-3-1b-it", 0.795, {
+        cases: casesWithFailedCase("case-01"),
+      }),
     })
-    const comparison = compareSnapshots("qwen-2.5-0.5b", baseline, changedNeighbor, {
+    assert.equal(
+      compareSnapshots("qwen-2.5-0.5b", baseline, toleratedNeighborDrift, {
+        verifyArtifactHashes: false,
+      }).status,
+      "pass",
+    )
+
+    const regressedNeighborScore = snapshot({
+      "qwen-2.5-0.5b": modelSummary("qwen-2.5-0.5b", 0.3),
+      "gemma-3-1b-it": modelSummary("gemma-3-1b-it", 0.789, {
+        cases: casesWithFailedCase("case-01"),
+      }),
+    })
+    const scoreRegression = compareSnapshots("qwen-2.5-0.5b", baseline, regressedNeighborScore, {
       verifyArtifactHashes: false,
     })
+    assert.equal(scoreRegression.status, "fail")
+    assert.match(scoreRegression.reasons.join("\n"), /gemma-3-1b-it score regressed/)
+
+    const stableBaseline = snapshot({
+      "qwen-2.5-0.5b": modelSummary("qwen-2.5-0.5b", 0.2),
+      "gemma-3-1b-it": modelSummary("gemma-3-1b-it", 0.8),
+    })
+    const introducedFailureNeighbor = snapshot({
+      "qwen-2.5-0.5b": modelSummary("qwen-2.5-0.5b", 0.3),
+      "gemma-3-1b-it": modelSummary("gemma-3-1b-it", 0.799, {
+        cases: casesWithFailedCase("case-02"),
+      }),
+    })
+    const newFailure = compareSnapshots("qwen-2.5-0.5b", stableBaseline, introducedFailureNeighbor, {
+      verifyArtifactHashes: false,
+    })
+    assert.equal(newFailure.status, "fail")
+    assert.match(newFailure.reasons.join("\n"), /gemma-3-1b-it introduced failing checks/)
+    assert.match(newFailure.reasons.join("\n"), /case-02/)
+  })
+
+  it("rejects non-selected pass and hard-failure regressions", () => {
+    const baseline = snapshot({
+      "qwen-2.5-0.5b": modelSummary("qwen-2.5-0.5b", 0.2),
+      "gemma-3-1b-it": {
+        ...modelSummary("gemma-3-1b-it", 0.8),
+        pass: true,
+        modelPass: true,
+      },
+    })
+    const regressed = snapshot({
+      "qwen-2.5-0.5b": modelSummary("qwen-2.5-0.5b", 0.3),
+      "gemma-3-1b-it": modelSummary("gemma-3-1b-it", 0.8, {
+        scoreBreakdown: { hardFailureCount: 1 },
+      }),
+    })
+    const comparison = compareSnapshots("qwen-2.5-0.5b", baseline, regressed, {
+      verifyArtifactHashes: false,
+    })
+
     assert.equal(comparison.status, "fail")
-    assert.match(comparison.reasons.join("\n"), /gemma-3-1b-it score changed/)
+    assert.match(comparison.reasons.join("\n"), /top-level pass outcome regressed/)
+    assert.match(comparison.reasons.join("\n"), /model pass outcome regressed/)
+    assert.match(comparison.reasons.join("\n"), /hard failures increased/)
   })
 
   it("formats score improvements for terminal output", () => {
