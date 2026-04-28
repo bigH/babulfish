@@ -24,6 +24,15 @@ const PRESERVE_REQUEST: TranslationRequest = {
 }
 
 const OPTIONS: TranslationOptions = { max_new_tokens: 64 }
+const BASE_CHAT_MODEL_OPTIONS = {
+  max_new_tokens: 64,
+  do_sample: false,
+  return_full_text: false,
+}
+const QWEN3_CHAT_MODEL_OPTIONS = {
+  ...BASE_CHAT_MODEL_OPTIONS,
+  tokenizer_encode_kwargs: { enable_thinking: false },
+}
 const PRESERVE_TOKEN_PATTERN = /\u27EAbf-preserve:[^\u27EB]+\u27EB/gu
 const CHAT_ADAPTER_FIXTURES = [
   [
@@ -405,27 +414,50 @@ describe("chat adapters", () => {
   })
 
   it.each(CHAT_ADAPTER_FIXTURES)(
-    "builds deterministic system/user string messages for %s",
+    "builds deterministic chat messages for %s",
     (_id, adapter, systemPrompt) => {
-      expect(adapter.buildInvocation(REQUEST, OPTIONS)).toEqual({
-        modelInput: [
-          {
-            role: "system",
-            content: systemPrompt,
-          },
-          {
-            role: "user",
-            content: "Hello **world**",
-          },
-        ],
-        modelOptions: {
-          max_new_tokens: 64,
-          do_sample: false,
-          return_full_text: false,
+      const invocation = adapter.buildInvocation(REQUEST, OPTIONS)
+      const expectedMessages = [
+        {
+          role: "system",
+          content: systemPrompt,
         },
-      })
+        {
+          role: "user",
+          content: "Hello **world**",
+        },
+      ]
+
+      expect(invocation.modelInput).toEqual(expectedMessages)
+      expect(invocation.modelOptions).toMatchObject(BASE_CHAT_MODEL_OPTIONS)
     },
   )
+
+  it("disables Qwen3 thinking through chat-template kwargs", () => {
+    expect(qwen3ChatAdapter.buildInvocation(REQUEST, OPTIONS)).toEqual({
+      modelInput: [
+        {
+          role: "system",
+          content:
+            "You are a translation engine. Translate from en to es. " +
+            "Output only the translation.",
+        },
+        {
+          role: "user",
+          content: "Hello **world**",
+        },
+      ],
+      modelOptions: QWEN3_CHAT_MODEL_OPTIONS,
+    })
+  })
+
+  it("keeps Qwen3 tokenizer kwargs out of other chat adapters", () => {
+    for (const adapter of [qwen25ChatAdapter, gemma3ChatAdapter]) {
+      expect(adapter.buildInvocation(REQUEST, OPTIONS).modelOptions).toEqual(
+        BASE_CHAT_MODEL_OPTIONS,
+      )
+    }
+  })
 
   it("adds markdown and exact substring preservation instructions when requested", () => {
     const invocation = qwen3ChatAdapter.buildInvocation(REQUEST, {
@@ -441,6 +473,7 @@ describe("chat adapters", () => {
         "Preserve Markdown formatting and translate only human-readable prose. " +
         "Preserve these exact substrings unchanged: [\"**world**\",\"babulfish\"].",
     )
+    expect(invocation.modelOptions).toEqual(QWEN3_CHAT_MODEL_OPTIONS)
   })
 
   it("defaults substring preservation to prompting for chat adapters", () => {
@@ -507,5 +540,58 @@ describe("chat adapters", () => {
         },
       ]),
     ).toEqual({ text: "segundo" })
+  })
+
+  it("removes leading thinking blocks from chat output", () => {
+    expect(
+      qwen3ChatAdapter.extractText(REQUEST, OPTIONS, [
+        {
+          generated_text:
+            "<think>\nI should translate this without showing work.\n</think>\n\nHola mundo",
+        },
+      ]),
+    ).toEqual({ text: "Hola mundo" })
+
+    expect(
+      qwen3ChatAdapter.extractText(REQUEST, OPTIONS, [
+        {
+          generated_text:
+            "<think>draft</think>\n<think>review</think>\n\nHola mundo",
+        },
+      ]),
+    ).toEqual({ text: "Hola mundo" })
+  })
+
+  it("unwraps common translation preambles after chat thinking", () => {
+    expect(
+      qwen3ChatAdapter.extractText(REQUEST, OPTIONS, [
+        {
+          generated_text:
+            "<think>draft</think>\n\n" +
+            "Translating the sentence: \"Hello world.\" " +
+            "The translated sentence is: \"Hola mundo.",
+        },
+      ]),
+    ).toEqual({ text: "Hola mundo." })
+  })
+
+  it("keeps late translation labels that are part of translated text", () => {
+    const translatedText = `${"texto ".repeat(50)}translation: etiqueta`
+
+    expect(
+      qwen3ChatAdapter.extractText(REQUEST, OPTIONS, [
+        { generated_text: translatedText },
+      ]),
+    ).toEqual({ text: translatedText.trim() })
+    expect(
+      qwen3ChatAdapter.extractText(REQUEST, OPTIONS, [
+        {
+          generated_text: [
+            { role: "assistant", content: "ignored" },
+            { role: "assistant", content: translatedText },
+          ],
+        },
+      ]),
+    ).toEqual({ text: translatedText.trim() })
   })
 })

@@ -307,6 +307,7 @@ describe("translate", () => {
         max_new_tokens: 256,
         do_sample: false,
         return_full_text: false,
+        tokenizer_encode_kwargs: { enable_thinking: false },
       },
     )
   })

@@ -1,4 +1,9 @@
-import type { TranslationAdapter } from "../../translation-adapter.js"
+import type {
+  TranslationAdapter,
+  TranslationOptions,
+  TranslationRequest,
+} from "../../translation-adapter.js"
+import type { TranslationModelInvocation } from "../translate.js"
 import {
   ChatModelBaseAdapter,
   type ChatInput,
@@ -11,6 +16,21 @@ export class Qwen3ChatAdapter extends ChatModelBaseAdapter {
       id: "qwen-3-0.6b-chat",
       label: "Qwen 3 0.6B chat translator",
     })
+  }
+
+  protected override buildModelInvocation(
+    request: TranslationRequest,
+    options: TranslationOptions,
+  ): TranslationModelInvocation<ChatInput, ChatOptions> {
+    const invocation = super.buildModelInvocation(request, options)
+
+    return {
+      ...invocation,
+      modelOptions: {
+        ...invocation.modelOptions,
+        tokenizer_encode_kwargs: { enable_thinking: false },
+      },
+    }
   }
 }
 

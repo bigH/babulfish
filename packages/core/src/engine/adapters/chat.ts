@@ -22,12 +22,83 @@ type ChatAdapterConfig = {
   readonly label: string
 }
 
+const TRANSLATION_WRAPPER_SCAN_LIMIT = 240
+
 function unexpectedModelOutput(): never {
   throw new Error("Unexpected model output format")
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null
+}
+
+function stripLeadingThinking(text: string): string {
+  let strippedThinking = false
+  let remaining = text
+
+  while (true) {
+    const stripped = remaining.replace(
+      /^\s*<think\b[^>]*>[\s\S]*?<\/think>\s*/i,
+      "",
+    )
+
+    if (stripped === remaining) break
+
+    strippedThinking = true
+    remaining = stripped
+  }
+
+  if (!strippedThinking) return text.trim()
+
+  const trimmed = remaining.trim()
+  return trimmed.length === 0 ? text.trim() : trimmed
+}
+
+function unwrapQuotedPayload(text: string): string {
+  const trimmed = text.trim()
+  const first = trimmed.at(0)
+  if (first !== "\"" && first !== "'") return trimmed
+
+  const unquoted = trimmed.slice(1)
+  return unquoted.endsWith(first)
+    ? unquoted.slice(0, -1).trim()
+    : unquoted.trim()
+}
+
+function looksLikeTranslationWrapperPrefix(prefix: string): boolean {
+  const trimmed = prefix.trim()
+  return (
+    trimmed.length === 0 ||
+    /\b(?:translat(?:e|ed|ing|ion)|sentence|text|answer)\b/i.test(trimmed)
+  )
+}
+
+function stripTranslationWrapper(text: string): string {
+  const translatedCue =
+    /(?:the\s+)?translated\s+(?:sentence|text|translation)\s+is:\s*/gi
+  const translationCue = /translation:\s*/gi
+  const cues = [translatedCue, translationCue]
+  let payloadStart: number | null = null
+
+  for (const cue of cues) {
+    for (const match of text.matchAll(cue)) {
+      if (
+        match.index <= TRANSLATION_WRAPPER_SCAN_LIMIT &&
+        looksLikeTranslationWrapperPrefix(text.slice(0, match.index))
+      ) {
+        payloadStart = match.index + match[0].length
+      }
+    }
+  }
+
+  if (payloadStart === null) return text.trim()
+
+  const payload = unwrapQuotedPayload(text.slice(payloadStart))
+  return payload.length === 0 ? text.trim() : payload
+}
+
+function normalizeChatText(text: string): string {
+  return stripTranslationWrapper(stripLeadingThinking(text))
 }
 
 export class ChatModelBaseAdapter<
@@ -130,7 +201,7 @@ export class ChatModelBaseAdapter<
 
     const generatedText = firstResult.generated_text
     if (typeof generatedText === "string") {
-      return generatedText.trim()
+      return normalizeChatText(generatedText)
     }
 
     if (!Array.isArray(generatedText)) unexpectedModelOutput()
@@ -142,7 +213,7 @@ export class ChatModelBaseAdapter<
         message.role === "assistant" &&
         typeof message.content === "string"
       ) {
-        return message.content.trim()
+        return normalizeChatText(message.content)
       }
     }
 
