@@ -303,7 +303,11 @@ describe("translate", () => {
         },
         {
           role: "user",
-          content: "hello",
+          content:
+            "Translate this text to Spanish (es).\n" +
+            "Return only the translated text.\n\n" +
+            "Source:\n" +
+            "hello",
         },
       ],
       {

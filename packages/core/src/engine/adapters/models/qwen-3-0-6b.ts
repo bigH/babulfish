@@ -34,6 +34,10 @@ function formatLanguageName(code: string): string {
   return name === undefined ? code : `${name} (${code})`
 }
 
+function formatSourceBlock(request: TranslationRequest): string {
+  return `Source:\n${request.text}`
+}
+
 export class Qwen3ChatAdapter extends ChatModelBaseAdapter {
   constructor() {
     super({
@@ -50,11 +54,52 @@ export class Qwen3ChatAdapter extends ChatModelBaseAdapter {
 
     return {
       ...invocation,
+      modelInput: [
+        invocation.modelInput[0],
+        {
+          role: "user",
+          content: this.buildUserPrompt(request, options),
+        },
+      ],
       modelOptions: {
         ...invocation.modelOptions,
         tokenizer_encode_kwargs: { enable_thinking: false },
       },
     }
+  }
+
+  private buildUserPrompt(
+    request: TranslationRequest,
+    options: TranslationOptions,
+  ): string {
+    const target = formatLanguageName(request.target.code)
+
+    if (options.content_type === "markdown") {
+      return [
+        `Translate this Markdown to ${target}.`,
+        "Keep Markdown syntax, code spans, links, and preserved terms exactly.",
+        "Return only the translated Markdown.",
+        "",
+        formatSourceBlock(request),
+      ].join("\n")
+    }
+
+    if (options.content_type === "structured") {
+      return [
+        `Translate this structured text to ${target}.`,
+        "Copy structured tokens exactly and keep them in order.",
+        "Return only the translated text.",
+        "",
+        formatSourceBlock(request),
+      ].join("\n")
+    }
+
+    return [
+      `Translate this text to ${target}.`,
+      "Return only the translated text.",
+      "",
+      formatSourceBlock(request),
+    ].join("\n")
   }
 
   protected override buildSystemPrompt(

@@ -459,7 +459,13 @@ describe("4.3 — cancellation", () => {
       expect(messages[0].content).toContain(
         "Preserve these exact substrings unchanged: [\"Chime\"].",
       )
-      expect(messages[1].content).toBe("Working at **Chime**")
+      expect(messages[1].content).toBe(
+        "Translate this Markdown to Spanish (es).\n" +
+          "Keep Markdown syntax, code spans, links, and preserved terms exactly.\n" +
+          "Return only the translated Markdown.\n\n" +
+          "Source:\n" +
+          "Working at **Chime**",
+      )
       expect(messages[1].content).not.toMatch(PRESERVE_TOKEN_PATTERN)
 
       return [{

@@ -38,6 +38,17 @@ const QWEN3_BASE_SYSTEM_PROMPT =
   "Translate short UI labels, buttons, headings, and sentence fragments naturally; do not copy source text just because it is short. " +
   "Keep brand names, product names, code identifiers, URLs, numbers, and preserved terms unchanged; translate the surrounding prose. " +
   "Do not return the source unchanged when it contains translatable prose."
+const QWEN3_BASE_USER_PROMPT =
+  "Translate this text to Spanish (es).\n" +
+  "Return only the translated text.\n\n" +
+  "Source:\n" +
+  "Hello **world**"
+const QWEN3_MARKDOWN_USER_PROMPT =
+  "Translate this Markdown to Spanish (es).\n" +
+  "Keep Markdown syntax, code spans, links, and preserved terms exactly.\n" +
+  "Return only the translated Markdown.\n\n" +
+  "Source:\n" +
+  "Hello **world**"
 const QWEN3_MARKDOWN_INSTRUCTION =
   "Preserve Markdown formatting markers exactly, including headings, emphasis, code spans, links, and lists; translate only human-readable prose."
 const GEMMA3_BASE_SYSTEM_PROMPT =
@@ -50,12 +61,14 @@ const CHAT_ADAPTER_FIXTURES = [
     "qwen-3-0.6b-chat",
     qwen3ChatAdapter,
     QWEN3_BASE_SYSTEM_PROMPT,
+    QWEN3_BASE_USER_PROMPT,
     QWEN3_CHAT_MODEL_OPTIONS,
   ],
   [
     "gemma-3-1b-it-chat",
     gemma3ChatAdapter,
     GEMMA3_BASE_SYSTEM_PROMPT,
+    "Hello **world**",
     BASE_CHAT_MODEL_OPTIONS,
   ],
 ] as const
@@ -228,7 +241,7 @@ describe("TranslateModelBaseAdapter", () => {
 describe("built-in adapter preservation", () => {
   it.each(BUILT_IN_PRESERVATION_FIXTURES)(
     "restores placeholder-preserved strings through %s",
-    (_id, createRoundTrip) => {
+    (id, createRoundTrip) => {
       const options = {
         max_new_tokens: 64,
         substrings_to_preserve: ["Chime"],
@@ -238,7 +251,16 @@ describe("built-in adapter preservation", () => {
       const roundTrip = createRoundTrip(options)
       const token = expectSinglePreserveToken(roundTrip.inputText)
 
-      expect(roundTrip.inputText).toBe(`Hello ${token}`)
+      if (id === "qwen-3-0.6b") {
+        expect(roundTrip.inputText).toBe(
+          "Translate this text to Spanish (es).\n" +
+            "Return only the translated text.\n\n" +
+            "Source:\n" +
+            `Hello ${token}`,
+        )
+      } else {
+        expect(roundTrip.inputText).toBe(`Hello ${token}`)
+      }
       expect(roundTrip.extract(token)).toEqual({ text: "Hola Chime" })
     },
   )
@@ -386,7 +408,7 @@ describe("chat adapters", () => {
 
   it.each(CHAT_ADAPTER_FIXTURES)(
     "builds deterministic chat messages for %s",
-    (_id, adapter, systemPrompt, modelOptions) => {
+    (_id, adapter, systemPrompt, userPrompt, modelOptions) => {
       const invocation = adapter.buildInvocation(REQUEST, OPTIONS)
       const expectedMessages = [
         {
@@ -395,7 +417,7 @@ describe("chat adapters", () => {
         },
         {
           role: "user",
-          content: "Hello **world**",
+          content: userPrompt,
         },
       ]
 
@@ -444,7 +466,7 @@ describe("chat adapters", () => {
         },
         {
           role: "user",
-          content: "Hello **world**",
+          content: QWEN3_BASE_USER_PROMPT,
         },
       ],
       modelOptions: QWEN3_CHAT_MODEL_OPTIONS,
@@ -463,6 +485,7 @@ describe("chat adapters", () => {
       qwen3ChatAdapter,
       QWEN3_BASE_SYSTEM_PROMPT,
       QWEN3_MARKDOWN_INSTRUCTION,
+      QWEN3_MARKDOWN_USER_PROMPT,
       QWEN3_CHAT_MODEL_OPTIONS,
     ],
     [
@@ -470,11 +493,12 @@ describe("chat adapters", () => {
       gemma3ChatAdapter,
       GEMMA3_BASE_SYSTEM_PROMPT,
       GEMMA3_MARKDOWN_INSTRUCTION,
+      "Hello **world**",
       BASE_CHAT_MODEL_OPTIONS,
     ],
   ] as const)(
     "adds markdown and exact substring preservation instructions for %s",
-    (_id, adapter, basePrompt, markdownInstruction, modelOptions) => {
+    (_id, adapter, basePrompt, markdownInstruction, userPrompt, modelOptions) => {
       const invocation = adapter.buildInvocation(REQUEST, {
         max_new_tokens: 64,
         content_type: "markdown",
@@ -486,6 +510,7 @@ describe("chat adapters", () => {
         `${basePrompt} ${markdownInstruction} ` +
           "Preserve these exact substrings unchanged: [\"**world**\",\"babulfish\"].",
       )
+      expect(invocation.modelInput[1]?.content).toBe(userPrompt)
       expect(invocation.modelOptions).toEqual(modelOptions)
     },
   )
@@ -505,7 +530,7 @@ describe("chat adapters", () => {
 
   it.each(CHAT_ADAPTER_FIXTURES)(
     "includes token-copy instruction when placeholders are active for %s",
-    (_id, adapter, systemPrompt) => {
+    (id, adapter, systemPrompt) => {
       const options = {
         max_new_tokens: 64,
         substrings_to_preserve: ["**world**"],
@@ -517,7 +542,16 @@ describe("chat adapters", () => {
       expect(invocation.modelInput[0]?.content).toBe(
         `${systemPrompt} Copy every preservation token exactly unchanged.`,
       )
-      expect(invocation.modelInput[1]?.content).toBe(`Hello ${token}`)
+      if (id === "qwen-3-0.6b-chat") {
+        expect(invocation.modelInput[1]?.content).toBe(
+          "Translate this text to Spanish (es).\n" +
+            "Return only the translated text.\n\n" +
+            "Source:\n" +
+            `Hello ${token}`,
+        )
+      } else {
+        expect(invocation.modelInput[1]?.content).toBe(`Hello ${token}`)
+      }
       expect(
         adapter.extractText(REQUEST, options, [
           { generated_text: `Hola ${token}` },
