@@ -6,6 +6,7 @@ HELPER="$REPO/scripts/auto-optimize-helper.mjs"
 TMP_BASE="$(cd "${TMPDIR:-/tmp}" && pwd -P)"
 TMP_ROOT="$TMP_BASE/auto-optimize-$(date -u +"%Y%m%dT%H%M%SZ")-$$"
 RUN_LOG_DIR="$REPO/.evals/auto-optimizer/runs/$(basename "$TMP_ROOT")"
+FAILED_LEDGER="docs/optimization/failed-experiments.jsonl"
 INNER_WORKTREES=()
 CODEX_YOLO_ARGS=()
 
@@ -37,6 +38,12 @@ stop_for_driver() {
 require_command() {
   if ! command -v "$1" >/dev/null 2>&1; then
     stop_for_driver "Required command '$1' is not available."
+  fi
+}
+
+ensure_failed_ledger_tracked() {
+  if ! git ls-files --error-unmatch "$FAILED_LEDGER" >/dev/null 2>&1; then
+    stop_for_driver "$FAILED_LEDGER must be tracked before running the optimizer."
   fi
 }
 
@@ -138,11 +145,14 @@ while IFS= read -r model; do
   REQUESTED_MODELS+=("$model")
 done < <(node "$HELPER" models "$MODEL_ARG")
 
-if ! git diff --quiet || ! git diff --cached --quiet; then
+ensure_failed_ledger_tracked
+
+if ! git diff --quiet -- . ":(exclude)$FAILED_LEDGER" ||
+  ! git diff --cached --quiet; then
   stop_for_driver "Tracked working-copy changes exist before the optimizer starts."
 fi
 
-PREEXISTING_UNTRACKED="$(git ls-files --others --exclude-standard || true)"
+PREEXISTING_UNTRACKED="$(git ls-files --others --exclude-standard | grep -vxF "$FAILED_LEDGER" || true)"
 if [[ -n "$PREEXISTING_UNTRACKED" ]]; then
   stop_for_driver "Untracked files exist before the optimizer starts: $PREEXISTING_UNTRACKED"
 fi
@@ -329,13 +339,14 @@ ensure_main_clean_before_import() {
     stop_for_driver "Main worktree HEAD changed during an optimizer attempt."
   fi
 
-  if ! git -C "$REPO" diff --quiet || ! git -C "$REPO" diff --cached --quiet; then
+  if ! git -C "$REPO" diff --quiet -- . ":(exclude)$FAILED_LEDGER" ||
+    ! git -C "$REPO" diff --cached --quiet; then
     git -C "$REPO" status --short > "$TMP_ROOT/main-dirty-before-import.log" || true
     stop_for_driver "Main worktree changed before candidate import. See $TMP_ROOT/main-dirty-before-import.log"
   fi
 
   local untracked
-  untracked="$(git -C "$REPO" ls-files --others --exclude-standard || true)"
+  untracked="$(git -C "$REPO" ls-files --others --exclude-standard | grep -vxF "$FAILED_LEDGER" || true)"
   if [[ -n "$untracked" ]]; then
     printf '%s\n' "$untracked" > "$TMP_ROOT/main-untracked-before-import.log"
     stop_for_driver "Main worktree has untracked files before candidate import. See $TMP_ROOT/main-untracked-before-import.log"
@@ -433,6 +444,8 @@ EOF
     node "$HELPER" prompt-summary "$selected_model" "$baseline_file"
     printf '\n'
     node "$HELPER" prompt-evidence "$selected_model" "$baseline_file"
+    printf '\n\n'
+    node "$HELPER" failed-memory-prompt "$selected_model" 6
     cat <<'EOF'
 
 Required workflow:
@@ -536,7 +549,7 @@ eval_log_refs() {
   fi
 }
 
-append_docs_note() {
+append_accepted_log() {
   local selected_model="$1"
   local iteration="$2"
   local score_line="$3"
@@ -546,22 +559,28 @@ append_docs_note() {
   local test_log="$7"
   local baseline_eval_log_prefix="$8"
   local verify_eval_log_prefix="$9"
+  local baseline_json="${10}"
+  local verify_json="${11}"
+  local compare_json="${12}"
 
-  mkdir -p "$REPO/docs/optimization"
-  local report
-  report="$(one_line_file "$report_file" "no report")"
-
-  printf '%s iteration=%s model=%s result="%s" summary="%s" logs="codex_stderr:%s codex_stdout:%s test:%s baseline_eval:%s verify_eval:%s"\n' \
-    "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" \
-    "$iteration" \
+  node "$HELPER" append-accepted-log \
     "$selected_model" \
+    "$iteration" \
     "$score_line" \
-    "$report" \
-    "$(log_ref "$stderr_log")" \
-    "$(log_ref "$stdout_log")" \
-    "$(log_ref "$test_log")" \
+    "$report_file" \
+    "$baseline_json" \
+    "$verify_json" \
+    "$compare_json" \
+    "$stdout_log" \
+    "$stderr_log" \
+    "$test_log" \
     "$(eval_log_refs "$baseline_eval_log_prefix")" \
-    "$(eval_log_refs "$verify_eval_log_prefix")" >> "$REPO/docs/optimization/${selected_model}-log.md"
+    "$(eval_log_refs "$verify_eval_log_prefix")"
+}
+
+run_summary_path() {
+  local iteration="$1"
+  printf '%s/iteration-%s.summary.log' "$RUN_LOG_DIR" "$iteration"
 }
 
 append_run_note() {
@@ -574,7 +593,8 @@ append_run_note() {
   local test_log="$7"
   local baseline_eval_log_prefix="$8"
   local verify_eval_log_prefix="$9"
-  local run_note="$RUN_LOG_DIR/iteration-${iteration}.summary.log"
+  local run_note
+  run_note="$(run_summary_path "$iteration")"
   local report
   report="$(one_line_file "$report_file" "no report")"
 
@@ -589,6 +609,42 @@ append_run_note() {
     "$(log_ref "$test_log")" \
     "$(eval_log_refs "$baseline_eval_log_prefix")" \
     "$(eval_log_refs "$verify_eval_log_prefix")" > "$run_note"
+}
+
+append_failed_experiment() {
+  local selected_model="$1"
+  local iteration="$2"
+  local score_line="$3"
+  local report_file="$4"
+  local stdout_log="$5"
+  local stderr_log="$6"
+  local test_log="$7"
+  local baseline_eval_log_prefix="$8"
+  local verify_eval_log_prefix="$9"
+  local candidate_patch="${10}"
+  local baseline_json="${11}"
+  local verify_json="${12}"
+  local compare_json="${13}"
+  local candidate_evaluated="${14}"
+  local run_note
+  run_note="$(run_summary_path "$iteration")"
+
+  node "$HELPER" append-failed-experiment \
+    "$selected_model" \
+    "$iteration" \
+    "$score_line" \
+    "$report_file" \
+    "$candidate_patch" \
+    "$baseline_json" \
+    "$verify_json" \
+    "$compare_json" \
+    "$stdout_log" \
+    "$stderr_log" \
+    "$test_log" \
+    "$(eval_log_refs "$baseline_eval_log_prefix")" \
+    "$(eval_log_refs "$verify_eval_log_prefix")" \
+    "$run_note" \
+    "$candidate_evaluated"
 }
 
 ACTIVE_BASELINE_JSON="$TMP_ROOT/current-baseline.json"
@@ -614,6 +670,10 @@ for ((iteration = 1; iteration <= ITERATIONS; iteration += 1)); do
   TEST_LOG="$RUN_LOG_DIR/iteration-${iteration}.test.log"
   VERIFY_EVAL_LOG_PREFIX="$RUN_LOG_DIR/iteration-${iteration}.verify-eval"
   CANDIDATE_CAN_IMPROVE="no"
+  CANDIDATE_EVALUATED="no"
+  SKIP_VERIFY="no"
+  VERIFY_JSON="none"
+  COMPARE_JSON="none"
   CANDIDATE_PATCH="$TMP_ROOT/iteration-${iteration}.product.patch"
   DOCS_PATCH="$TMP_ROOT/iteration-${iteration}.docs.patch"
 
@@ -654,55 +714,68 @@ for ((iteration = 1; iteration <= ITERATIONS; iteration += 1)); do
     SCORE_LINE="no improvement (no product diff)"
     import_inner_patches "$ATTEMPT_BASE_SHA" "$CANDIDATE_PATCH" "$DOCS_PATCH" "no"
   else
-    import_inner_patches "$ATTEMPT_BASE_SHA" "$CANDIDATE_PATCH" "$DOCS_PATCH" "yes"
-
-    printf -- "- tests running...\n"
-    printf '    output: %s\n' "$TEST_LOG"
-    if ! run_to_log "$TEST_LOG" pnpm test; then
-      SCORE_LINE="no improvement (tests failed)"
-      reset_candidate_product_patch "$CANDIDATE_PATCH"
-      ensure_product_changes_reset
+    DUPLICATE_FAILED_DIFF="$(node "$HELPER" failed-memory-duplicate "$SELECTED_MODEL" "$CANDIDATE_PATCH")"
+    if [[ -n "$DUPLICATE_FAILED_DIFF" ]]; then
+      SCORE_LINE="no improvement (${DUPLICATE_FAILED_DIFF})"
+      SKIP_VERIFY="yes"
+      import_inner_patches "$ATTEMPT_BASE_SHA" "$CANDIDATE_PATCH" "$DOCS_PATCH" "no"
     else
-      CANDIDATE_CAN_IMPROVE="yes"
+      import_inner_patches "$ATTEMPT_BASE_SHA" "$CANDIDATE_PATCH" "$DOCS_PATCH" "yes"
+
+      printf -- "- tests running...\n"
+      printf '    output: %s\n' "$TEST_LOG"
+      if ! run_to_log "$TEST_LOG" pnpm test; then
+        SCORE_LINE="no improvement (tests failed)"
+        reset_candidate_product_patch "$CANDIDATE_PATCH"
+        ensure_product_changes_reset
+      else
+        CANDIDATE_CAN_IMPROVE="yes"
+      fi
     fi
   fi
 
-  VERIFY_DIR="$REPO/.evals/web-gpu-$(timestamp)-auto-verify-${SELECTED_MODEL}-${iteration}-$$"
-  cd "$REPO"
-  run_eval_set "$VERIFY_DIR" "$VERIFY_EVAL_LOG_PREFIX"
-  VERIFY_JSON="$TMP_ROOT/iteration-${iteration}-verify.json"
-  node "$HELPER" snapshot "$MODEL_ARG" "$VERIFY_DIR" > "$VERIFY_JSON" ||
-    stop_for_driver "Verification artifacts could not be validated."
+  if [[ "$SKIP_VERIFY" == "yes" ]]; then
+    printf -- "- verification skipped: duplicate failed product diff\n"
+  else
+    VERIFY_DIR="$REPO/.evals/web-gpu-$(timestamp)-auto-verify-${SELECTED_MODEL}-${iteration}-$$"
+    cd "$REPO"
+    run_eval_set "$VERIFY_DIR" "$VERIFY_EVAL_LOG_PREFIX"
+    VERIFY_JSON="$TMP_ROOT/iteration-${iteration}-verify.json"
+    node "$HELPER" snapshot "$MODEL_ARG" "$VERIFY_DIR" > "$VERIFY_JSON" ||
+      stop_for_driver "Verification artifacts could not be validated."
 
-  COMPARE_JSON="$TMP_ROOT/iteration-${iteration}-compare.json"
-  node "$HELPER" compare "$SELECTED_MODEL" "$ACTIVE_BASELINE_JSON" "$VERIFY_JSON" > "$COMPARE_JSON"
-  COMPARE_STATUS="$(node "$HELPER" compare-status "$COMPARE_JSON")"
+    COMPARE_JSON="$TMP_ROOT/iteration-${iteration}-compare.json"
+    node "$HELPER" compare "$SELECTED_MODEL" "$ACTIVE_BASELINE_JSON" "$VERIFY_JSON" > "$COMPARE_JSON"
+    COMPARE_STATUS="$(node "$HELPER" compare-status "$COMPARE_JSON")"
 
-  if [[ "$COMPARE_STATUS" == "stop" ]]; then
+    if [[ "$COMPARE_STATUS" == "stop" ]]; then
+      if [[ "$CANDIDATE_CAN_IMPROVE" == "yes" ]]; then
+        reset_candidate_product_patch "$CANDIDATE_PATCH"
+        ensure_product_changes_reset
+      fi
+      stop_for_driver "Verification could not prove the contract. See $COMPARE_JSON"
+    fi
+
     if [[ "$CANDIDATE_CAN_IMPROVE" == "yes" ]]; then
-      reset_candidate_product_patch "$CANDIDATE_PATCH"
-      ensure_product_changes_reset
-    fi
-    stop_for_driver "Verification could not prove the contract. See $COMPARE_JSON"
-  fi
-
-  if [[ "$CANDIDATE_CAN_IMPROVE" == "yes" ]]; then
-    if [[ "$COMPARE_STATUS" != "pass" ]]; then
-      SCORE_LINE="no improvement ($(node "$HELPER" compare-reasons "$COMPARE_JSON"))"
-      reset_candidate_product_patch "$CANDIDATE_PATCH"
-      ensure_product_changes_reset
-    else
-      NEW_SCORE="$(node "$HELPER" compare-new-score "$COMPARE_JSON")"
-      SCORE_LINE="$(node "$HELPER" compare-score-improvement "$COMPARE_JSON")"
+      CANDIDATE_EVALUATED="yes"
+      if [[ "$COMPARE_STATUS" != "pass" ]]; then
+        SCORE_LINE="no improvement ($(node "$HELPER" compare-reasons "$COMPARE_JSON"))"
+        reset_candidate_product_patch "$CANDIDATE_PATCH"
+        ensure_product_changes_reset
+      else
+        NEW_SCORE="$(node "$HELPER" compare-new-score "$COMPARE_JSON")"
+        SCORE_LINE="$(node "$HELPER" compare-score-improvement "$COMPARE_JSON")"
+      fi
     fi
   fi
 
   append_run_note "$SELECTED_MODEL" "$iteration" "$SCORE_LINE" "$REPORT_FILE" "$STDOUT_LOG" "$STDERR_LOG" "$TEST_LOG" "$ITERATION_BASELINE_EVAL_LOG_PREFIX" "$VERIFY_EVAL_LOG_PREFIX"
 
   if [[ "$SCORE_LINE" == no\ improvement* ]]; then
+    append_failed_experiment "$SELECTED_MODEL" "$iteration" "$SCORE_LINE" "$REPORT_FILE" "$STDOUT_LOG" "$STDERR_LOG" "$TEST_LOG" "$ITERATION_BASELINE_EVAL_LOG_PREFIX" "$VERIFY_EVAL_LOG_PREFIX" "$CANDIDATE_PATCH" "$ACTIVE_BASELINE_JSON" "$VERIFY_JSON" "$COMPARE_JSON" "$CANDIDATE_EVALUATED"
     COMMIT_SHA=""
   else
-    append_docs_note "$SELECTED_MODEL" "$iteration" "$SCORE_LINE" "$REPORT_FILE" "$STDOUT_LOG" "$STDERR_LOG" "$TEST_LOG" "$ITERATION_BASELINE_EVAL_LOG_PREFIX" "$VERIFY_EVAL_LOG_PREFIX"
+    append_accepted_log "$SELECTED_MODEL" "$iteration" "$SCORE_LINE" "$REPORT_FILE" "$STDOUT_LOG" "$STDERR_LOG" "$TEST_LOG" "$ITERATION_BASELINE_EVAL_LOG_PREFIX" "$VERIFY_EVAL_LOG_PREFIX" "$ACTIVE_BASELINE_JSON" "$VERIFY_JSON" "$COMPARE_JSON"
     PATHSPEC_FILE="$TMP_ROOT/iteration-${iteration}-commit-paths.nul"
     if ! changed_paths_for_commit "$PATHSPEC_FILE"; then
       stop_for_driver "No optimizer-owned files changed after iteration ${iteration}."

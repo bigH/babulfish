@@ -1,19 +1,39 @@
 import assert from "node:assert/strict"
 import { spawnSync } from "node:child_process"
-import { chmodSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs"
+import {
+  chmodSync,
+  existsSync,
+  mkdtempSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  writeFileSync,
+} from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { describe, it } from "node:test"
+import { fileURLToPath } from "node:url"
 
 import {
   EXPECTED_CASE_COUNT,
+  appendAcceptedOptimizationLog,
+  appendFailedExperiment,
+  buildAcceptedOptimizationRecord,
   buildPromptEvidence,
+  buildFailedExperimentRecord,
+  changedFilesFromPatchText,
   compareSnapshots,
   createSnapshot,
+  duplicateFailedExperimentForHash,
   formatCompareReasons,
+  formatFailedExperimentsPrompt,
   formatScoreImprovement,
   isAllowedAttemptPath,
+  parseInnerReportLine,
   parseRequestedModels,
+  productDiffHashFromPatchText,
+  readFailedExperiments,
+  recentFailedExperiments,
   selectModelFromSnapshot,
   summarizeArtifactObject,
   updateLastGoodScores,
@@ -107,7 +127,10 @@ const onlyRunLogDir = (repo) => {
   return entries[0]
 }
 
+const helperPath = fileURLToPath(new URL("./auto-optimize-helper.mjs", import.meta.url))
+
 const helperShim = `#!/usr/bin/env node
+import crypto from "node:crypto"
 import fs from "node:fs"
 import path from "node:path"
 
@@ -129,6 +152,24 @@ const requestedModels = (modelArg) => modelArg === "all" ? allModels : [modelArg
 const artifactName = (model) => model.replaceAll("/", "-") + ".json"
 const readJson = (file) => JSON.parse(fs.readFileSync(file, "utf8"))
 const formatScore = (score) => Number(score).toFixed(6)
+const ledgerPath = path.join(process.cwd(), "docs", "optimization", "failed-experiments.jsonl")
+const acceptedLogPath = (model) => path.join(process.cwd(), "docs", "optimization", model + "-log.jsonl")
+const readLedger = () => {
+  if (!fs.existsSync(ledgerPath)) return []
+  return fs.readFileSync(ledgerPath, "utf8")
+    .split(/\\r?\\n/)
+    .filter((line) => line.trim())
+    .map((line) => JSON.parse(line))
+}
+const patchHash = (patchPath) => {
+  if (!patchPath || patchPath === "none" || !fs.existsSync(patchPath)) return null
+  const patch = fs.readFileSync(patchPath)
+  return patch.length === 0 ? null : crypto.createHash("sha256").update(patch).digest("hex")
+}
+const changedFiles = (patchPath) => {
+  if (!patchPath || !fs.existsSync(patchPath) || fs.readFileSync(patchPath, "utf8").length === 0) return []
+  return ["packages/core/src/engine/adapters/chat.ts"]
+}
 const verifyIteration = (outputDir) => {
   const match = path.basename(outputDir).match(/-auto-verify-.+-([0-9]+)-[0-9]+$/)
   return match ? Number(match[1]) : 0
@@ -232,6 +273,105 @@ switch (command) {
   case "prompt-evidence":
     console.log("Failure evidence:\\n- score: " + readJson(args[1]).models[args[0]].score)
     break
+  case "failed-memory-prompt": {
+    const records = readLedger().filter((record) => record.model === args[0]).reverse()
+    console.log("Rejected approaches:")
+    console.log("Recent failed experiments for " + args[0] + ". Do not repeat the same product diff or substantially the same approach unless this attempt is materially different.")
+    if (records.length === 0) {
+      console.log("- none recorded for " + args[0])
+    } else {
+      for (const record of records) {
+        console.log("- iteration " + record.iteration + ": " + record.result)
+      }
+    }
+    break
+  }
+  case "failed-memory-duplicate": {
+    const hash = patchHash(args[1])
+    const duplicate = readLedger().find((record) => record.model === args[0] && record.productDiffHash === hash)
+    if (duplicate) console.log("duplicate failed product diff hash=" + hash.slice(0, 12))
+    break
+  }
+  case "append-failed-experiment": {
+    const [
+      model,
+      iteration,
+      result,
+      reportFile,
+      productPatch,
+      baselineSnapshot,
+      verifySnapshot,
+      compareJson,
+    ] = args
+    const baseline = fs.existsSync(baselineSnapshot) ? readJson(baselineSnapshot).models[model].score : null
+    const verify = fs.existsSync(verifySnapshot) ? readJson(verifySnapshot).models[model].score : null
+    const comparison = fs.existsSync(compareJson) ? readJson(compareJson) : null
+    const candidate = comparison?.selected?.newScore ?? verify
+    fs.mkdirSync(path.dirname(ledgerPath), { recursive: true })
+    fs.appendFileSync(ledgerPath, JSON.stringify({
+      schemaVersion: 1,
+      timestamp: new Date().toISOString(),
+      model,
+      iteration: Number(iteration),
+      result,
+      rejectionReason: comparison ? comparison.reasons.join("; ") : result,
+      innerReportRaw: fs.existsSync(reportFile) ? fs.readFileSync(reportFile, "utf8").trim() : null,
+      parsed: {},
+      scores: {
+        baseline,
+        candidate,
+        verify,
+        delta: typeof baseline === "number" && typeof candidate === "number" ? candidate - baseline : null,
+      },
+      changedFiles: changedFiles(productPatch),
+      productDiffHash: patchHash(productPatch),
+      logs: {},
+    }) + "\\n")
+    break
+  }
+  case "append-accepted-log": {
+    const [
+      model,
+      iteration,
+      result,
+      reportFile,
+      baselineSnapshot,
+      verifySnapshot,
+      compareJson,
+      codexStdout,
+      codexStderr,
+      testLog,
+      baselineEvalRefs,
+      verifyEvalRefs,
+    ] = args
+    const comparison = readJson(compareJson)
+    const logPath = acceptedLogPath(model)
+    fs.mkdirSync(path.dirname(logPath), { recursive: true })
+    fs.appendFileSync(logPath, JSON.stringify({
+      schemaVersion: 1,
+      timestamp: new Date().toISOString(),
+      model,
+      iteration: Number(iteration),
+      result,
+      innerReportRaw: fs.existsSync(reportFile) ? fs.readFileSync(reportFile, "utf8").trim() : null,
+      parsed: {},
+      scores: {
+        baseline: comparison.selected.oldScore,
+        candidate: comparison.selected.newScore,
+        verify: readJson(verifySnapshot).models[model].score,
+        delta: comparison.selected.newScore - comparison.selected.oldScore,
+      },
+      logs: {
+        codex_stdout: codexStdout,
+        codex_stderr: codexStderr,
+        test: testLog,
+        baseline_eval: baselineEvalRefs === "none" ? [] : baselineEvalRefs.split(","),
+        verify_eval: verifyEvalRefs === "none" ? [] : verifyEvalRefs.split(","),
+        baselineSnapshot,
+      },
+    }) + "\\n")
+    break
+  }
   case "ensure-reset-scope":
     break
   case "compare":
@@ -244,7 +384,7 @@ switch (command) {
     console.log(readJson(args[0]).reasons.join("; "))
     break
   case "commit-paths":
-    process.stdout.write("packages/core/src/engine/adapters/chat.ts\\0docs/optimization/qwen-2.5-0.5b-log.md\\0")
+    process.stdout.write("packages/core/src/engine/adapters/chat.ts\\0docs/optimization/qwen-2.5-0.5b-log.jsonl\\0")
     break
   case "compare-new-score":
     console.log(readJson(args[0]).selected.newScore)
@@ -334,6 +474,7 @@ const writeState = (state) => {
   if (statePath) fs.writeFileSync(statePath, JSON.stringify(state))
 }
 const isInnerWorktree = cwd.includes("worktree-")
+const innerIteration = () => cwd.match(/worktree-([0-9]+)-/)?.[1] ?? "0"
 
 if (command === "clone") {
   fs.mkdirSync(args[args.length - 1], { recursive: true })
@@ -350,19 +491,31 @@ if (command === "diff") {
     process.exit(!isInnerWorktree && readState().dirty && !args.includes("--cached") ? 1 : 0)
   }
   if (args.includes("--cached")) process.exit(0)
-  if (args.includes(":(exclude)docs/optimization/**") && (isInnerWorktree || readState().dirty)) {
-    process.stdout.write("mock product patch\\n")
+  if (args.includes(":(exclude)docs/optimization/**")) {
+    if (isInnerWorktree) {
+      process.stdout.write("mock product patch iteration-" + innerIteration() + "\\n")
+    } else if (readState().dirty) {
+      process.stdout.write(readState().patch ?? "mock product patch\\n")
+    }
   }
   process.exit(0)
 }
 
 if (command === "apply" && !isInnerWorktree) {
-  writeState({ dirty: !args.includes("-R") })
+  if (args.includes("-R")) {
+    writeState({ dirty: false, patch: null })
+  } else {
+    const patchPath = args[args.length - 1]
+    writeState({
+      dirty: true,
+      patch: fs.existsSync(patchPath) ? fs.readFileSync(patchPath, "utf8") : "mock product patch\\n",
+    })
+  }
   process.exit(0)
 }
 
 if (command === "commit") {
-  writeState({ dirty: false })
+  writeState({ dirty: false, patch: null })
   console.log("COMMIT_STDOUT")
   process.exit(0)
 }
@@ -632,6 +785,331 @@ describe("auto optimizer helper", () => {
     )
   })
 
+  it("parses inner reports without splitting commas inside values", () => {
+    const report = parseInnerReportLine(
+      "failure_modes=wrapped answers, short output, hypotheses=strip wrappers, tighten prompt, selected=strip wrapper because it is cheap, change=added output cleanup, eval=0.66 -> 0.53, result=no improvement",
+    )
+
+    assert.equal(report.failure_modes, "wrapped answers, short output")
+    assert.equal(report.hypotheses, "strip wrappers, tighten prompt")
+    assert.equal(report.selected, "strip wrapper because it is cheap")
+    assert.equal(report.change, "added output cleanup")
+    assert.equal(report.eval, "0.66 -> 0.53")
+    assert.equal(report.result, "no improvement")
+
+    const partial = parseInnerReportLine("selected=one idea, result=tests failed")
+    assert.equal(partial.failure_modes, null)
+    assert.equal(partial.selected, "one idea")
+    assert.equal(partial.result, "tests failed")
+  })
+
+  it("appends compact failed JSONL records with parsed report, scores, files, hash, and logs", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "auto-optimizer-failed-ledger-"))
+    const runDir = path.join(root, ".evals", "auto-optimizer", "runs", "run-1")
+    const patchPath = path.join(root, "candidate.patch")
+    const reportPath = path.join(runDir, "iteration-2.report.txt")
+    const baselinePath = path.join(root, "baseline.json")
+    const verifyPath = path.join(root, "verify.json")
+    const comparePath = path.join(root, "compare.json")
+    const stdoutPath = path.join(runDir, "iteration-2.codex.stdout.jsonl")
+    const stderrPath = path.join(runDir, "iteration-2.codex.stderr.log")
+    const testPath = path.join(runDir, "iteration-2.test.log")
+    const runSummaryPath = path.join(runDir, "iteration-2.summary.log")
+    const baselineEvalPath = path.join(runDir, "baseline.eval-qwen-2.5-0.5b.log")
+    const verifyEvalPath = path.join(runDir, "iteration-2.verify-eval-qwen-2.5-0.5b.log")
+
+    mkdirSync(runDir, { recursive: true })
+    writeFileSync(
+      patchPath,
+      [
+        "diff --git a/packages/core/src/engine/adapters/chat.ts b/packages/core/src/engine/adapters/chat.ts",
+        "--- a/packages/core/src/engine/adapters/chat.ts",
+        "+++ b/packages/core/src/engine/adapters/chat.ts",
+        "@@ -1 +1 @@",
+        "-old",
+        "+new",
+        "diff --git a/docs/optimization/qwen-2.5-0.5b-log.jsonl b/docs/optimization/qwen-2.5-0.5b-log.jsonl",
+        "--- a/docs/optimization/qwen-2.5-0.5b-log.jsonl",
+        "+++ b/docs/optimization/qwen-2.5-0.5b-log.jsonl",
+      ].join("\n"),
+    )
+    writeFileSync(
+      reportPath,
+      "failure_modes=wrapped answers, short outputs, hypotheses=strip wrapper, add examples, selected=strip wrapper, change=normalizer tweak, eval=0.66 -> 0.53, result=no improvement\n",
+    )
+    writeFileSync(
+      baselinePath,
+      `${JSON.stringify(snapshot({ "qwen-2.5-0.5b": modelSummary("qwen-2.5-0.5b", 0.66) }))}\n`,
+    )
+    writeFileSync(
+      verifyPath,
+      `${JSON.stringify(snapshot({ "qwen-2.5-0.5b": modelSummary("qwen-2.5-0.5b", 0.53) }))}\n`,
+    )
+    writeFileSync(
+      comparePath,
+      `${JSON.stringify({
+        status: "fail",
+        reasons: ["qwen-2.5-0.5b score did not improve: 0.66 -> 0.53."],
+        stops: [],
+        selected: {
+          model: "qwen-2.5-0.5b",
+          oldScore: 0.66,
+          newScore: 0.53,
+        },
+      })}\n`,
+    )
+    for (const logPath of [
+      stdoutPath,
+      stderrPath,
+      testPath,
+      runSummaryPath,
+      baselineEvalPath,
+      verifyEvalPath,
+    ]) {
+      writeFileSync(logPath, "log\n")
+    }
+
+    const record = buildFailedExperimentRecord(
+      {
+        model: "qwen-2.5-0.5b",
+        iteration: 2,
+        result: "no improvement (qwen-2.5-0.5b score did not improve: 0.66 -> 0.53.)",
+        reportFile: reportPath,
+        productPatch: patchPath,
+        baselineSnapshot: baselinePath,
+        verifySnapshot: verifyPath,
+        compareJson: comparePath,
+        codexStdout: stdoutPath,
+        codexStderr: stderrPath,
+        testLog: testPath,
+        baselineEvalRefs: path.relative(root, baselineEvalPath),
+        verifyEvalRefs: path.relative(root, verifyEvalPath),
+        runSummary: runSummaryPath,
+        candidateEvaluated: true,
+      },
+      root,
+    )
+    appendFailedExperiment(record, root)
+
+    const rawLedger = readFileSync(
+      path.join(root, "docs", "optimization", "failed-experiments.jsonl"),
+      "utf8",
+    )
+    assert.equal(rawLedger.trim().split("\n").length, 1)
+    assert.doesNotMatch(rawLedger, /\n\{/)
+
+    const [saved] = readFailedExperiments(root)
+    assert.equal(saved.schemaVersion, 1)
+    assert.equal(saved.model, "qwen-2.5-0.5b")
+    assert.equal(saved.iteration, 2)
+    assert.equal(saved.rejectionReason, "qwen-2.5-0.5b score did not improve: 0.66 -> 0.53.")
+    assert.equal(saved.innerReportRaw.includes("failure_modes=wrapped answers"), true)
+    assert.equal(saved.parsed.failure_modes, "wrapped answers, short outputs")
+    assert.equal(saved.parsed.hypotheses, "strip wrapper, add examples")
+    assert.equal(saved.candidateEvaluated, true)
+    assert.equal(saved.scores.baseline, 0.66)
+    assert.equal(saved.scores.candidate, 0.53)
+    assert.equal(saved.scores.verify, 0.53)
+    assert.equal(saved.scores.delta, -0.13)
+    assert.deepEqual(saved.changedFiles, ["packages/core/src/engine/adapters/chat.ts"])
+    assert.equal(saved.productDiffHash, productDiffHashFromPatchText(readFileSync(patchPath, "utf8")))
+    assert.equal(saved.logs.codex_stdout, ".evals/auto-optimizer/runs/run-1/iteration-2.codex.stdout.jsonl")
+    assert.deepEqual(saved.logs.baseline_eval, [
+      ".evals/auto-optimizer/runs/run-1/baseline.eval-qwen-2.5-0.5b.log",
+    ])
+
+    const failedBeforeCandidateEval = buildFailedExperimentRecord(
+      {
+        model: "qwen-2.5-0.5b",
+        iteration: 3,
+        result: "no improvement (tests failed)",
+        reportFile: reportPath,
+        productPatch: patchPath,
+        baselineSnapshot: baselinePath,
+        verifySnapshot: verifyPath,
+        compareJson: comparePath,
+        candidateEvaluated: false,
+      },
+      root,
+    )
+    assert.equal(failedBeforeCandidateEval.rejectionReason, "tests failed")
+    assert.equal(failedBeforeCandidateEval.scores.candidate, null)
+    assert.equal(failedBeforeCandidateEval.scores.verify, 0.53)
+  })
+
+  it("formats prior failed experiments for the inner prompt", () => {
+    const prompt = formatFailedExperimentsPrompt(
+      [
+        {
+          schemaVersion: 1,
+          model: "qwen-2.5-0.5b",
+          iteration: 4,
+          result: "no improvement (tests failed)",
+          rejectionReason: "tests failed",
+          parsed: {
+            selected: "add wrapper stripping",
+            change: "changed chat adapter output cleanup",
+          },
+          scores: { baseline: 0.66, candidate: 0.53 },
+          changedFiles: ["packages/core/src/engine/adapters/chat.ts"],
+          productDiffHash: "1234567890abcdef",
+        },
+      ],
+      "qwen-2.5-0.5b",
+    )
+
+    assert.match(prompt, /Rejected approaches:/)
+    assert.match(prompt, /Do not repeat/)
+    assert.match(prompt, /materially different/)
+    assert.match(prompt, /add wrapper stripping/)
+    assert.match(prompt, /hash=1234567890ab/)
+  })
+
+  it("appends accepted optimization logs as JSONL", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "auto-optimizer-accepted-log-"))
+    const runDir = path.join(root, ".evals", "auto-optimizer", "runs", "run-1")
+    const reportPath = path.join(runDir, "iteration-1.report.txt")
+    const baselinePath = path.join(root, "baseline.json")
+    const verifyPath = path.join(root, "verify.json")
+    const comparePath = path.join(root, "compare.json")
+    const stdoutPath = path.join(runDir, "iteration-1.codex.stdout.jsonl")
+    const stderrPath = path.join(runDir, "iteration-1.codex.stderr.log")
+    const testPath = path.join(runDir, "iteration-1.test.log")
+    const baselineEvalPath = path.join(runDir, "baseline.eval-qwen-2.5-0.5b.log")
+    const verifyEvalPath = path.join(runDir, "iteration-1.verify-eval-qwen-2.5-0.5b.log")
+
+    mkdirSync(runDir, { recursive: true })
+    writeFileSync(
+      reportPath,
+      "failure_modes=wrapper, hypotheses=strip wrapper, selected=strip wrapper, change=normalizer, eval=0 -> 0.66, result=improved\n",
+    )
+    writeFileSync(
+      baselinePath,
+      `${JSON.stringify(snapshot({ "qwen-2.5-0.5b": modelSummary("qwen-2.5-0.5b", 0) }))}\n`,
+    )
+    writeFileSync(
+      verifyPath,
+      `${JSON.stringify(snapshot({ "qwen-2.5-0.5b": modelSummary("qwen-2.5-0.5b", 0.66) }))}\n`,
+    )
+    writeFileSync(
+      comparePath,
+      `${JSON.stringify({
+        status: "pass",
+        reasons: [],
+        stops: [],
+        selected: {
+          model: "qwen-2.5-0.5b",
+          oldScore: 0,
+          newScore: 0.66,
+        },
+      })}\n`,
+    )
+    for (const logPath of [stdoutPath, stderrPath, testPath, baselineEvalPath, verifyEvalPath]) {
+      writeFileSync(logPath, "log\n")
+    }
+
+    const record = buildAcceptedOptimizationRecord(
+      {
+        model: "qwen-2.5-0.5b",
+        iteration: 1,
+        result: "0.000000 -> 0.660000 (+0.660000)",
+        reportFile: reportPath,
+        baselineSnapshot: baselinePath,
+        verifySnapshot: verifyPath,
+        compareJson: comparePath,
+        codexStdout: stdoutPath,
+        codexStderr: stderrPath,
+        testLog: testPath,
+        baselineEvalRefs: path.relative(root, baselineEvalPath),
+        verifyEvalRefs: path.relative(root, verifyEvalPath),
+      },
+      root,
+    )
+    appendAcceptedOptimizationLog(record, root)
+
+    assert.equal(
+      existsSync(path.join(root, "docs", "optimization", "qwen-2.5-0.5b-log.md")),
+      false,
+    )
+    const logLines = readFileSync(
+      path.join(root, "docs", "optimization", "qwen-2.5-0.5b-log.jsonl"),
+      "utf8",
+    ).trim().split("\n")
+    assert.equal(logLines.length, 1)
+    const saved = JSON.parse(logLines[0])
+    assert.equal(saved.schemaVersion, 1)
+    assert.equal(saved.model, "qwen-2.5-0.5b")
+    assert.equal(saved.parsed.selected, "strip wrapper")
+    assert.equal(saved.scores.baseline, 0)
+    assert.equal(saved.scores.candidate, 0.66)
+    assert.equal(saved.scores.delta, 0.66)
+    assert.deepEqual(saved.logs.verify_eval, [
+      ".evals/auto-optimizer/runs/run-1/iteration-1.verify-eval-qwen-2.5-0.5b.log",
+    ])
+  })
+
+  it("detects duplicate failed product diff hashes for the same model only", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "auto-optimizer-duplicate-hash-"))
+    const hash = productDiffHashFromPatchText("mock product patch\n")
+    appendFailedExperiment(
+      {
+        schemaVersion: 1,
+        timestamp: "2026-04-28T00:00:00.000Z",
+        model: "qwen-2.5-0.5b",
+        iteration: 1,
+        result: "no improvement (tests failed)",
+        rejectionReason: "tests failed",
+        innerReportRaw: null,
+        parsed: {},
+        scores: { baseline: 0.66, candidate: null, verify: null, delta: null },
+        changedFiles: ["packages/core/src/engine/adapters/chat.ts"],
+        productDiffHash: hash,
+        logs: {},
+      },
+      root,
+    )
+    appendFailedExperiment(
+      {
+        schemaVersion: 1,
+        timestamp: "2026-04-28T00:00:01.000Z",
+        model: "qwen-3-0.6b",
+        iteration: 2,
+        result: "no improvement (tests failed)",
+        rejectionReason: "tests failed",
+        innerReportRaw: null,
+        parsed: {},
+        scores: { baseline: 0.5, candidate: null, verify: null, delta: null },
+        changedFiles: ["packages/core/src/engine/adapters/chat.ts"],
+        productDiffHash: hash,
+        logs: {},
+      },
+      root,
+    )
+
+    assert.equal(duplicateFailedExperimentForHash("qwen-2.5-0.5b", hash, root)?.iteration, 1)
+    assert.equal(duplicateFailedExperimentForHash("gemma-3-1b-it", hash, root), null)
+    assert.equal(recentFailedExperiments("qwen-3-0.6b", 1, root)[0].iteration, 2)
+  })
+
+  it("hashes product patches and extracts changed product files", () => {
+    const patch = [
+      "diff --git a/packages/core/src/old.ts b/packages/core/src/new.ts",
+      "similarity index 93%",
+      "rename from packages/core/src/old.ts",
+      "rename to packages/core/src/new.ts",
+      "diff --git a/docs/optimization/qwen-2.5-0.5b-log.jsonl b/docs/optimization/qwen-2.5-0.5b-log.jsonl",
+      "--- a/docs/optimization/qwen-2.5-0.5b-log.jsonl",
+      "+++ b/docs/optimization/qwen-2.5-0.5b-log.jsonl",
+    ].join("\n")
+
+    assert.equal(productDiffHashFromPatchText(""), null)
+    assert.match(productDiffHashFromPatchText(patch), /^[a-f0-9]{64}$/)
+    assert.deepEqual(changedFilesFromPatchText(patch), [
+      "packages/core/src/new.ts",
+      "packages/core/src/old.ts",
+    ])
+  })
+
   it("stops when an accepted baseline artifact hash changes", () => {
     const root = mkdtempSync(path.join(tmpdir(), "auto-optimizer-hash-test-"))
     const artifactDir = path.join(root, ".evals", "web-gpu-hash-test")
@@ -757,8 +1235,8 @@ describe("auto optimizer helper", () => {
       "packages/demo/app/page.tsx",
       "packages/core/README.md",
       "packages/react/README.md",
-      "docs/optimization/qwen-3-0.6b-log.md",
-      "docs/optimization/nested/qwen-3-0.6b-log.md",
+      "docs/optimization/failed-experiments.jsonl",
+      "docs/optimization/qwen-3-0.6b-log.jsonl",
     ]
 
     for (const filePath of paths) {
@@ -845,6 +1323,9 @@ describe("auto optimizer helper", () => {
   it("blocks non-product near misses for optimizer attempts", () => {
     const paths = [
       "docs/optimization/qwen-3-0.6b-log.txt",
+      "docs/optimization/qwen-3-0.6b-log.md",
+      "docs/optimization/nested/qwen-3-0.6b-log.jsonl",
+      "docs/optimization/not-a-model-log.jsonl",
       "README.md",
       "packages/core/docs/guide.md",
       "packages/core/test/contract.test.ts",
@@ -856,6 +1337,29 @@ describe("auto optimizer helper", () => {
     for (const filePath of paths) {
       assert.equal(isAllowedAttemptPath(filePath), false, filePath)
     }
+  })
+
+  it("allows failed ledger state without staging it in accepted commit paths", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "auto-optimizer-commit-paths-"))
+    mkdirSync(path.join(root, "packages", "core", "src"), { recursive: true })
+    mkdirSync(path.join(root, "docs", "optimization"), { recursive: true })
+    writeFileSync(path.join(root, "packages", "core", "src", "change.ts"), "export {}\n")
+    writeFileSync(path.join(root, "docs", "optimization", "qwen-2.5-0.5b-log.jsonl"), "{}\n")
+    writeFileSync(path.join(root, "docs", "optimization", "failed-experiments.jsonl"), "{}\n")
+
+    const init = spawnSync("git", ["init", "--quiet"], { cwd: root, encoding: "utf8" })
+    assert.equal(init.status, 0, init.stderr)
+
+    const result = spawnSync(process.execPath, [helperPath, "commit-paths", root], {
+      encoding: "utf8",
+    })
+    assert.equal(result.status, 0, result.stderr)
+
+    const paths = result.stdout.split("\0").filter(Boolean).sort()
+    assert.deepEqual(paths, [
+      "docs/optimization/qwen-2.5-0.5b-log.jsonl",
+      "packages/core/src/change.ts",
+    ])
   })
 
   it("keeps auto optimizer inner dependencies isolated", () => {
@@ -902,11 +1406,39 @@ describe("auto optimizer helper", () => {
 
     assert.match(script, /SELECTED_MODEL="\$\(node "\$HELPER" select-model "\$MODEL_ARG" "\$ACTIVE_BASELINE_JSON"\)"/)
     assert.match(script, /write_inner_prompt .*"\$ACTIVE_BASELINE_JSON"/)
+    assert.match(script, /node "\$HELPER" failed-memory-prompt "\$selected_model" 6/)
     assert.match(script, /VERIFY_EVAL_LOG_PREFIX="\$RUN_LOG_DIR\/iteration-\$\{iteration\}\.verify-eval"/)
-    assert.match(script, /cd "\$REPO"\n  run_eval_set "\$VERIFY_DIR" "\$VERIFY_EVAL_LOG_PREFIX"/)
+    assert.match(script, /cd "\$REPO"\n\s+run_eval_set "\$VERIFY_DIR" "\$VERIFY_EVAL_LOG_PREFIX"/)
     assert.match(script, /node "\$HELPER" compare "\$SELECTED_MODEL" "\$ACTIVE_BASELINE_JSON" "\$VERIFY_JSON"/)
     assert.match(script, /cp "\$VERIFY_JSON" "\$ACTIVE_BASELINE_JSON"/)
     assert.match(script, /CANDIDATE_CAN_IMPROVE="yes"/)
+  })
+
+  it("checks failed-memory duplicates before expensive verification work", () => {
+    const script = readFileSync(new URL("./auto-optimize.sh", import.meta.url), "utf8")
+    const duplicateIndex = script.indexOf("failed-memory-duplicate")
+    const testIndex = script.indexOf('run_to_log "$TEST_LOG" pnpm test')
+    const verifyIndex = script.indexOf('run_eval_set "$VERIFY_DIR" "$VERIFY_EVAL_LOG_PREFIX"')
+
+    assert.notEqual(duplicateIndex, -1)
+    assert.ok(duplicateIndex < testIndex)
+    assert.ok(duplicateIndex < verifyIndex)
+    assert.match(script, /verification skipped: duplicate failed product diff/)
+    assert.match(script, /node "\$HELPER" append-failed-experiment/)
+  })
+
+  it("lets the tracked failed ledger survive between iterations without blocking imports", () => {
+    const script = readFileSync(new URL("./auto-optimize.sh", import.meta.url), "utf8")
+
+    assert.match(script, /git ls-files --error-unmatch "\$FAILED_LEDGER"/)
+    assert.match(script, /must be tracked before running the optimizer/)
+    assert.match(script, /git ls-files --others --exclude-standard \| grep -vxF "\$FAILED_LEDGER"/)
+    assert.match(script, /git -C "\$REPO" ls-files --others --exclude-standard \| grep -vxF "\$FAILED_LEDGER"/)
+    assert.match(script, /git diff --quiet -- \. ":\(exclude\)\$FAILED_LEDGER"/)
+    assert.match(script, /git -C "\$REPO" diff --quiet -- \. ":\(exclude\)\$FAILED_LEDGER"/)
+    assert.match(script, /git diff --cached --quiet/)
+    assert.match(script, /git -C "\$REPO" diff --cached --quiet/)
+    assert.doesNotMatch(script, /diff --cached --quiet -- \. ":\(exclude\)\$FAILED_LEDGER"/)
   })
 
   it("keeps outer loop logs and optimization result authoritative", () => {
@@ -917,7 +1449,7 @@ describe("auto optimizer helper", () => {
     assert.match(script, /optimizer logs:/)
     assert.match(script, /run_eval_set "\$VERIFY_DIR" "\$VERIFY_EVAL_LOG_PREFIX"/)
     assert.match(script, /ignoring inner docs patch; outer harness writes authoritative optimization log/)
-    assert.match(script, /append_docs_note "\$SELECTED_MODEL" "\$iteration" "\$SCORE_LINE"/)
+    assert.match(script, /append_accepted_log "\$SELECTED_MODEL" "\$iteration" "\$SCORE_LINE"/)
     assert.match(script, /append_run_note "\$SELECTED_MODEL" "\$iteration" "\$SCORE_LINE"/)
     assert.match(script, /baseline_eval:%s verify_eval:%s/)
     assert.doesNotMatch(script, /auto-optimize: \$\{SELECTED_MODEL\} no improvement/)
@@ -996,13 +1528,25 @@ describe("auto optimizer helper", () => {
     assert.match(verifyLog, /EVAL_STDOUT qwen-2\.5-0\.5b/)
     assert.match(verifyLog, /EVAL_STDERR qwen-2\.5-0\.5b/)
 
-    const docsLog = readFileSync(
-      path.join(repo, "docs", "optimization", "qwen-2.5-0.5b-log.md"),
+    const [acceptedLog] = readFileSync(
+      path.join(repo, "docs", "optimization", "qwen-2.5-0.5b-log.jsonl"),
       "utf8",
+    ).trim().split("\n").map((line) => JSON.parse(line))
+    assert.equal(acceptedLog.schemaVersion, 1)
+    assert.equal(acceptedLog.model, "qwen-2.5-0.5b")
+    assert.equal(acceptedLog.scores.baseline, 0)
+    assert.equal(acceptedLog.scores.candidate, 0.66)
+    assert.match(acceptedLog.logs.test, /iteration-1\.test\.log/)
+    assert.match(acceptedLog.logs.baseline_eval.join(","), /baseline\.eval-qwen-2\.5-0\.5b\.log/)
+    assert.match(acceptedLog.logs.verify_eval.join(","), /iteration-1\.verify-eval-qwen-2\.5-0\.5b\.log/)
+    assert.equal(
+      existsSync(path.join(repo, "docs", "optimization", "qwen-2.5-0.5b-log.md")),
+      false,
     )
-    assert.match(docsLog, /test:.*iteration-1\.test\.log/)
-    assert.match(docsLog, /baseline_eval:.*baseline\.eval-qwen-2\.5-0\.5b\.log/)
-    assert.match(docsLog, /verify_eval:.*iteration-1\.verify-eval-qwen-2\.5-0\.5b\.log/)
+    assert.equal(
+      existsSync(path.join(repo, "docs", "optimization", "failed-experiments.jsonl")),
+      false,
+    )
 
     const commands = readFileSync(commandLog, "utf8")
     const baselineIndex = commands.indexOf("auto-baseline")
@@ -1074,18 +1618,38 @@ describe("auto optimizer helper", () => {
     assert.match(secondPrompt, /Current accepted score: 0\.66/)
     assert.match(thirdPrompt, /Current accepted score: 0\.66/)
     assert.doesNotMatch(thirdPrompt, /Current accepted score: 0\.53/)
+    assert.match(thirdPrompt, /Rejected approaches:/)
+    assert.match(thirdPrompt, /iteration 2: no improvement .*0\.66 -> 0\.53/)
 
     const runLogDir = onlyRunLogDir(repo)
     const secondSummary = readFileSync(path.join(runLogDir, "iteration-2.summary.log"), "utf8")
     assert.match(secondSummary, /no improvement/)
     assert.match(secondSummary, /0\.66 -> 0\.53/)
 
-    const docsLog = readFileSync(
-      path.join(repo, "docs", "optimization", "qwen-2.5-0.5b-log.md"),
+    const acceptedLog = readFileSync(
+      path.join(repo, "docs", "optimization", "qwen-2.5-0.5b-log.jsonl"),
       "utf8",
+    ).trim().split("\n").map((line) => JSON.parse(line))
+    assert.equal(acceptedLog.length, 2)
+    assert.deepEqual(acceptedLog.map((record) => record.iteration), [1, 3])
+    assert.equal(
+      acceptedLog.some((record) => record.scores.candidate === 0.53),
+      false,
     )
-    assert.equal(docsLog.trim().split("\n").length, 2)
-    assert.doesNotMatch(docsLog, /0\.53/)
+    assert.equal(
+      existsSync(path.join(repo, "docs", "optimization", "qwen-2.5-0.5b-log.md")),
+      false,
+    )
+
+    const failedLedger = readFileSync(
+      path.join(repo, "docs", "optimization", "failed-experiments.jsonl"),
+      "utf8",
+    ).trim().split("\n").map((line) => JSON.parse(line))
+    assert.equal(failedLedger.length, 1)
+    assert.equal(failedLedger[0].iteration, 2)
+    assert.match(failedLedger[0].result, /no improvement .*0\.66 -> 0\.53/)
+    assert.equal(failedLedger[0].scores.baseline, 0.66)
+    assert.equal(failedLedger[0].scores.candidate, 0.53)
 
     const commands = readFileSync(commandLog, "utf8")
     assert.equal((commands.match(/git commit /g) ?? []).length, 2)

@@ -1,7 +1,15 @@
 #!/usr/bin/env node
 import { execFileSync } from "node:child_process"
 import { createHash } from "node:crypto"
-import { existsSync, readFileSync, readdirSync, renameSync, writeFileSync } from "node:fs"
+import {
+  appendFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  renameSync,
+  writeFileSync,
+} from "node:fs"
 import { mkdir } from "node:fs/promises"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
@@ -19,6 +27,18 @@ const NON_SELECTED_SCORE_REGRESSION_TOLERANCE = 0.01
 const scriptPath = fileURLToPath(import.meta.url)
 const repoRoot = path.resolve(path.dirname(scriptPath), "..")
 const docsOptimizationPrefix = "docs/optimization/"
+export const FAILED_EXPERIMENTS_LEDGER = "docs/optimization/failed-experiments.jsonl"
+const acceptedLogPattern = new RegExp(
+  `^docs/optimization/(${WEBGPU_EVAL_MODEL_IDS.map((modelId) => modelId.replaceAll(".", "\\.")).join("|")})-log\\.jsonl$`,
+)
+const innerReportFieldNames = Object.freeze([
+  "failure_modes",
+  "hypotheses",
+  "selected",
+  "change",
+  "eval",
+  "result",
+])
 const productSourcePrefixes = Object.freeze([
   "packages/core/src/",
   "packages/react/src/",
@@ -601,6 +621,356 @@ export function formatCompareReasons(comparison) {
   return reasons.length > 0 ? reasons.join("; ") : "no comparison failure reason"
 }
 
+function collapseReportText(value) {
+  const text = String(value ?? "").replace(/\s+/g, " ").trim()
+  return text.length > 0 ? text : null
+}
+
+export function parseInnerReportLine(text) {
+  const raw = collapseReportText(text)
+  const parsed = Object.fromEntries(innerReportFieldNames.map((field) => [field, null]))
+  if (raw === null) return { raw, ...parsed }
+
+  const fieldPattern = new RegExp(
+    `(^|[,;]\\s*|\\s+)(${innerReportFieldNames.join("|")})=`,
+    "g",
+  )
+  const matches = [...raw.matchAll(fieldPattern)].map((match) => ({
+    key: match[2],
+    keyStart: match.index + match[1].length,
+    valueStart: match.index + match[0].length,
+  }))
+
+  for (const [index, match] of matches.entries()) {
+    const next = matches[index + 1]
+    const valueEnd = next ? next.keyStart : raw.length
+    const value = raw.slice(match.valueStart, valueEnd).replace(/[,;\s]+$/g, "").trim()
+    parsed[match.key] = value.length > 0 ? value : null
+  }
+
+  return { raw, ...parsed }
+}
+
+function readOptionalText(filePath) {
+  if (!filePath || filePath === "none" || filePath === "-") return null
+  return existsSync(filePath) ? readFileSync(filePath, "utf8") : null
+}
+
+function readOptionalJson(filePath) {
+  const text = readOptionalText(filePath)
+  return text === null ? null : JSON.parse(text)
+}
+
+export function productDiffHashFromPatchText(patchText) {
+  if (patchText.length === 0) return null
+  return createHash("sha256").update(patchText).digest("hex")
+}
+
+export function productDiffHashFromPatchFile(patchPath) {
+  if (!patchPath || patchPath === "none" || patchPath === "-" || !existsSync(patchPath)) {
+    return null
+  }
+
+  const patch = readFileSync(patchPath)
+  if (patch.length === 0) return null
+  return createHash("sha256").update(patch).digest("hex")
+}
+
+function unquoteGitPath(filePath) {
+  if (filePath.startsWith("\"") && filePath.endsWith("\"")) {
+    try {
+      return JSON.parse(filePath)
+    } catch {
+      return filePath.slice(1, -1)
+    }
+  }
+
+  return filePath
+}
+
+export function changedFilesFromPatchText(patchText) {
+  const files = new Set()
+  const diffHeaderPattern = /^diff --git a\/(.+?) b\/(.+)$/gm
+  let match
+
+  while ((match = diffHeaderPattern.exec(patchText)) !== null) {
+    for (const rawPath of [match[1], match[2]]) {
+      const filePath = normalizeAttemptPath(unquoteGitPath(rawPath))
+      if (filePath !== "/dev/null" && !filePath.startsWith(docsOptimizationPrefix)) {
+        files.add(filePath)
+      }
+    }
+  }
+
+  return [...files].sort((left, right) => left.localeCompare(right))
+}
+
+export function changedFilesFromPatchFile(patchPath) {
+  const patch = readOptionalText(patchPath)
+  return patch === null ? [] : changedFilesFromPatchText(patch)
+}
+
+function failedExperimentsPath(root = repoRoot) {
+  return path.join(root, FAILED_EXPERIMENTS_LEDGER)
+}
+
+function acceptedOptimizationLogPath(modelId, root = repoRoot) {
+  assertKnownModel(modelId)
+  return path.join(root, "docs", "optimization", `${modelId}-log.jsonl`)
+}
+
+export function readFailedExperiments(root = repoRoot) {
+  const ledgerPath = failedExperimentsPath(root)
+  if (!existsSync(ledgerPath)) return []
+
+  return readFileSync(ledgerPath, "utf8")
+    .split(/\r?\n/)
+    .filter((line) => line.trim().length > 0)
+    .map((line, index) => {
+      const record = JSON.parse(line)
+      requireRecord(record, `failed experiment line ${index + 1}`)
+      if (record.schemaVersion !== 1) {
+        throw new Error(`failed experiment line ${index + 1} schemaVersion must be 1.`)
+      }
+      return record
+    })
+}
+
+export function recentFailedExperiments(modelId, limit = 6, root = repoRoot) {
+  return readFailedExperiments(root)
+    .filter((record) => record.model === modelId)
+    .slice()
+    .reverse()
+    .slice(0, limit)
+}
+
+function scoreDelta(scores) {
+  if (!isRecord(scores)) return null
+  if (typeof scores.baseline !== "number" || typeof scores.candidate !== "number") return null
+  const delta = scores.candidate - scores.baseline
+  const sign = delta >= 0 ? "+" : ""
+  return `${sign}${formatScore(delta)}`
+}
+
+export function formatFailedExperimentsPrompt(records, modelId) {
+  const lines = [
+    "Rejected approaches:",
+    `Recent failed experiments for ${modelId}. Do not repeat the same product diff or substantially the same approach unless this attempt is materially different; if it is different, say why in selected=... or change=....`,
+  ]
+
+  if (records.length === 0) {
+    lines.push(`- none recorded for ${modelId}`)
+    return lines.join("\n")
+  }
+
+  for (const record of records) {
+    const parsed = isRecord(record.parsed) ? record.parsed : {}
+    const hash = typeof record.productDiffHash === "string"
+      ? record.productDiffHash.slice(0, 12)
+      : "none"
+    const changedFiles = Array.isArray(record.changedFiles)
+      ? record.changedFiles.slice(0, 4).join(", ")
+      : ""
+    const delta = scoreDelta(record.scores)
+    const scoreText = delta === null ? "" : ` delta=${delta}`
+    const selected = truncateText(parsed.selected ?? parsed.hypotheses ?? "no selected hypothesis", 120)
+    const change = truncateText(parsed.change ?? record.innerReportRaw ?? "no change summary", 140)
+    const reason = truncateText(record.rejectionReason ?? record.result ?? "no rejection reason", 140)
+    lines.push(
+      `- iteration ${record.iteration}: result=${truncateText(record.result, 80)}${scoreText} hash=${hash} files=${changedFiles || "none"}`,
+    )
+    lines.push(`  selected: ${selected}`)
+    lines.push(`  change: ${change}`)
+    lines.push(`  reason: ${reason}`)
+  }
+
+  return lines.join("\n")
+}
+
+export function duplicateFailedExperimentForHash(modelId, productDiffHash, root = repoRoot) {
+  if (productDiffHash === null) return null
+
+  return [...readFailedExperiments(root)]
+    .reverse()
+    .find((record) => record.model === modelId && record.productDiffHash === productDiffHash) ?? null
+}
+
+function logRef(value, root = repoRoot) {
+  if (!value || value === "none" || value === "-") return null
+  const text = String(value)
+  const absolutePath = path.isAbsolute(text) ? text : path.resolve(root, text)
+  if (!existsSync(absolutePath)) return null
+  return path.isAbsolute(text) ? normalizeRelativePath(text, root) : text
+}
+
+function logRefs(value, root = repoRoot) {
+  if (!value || value === "none" || value === "-") return []
+  return String(value)
+    .split(",")
+    .map((ref) => logRef(ref.trim(), root))
+    .filter((ref) => ref !== null)
+}
+
+function rejectionReasonFromResult(result) {
+  const text = String(result ?? "").trim()
+  const match = text.match(/^no improvement \((.*)\)$/)
+  return match ? match[1] : text || "no improvement"
+}
+
+function selectedScoreFromSnapshot(snapshot, modelId) {
+  if (!snapshot) return null
+  const model = isRecord(snapshot.models) ? snapshot.models[modelId] : null
+  return isRecord(model) && typeof model.score === "number" && Number.isFinite(model.score)
+    ? model.score
+    : null
+}
+
+function booleanInput(value) {
+  return value === true || value === "true" || value === "yes" || value === "1"
+}
+
+function failedExperimentScores(modelId, baselineSnapshot, verifySnapshot, comparison, candidateEvaluated) {
+  const selected = isRecord(comparison?.selected) ? comparison.selected : null
+  const baseline = typeof selected?.oldScore === "number"
+    ? selected.oldScore
+    : selectedScoreFromSnapshot(baselineSnapshot, modelId)
+  const verify = selectedScoreFromSnapshot(verifySnapshot, modelId)
+  let candidate = null
+  if (candidateEvaluated) {
+    candidate = typeof selected?.newScore === "number" ? selected.newScore : verify
+  }
+
+  return {
+    baseline,
+    candidate,
+    verify,
+    delta: typeof baseline === "number" && typeof candidate === "number"
+      ? candidate - baseline
+      : null,
+  }
+}
+
+export function buildFailedExperimentRecord(input, root = repoRoot) {
+  const recordInput = requireRecord(input, "failed experiment input")
+  const model = String(recordInput.model)
+  const iteration = Number(recordInput.iteration)
+  if (!Number.isInteger(iteration) || iteration < 1) {
+    throw new Error("failed experiment iteration must be a positive integer.")
+  }
+
+  const report = parseInnerReportLine(readOptionalText(recordInput.reportFile))
+  const baselineSnapshot = readOptionalJson(recordInput.baselineSnapshot)
+  const verifySnapshot = readOptionalJson(recordInput.verifySnapshot)
+  const comparison = readOptionalJson(recordInput.compareJson)
+  const comparisonReason = comparison ? formatCompareReasons(comparison) : null
+  const result = String(recordInput.result ?? "no improvement")
+  const productDiffHash = productDiffHashFromPatchFile(recordInput.productPatch)
+  const candidateEvaluated = booleanInput(recordInput.candidateEvaluated)
+  const rejectionReason = candidateEvaluated && comparisonReason
+    ? comparisonReason
+    : rejectionReasonFromResult(result)
+
+  return {
+    schemaVersion: 1,
+    timestamp: new Date().toISOString(),
+    model,
+    iteration,
+    result,
+    rejectionReason,
+    innerReportRaw: report.raw,
+    parsed: Object.fromEntries(innerReportFieldNames.map((field) => [field, report[field]])),
+    candidateEvaluated,
+    scores: failedExperimentScores(
+      model,
+      baselineSnapshot,
+      verifySnapshot,
+      comparison,
+      candidateEvaluated,
+    ),
+    changedFiles: changedFilesFromPatchFile(recordInput.productPatch),
+    productDiffHash,
+    logs: {
+      codex_stdout: logRef(recordInput.codexStdout, root),
+      codex_stderr: logRef(recordInput.codexStderr, root),
+      test: logRef(recordInput.testLog, root),
+      baseline_eval: logRefs(recordInput.baselineEvalRefs, root),
+      verify_eval: logRefs(recordInput.verifyEvalRefs, root),
+      run_summary: logRef(recordInput.runSummary, root),
+      compare: logRef(recordInput.compareJson, root),
+    },
+  }
+}
+
+export function appendFailedExperiment(record, root = repoRoot) {
+  const checked = requireRecord(record, "failed experiment record")
+  if (checked.schemaVersion !== 1) throw new Error("failed experiment schemaVersion must be 1.")
+
+  const ledgerPath = failedExperimentsPath(root)
+  mkdirSync(path.dirname(ledgerPath), { recursive: true })
+  appendFileSync(ledgerPath, `${JSON.stringify(checked)}\n`)
+}
+
+export function buildAcceptedOptimizationRecord(input, root = repoRoot) {
+  const recordInput = requireRecord(input, "accepted optimization input")
+  const model = String(recordInput.model)
+  assertKnownModel(model)
+  const iteration = Number(recordInput.iteration)
+  if (!Number.isInteger(iteration) || iteration < 1) {
+    throw new Error("accepted optimization iteration must be a positive integer.")
+  }
+
+  const report = parseInnerReportLine(readOptionalText(recordInput.reportFile))
+  const baselineSnapshot = readOptionalJson(recordInput.baselineSnapshot)
+  const verifySnapshot = readOptionalJson(recordInput.verifySnapshot)
+  const comparison = readOptionalJson(recordInput.compareJson)
+  const result = String(recordInput.result ?? "accepted")
+
+  return {
+    schemaVersion: 1,
+    timestamp: new Date().toISOString(),
+    model,
+    iteration,
+    result,
+    innerReportRaw: report.raw,
+    parsed: Object.fromEntries(innerReportFieldNames.map((field) => [field, report[field]])),
+    scores: failedExperimentScores(model, baselineSnapshot, verifySnapshot, comparison, true),
+    logs: {
+      codex_stdout: logRef(recordInput.codexStdout, root),
+      codex_stderr: logRef(recordInput.codexStderr, root),
+      test: logRef(recordInput.testLog, root),
+      baseline_eval: logRefs(recordInput.baselineEvalRefs, root),
+      verify_eval: logRefs(recordInput.verifyEvalRefs, root),
+      compare: logRef(recordInput.compareJson, root),
+    },
+  }
+}
+
+export function appendAcceptedOptimizationLog(record, root = repoRoot) {
+  const checked = requireRecord(record, "accepted optimization record")
+  if (checked.schemaVersion !== 1) {
+    throw new Error("accepted optimization schemaVersion must be 1.")
+  }
+  const model = String(checked.model)
+  const logPath = acceptedOptimizationLogPath(model, root)
+  mkdirSync(path.dirname(logPath), { recursive: true })
+  appendFileSync(logPath, `${JSON.stringify(checked)}\n`)
+}
+
+function formatDuplicateFailedExperiment(record) {
+  const hash = typeof record.productDiffHash === "string"
+    ? record.productDiffHash.slice(0, 12)
+    : "unknown"
+  const changedFiles = Array.isArray(record.changedFiles)
+    ? record.changedFiles.slice(0, 4).join(", ")
+    : ""
+  return [
+    `duplicate failed product diff hash=${hash}`,
+    `iteration=${record.iteration}`,
+    `result=${truncateText(record.result, 120)}`,
+    changedFiles ? `files=${changedFiles}` : null,
+  ].filter(Boolean).join("; ")
+}
+
 function gitStatusRecords(root = repoRoot) {
   const output = execFileSync(
     "git",
@@ -633,7 +1003,11 @@ export function isAllowedAttemptPath(filePath) {
   const normalized = normalizeAttemptPath(filePath)
   if (isBlockedAttemptPath(normalized)) return false
 
-  if (normalized.startsWith(docsOptimizationPrefix) && normalized.endsWith(".md")) {
+  if (normalized === FAILED_EXPERIMENTS_LEDGER) {
+    return true
+  }
+
+  if (acceptedLogPattern.test(normalized)) {
     return true
   }
 
@@ -661,6 +1035,10 @@ function ensureAttemptScope(root = repoRoot) {
 function attemptPaths(root = repoRoot) {
   ensureAttemptScope(root)
   return statusPaths(root).filter(isAllowedAttemptPath)
+}
+
+function committableAttemptPaths(root = repoRoot) {
+  return attemptPaths(root).filter((filePath) => normalizeAttemptPath(filePath) !== FAILED_EXPERIMENTS_LEDGER)
 }
 
 export async function updateLastGoodScores(selectedModel, snapshotPath, commitSha, root = repoRoot) {
@@ -742,6 +1120,81 @@ async function main(argv) {
     printPromptSummary(argv[1], readSnapshot(argv[2]))
   } else if (command === "prompt-evidence") {
     console.log(buildPromptEvidence(argv[1], readSnapshot(argv[2])))
+  } else if (command === "failed-memory-prompt") {
+    const limit = argv[2] ? validatePositiveInteger(argv[2], "limit") : 6
+    console.log(formatFailedExperimentsPrompt(recentFailedExperiments(argv[1], limit), argv[1]))
+  } else if (command === "failed-memory-duplicate") {
+    const productDiffHash = productDiffHashFromPatchFile(argv[2])
+    const duplicate = duplicateFailedExperimentForHash(argv[1], productDiffHash)
+    if (duplicate) console.log(formatDuplicateFailedExperiment(duplicate))
+  } else if (command === "append-failed-experiment") {
+    const [
+      model,
+      iteration,
+      result,
+      reportFile,
+      productPatch,
+      baselineSnapshot,
+      verifySnapshot,
+      compareJson,
+      codexStdout,
+      codexStderr,
+      testLog,
+      baselineEvalRefs,
+      verifyEvalRefs,
+      runSummary,
+      candidateEvaluated,
+    ] = argv.slice(1)
+    appendFailedExperiment(
+      buildFailedExperimentRecord({
+        model,
+        iteration,
+        result,
+        reportFile,
+        productPatch,
+        baselineSnapshot,
+        verifySnapshot,
+        compareJson,
+        codexStdout,
+        codexStderr,
+        testLog,
+        baselineEvalRefs,
+        verifyEvalRefs,
+        runSummary,
+        candidateEvaluated,
+      }),
+    )
+  } else if (command === "append-accepted-log") {
+    const [
+      model,
+      iteration,
+      result,
+      reportFile,
+      baselineSnapshot,
+      verifySnapshot,
+      compareJson,
+      codexStdout,
+      codexStderr,
+      testLog,
+      baselineEvalRefs,
+      verifyEvalRefs,
+    ] = argv.slice(1)
+    appendAcceptedOptimizationLog(
+      buildAcceptedOptimizationRecord({
+        model,
+        iteration,
+        result,
+        reportFile,
+        baselineSnapshot,
+        verifySnapshot,
+        compareJson,
+        codexStdout,
+        codexStderr,
+        testLog,
+        baselineEvalRefs,
+        verifyEvalRefs,
+      }),
+    )
   } else if (command === "compare") {
     console.log(
       JSON.stringify(compareSnapshots(argv[1], readSnapshot(argv[2]), readSnapshot(argv[3])), null, 2),
@@ -765,7 +1218,7 @@ async function main(argv) {
   } else if (command === "ensure-reset-scope") {
     ensureAttemptScope(optionalRoot(argv[1]))
   } else if (command === "commit-paths") {
-    const paths = attemptPaths(optionalRoot(argv[1]))
+    const paths = committableAttemptPaths(optionalRoot(argv[1]))
     process.stdout.write(paths.join("\0"))
     if (paths.length > 0) process.stdout.write("\0")
   } else if (command === "update-last-good") {
@@ -777,6 +1230,7 @@ async function main(argv) {
         "Commands: models, validate-options, latest-snapshot, snapshot, validate-artifact,",
         "select-model, prompt-summary, prompt-evidence, compare, compare-status,",
         "compare-new-score, compare-score-improvement, compare-reasons, compare-artifact, candidate-count,",
+        "failed-memory-prompt, failed-memory-duplicate, append-failed-experiment, append-accepted-log,",
         "ensure-reset-scope, commit-paths, update-last-good",
       ].join("\n"),
     )
