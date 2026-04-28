@@ -295,8 +295,11 @@ describe("translate", () => {
         {
           role: "system",
           content:
-            "You are a translation engine. Translate from en to es. " +
-            "Output only the translation.",
+            "You are a translation engine. Translate from English (en) to Spanish (es). " +
+            "Output only the translation. " +
+            "Translate short UI labels, buttons, headings, and sentence fragments naturally; do not copy source text just because it is short. " +
+            "Keep brand names, product names, code identifiers, URLs, numbers, and preserved terms unchanged; translate the surrounding prose. " +
+            "Do not return the source unchanged when it contains translatable prose.",
         },
         {
           role: "user",

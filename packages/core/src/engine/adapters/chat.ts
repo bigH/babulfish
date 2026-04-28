@@ -101,7 +101,7 @@ function normalizeChatText(text: string): string {
   return stripTranslationWrapper(stripLeadingThinking(text))
 }
 
-export class ChatModelBaseAdapter<
+export abstract class ChatModelBaseAdapter<
   ModelOutput = unknown,
 > extends TranslateModelBaseAdapter<ChatInput, ModelOutput, ChatOptions> {
   constructor(config: ChatAdapterConfig) {
@@ -147,47 +147,10 @@ export class ChatModelBaseAdapter<
     }
   }
 
-  protected buildSystemPrompt(
+  protected abstract buildSystemPrompt(
     request: TranslationRequest,
     options: TranslationOptions,
-  ): string {
-    return this.buildBaseTranslationPrompt(
-      request.source.code,
-      request.target.code,
-      options,
-    )
-  }
-
-  protected buildBaseTranslationPrompt(
-    sourceLanguage: string,
-    targetLanguage: string,
-    options: TranslationOptions,
-  ): string {
-    const instructions = [
-      `You are a translation engine. Translate from ${sourceLanguage} to ${targetLanguage}.`,
-      "Output only the translation.",
-    ]
-
-    if (options.content_type === "markdown") {
-      instructions.push("Preserve Markdown formatting and translate only human-readable prose.")
-    }
-
-    if (options.content_type === "structured") {
-      instructions.push("Copy all structured tokens exactly and keep them in order.")
-    }
-
-    const preservedInstruction = this.preservedSubstringsPrompt(options)
-    if (preservedInstruction !== null) {
-      instructions.push(preservedInstruction)
-    }
-
-    const placeholderInstruction = this.placeholderPreservationPrompt(options)
-    if (placeholderInstruction !== null) {
-      instructions.push(placeholderInstruction)
-    }
-
-    return instructions.join(" ")
-  }
+  ): string
 
   protected override extractModelText(
     _request: TranslationRequest,

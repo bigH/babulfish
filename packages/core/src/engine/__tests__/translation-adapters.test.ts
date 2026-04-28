@@ -32,17 +32,31 @@ const QWEN3_CHAT_MODEL_OPTIONS = {
   ...BASE_CHAT_MODEL_OPTIONS,
   tokenizer_encode_kwargs: { enable_thinking: false },
 }
+const QWEN3_BASE_SYSTEM_PROMPT =
+  "You are a translation engine. Translate from English (en) to Spanish (es). " +
+  "Output only the translation. " +
+  "Translate short UI labels, buttons, headings, and sentence fragments naturally; do not copy source text just because it is short. " +
+  "Keep brand names, product names, code identifiers, URLs, numbers, and preserved terms unchanged; translate the surrounding prose. " +
+  "Do not return the source unchanged when it contains translatable prose."
+const QWEN3_MARKDOWN_INSTRUCTION =
+  "Preserve Markdown formatting markers exactly, including headings, emphasis, code spans, links, and lists; translate only human-readable prose."
+const GEMMA3_BASE_SYSTEM_PROMPT =
+  "You are a translation engine. Translate from en to es. Output only the translation."
+const GEMMA3_MARKDOWN_INSTRUCTION =
+  "Preserve Markdown formatting and translate only human-readable prose."
 const PRESERVE_TOKEN_PATTERN = /\u27EAbf-preserve:[^\u27EB]+\u27EB/gu
 const CHAT_ADAPTER_FIXTURES = [
   [
     "qwen-3-0.6b-chat",
     qwen3ChatAdapter,
-    "You are a translation engine. Translate from en to es. Output only the translation.",
+    QWEN3_BASE_SYSTEM_PROMPT,
+    QWEN3_CHAT_MODEL_OPTIONS,
   ],
   [
     "gemma-3-1b-it-chat",
     gemma3ChatAdapter,
-    "You are a translation engine. Translate from en to es. Output only the translation.",
+    GEMMA3_BASE_SYSTEM_PROMPT,
+    BASE_CHAT_MODEL_OPTIONS,
   ],
 ] as const
 
@@ -130,10 +144,6 @@ class InspectableTranslateAdapter extends TranslateModelBaseAdapter<
     return this.usesPlaceholderPreservation(options)
   }
 
-  inspectPreservedSubstringsPrompt(options: TranslationOptions) {
-    return this.preservedSubstringsPrompt(options)
-  }
-
   protected override buildModelInvocation(
     request: TranslationRequest,
     options: TranslationOptions,
@@ -195,25 +205,6 @@ describe("TranslateModelBaseAdapter", () => {
         preservation_approach: "placeholders",
       }),
     ).toBe(true)
-  })
-
-  it("builds the shared exact-substring prompt instruction only for prompting", () => {
-    const adapter = new InspectableTranslateAdapter()
-
-    expect(
-      adapter.inspectPreservedSubstringsPrompt({
-        max_new_tokens: 64,
-        substrings_to_preserve: ["**world**", "babulfish"],
-        preservation_approach: "prompting",
-      }),
-    ).toBe("Preserve these exact substrings unchanged: [\"**world**\",\"babulfish\"].")
-    expect(
-      adapter.inspectPreservedSubstringsPrompt({
-        max_new_tokens: 64,
-        substrings_to_preserve: ["**world**"],
-        preservation_approach: "placeholders",
-      }),
-    ).toBeNull()
   })
 
   it("masks placeholder-preserved substrings around model invocation and extraction", () => {
@@ -395,7 +386,7 @@ describe("chat adapters", () => {
 
   it.each(CHAT_ADAPTER_FIXTURES)(
     "builds deterministic chat messages for %s",
-    (_id, adapter, systemPrompt) => {
+    (_id, adapter, systemPrompt, modelOptions) => {
       const invocation = adapter.buildInvocation(REQUEST, OPTIONS)
       const expectedMessages = [
         {
@@ -409,7 +400,38 @@ describe("chat adapters", () => {
       ]
 
       expect(invocation.modelInput).toEqual(expectedMessages)
-      expect(invocation.modelOptions).toMatchObject(BASE_CHAT_MODEL_OPTIONS)
+      expect(invocation.modelOptions).toEqual(modelOptions)
+    },
+  )
+
+  it("keeps built-in chat prompts model-specific", () => {
+    const qwenPrompt = qwen3ChatAdapter.buildInvocation(REQUEST, OPTIONS).modelInput[0]
+      ?.content
+    const gemmaPrompt = gemma3ChatAdapter.buildInvocation(REQUEST, OPTIONS).modelInput[0]
+      ?.content
+
+    expect(qwenPrompt).toBe(QWEN3_BASE_SYSTEM_PROMPT)
+    expect(gemmaPrompt).toBe(GEMMA3_BASE_SYSTEM_PROMPT)
+    expect(qwenPrompt).not.toBe(gemmaPrompt)
+  })
+
+  it.each([
+    ["en-US", "es-ES", "Translate from English (en-US) to Spanish (es-ES)."],
+    ["en", "zh-CN", "Translate from English (en) to Chinese (zh-CN)."],
+    ["en", "pt-BR", "Translate from English (en) to Portuguese (pt-BR)."],
+  ] as const)(
+    "spells Qwen3 regional language codes as names for %s to %s",
+    (source, target, expectedFragment) => {
+      const invocation = qwen3ChatAdapter.buildInvocation(
+        {
+          text: "Hello",
+          source: { code: source },
+          target: { code: target },
+        },
+        OPTIONS,
+      )
+
+      expect(invocation.modelInput[0]?.content).toContain(expectedFragment)
     },
   )
 
@@ -418,9 +440,7 @@ describe("chat adapters", () => {
       modelInput: [
         {
           role: "system",
-          content:
-            "You are a translation engine. Translate from en to es. " +
-            "Output only the translation.",
+          content: QWEN3_BASE_SYSTEM_PROMPT,
         },
         {
           role: "user",
@@ -437,22 +457,38 @@ describe("chat adapters", () => {
     )
   })
 
-  it("adds markdown and exact substring preservation instructions when requested", () => {
-    const invocation = qwen3ChatAdapter.buildInvocation(REQUEST, {
-      max_new_tokens: 64,
-      content_type: "markdown",
-      substrings_to_preserve: ["**world**", "babulfish"],
-      preservation_approach: "prompting",
-    })
+  it.each([
+    [
+      "qwen-3-0.6b-chat",
+      qwen3ChatAdapter,
+      QWEN3_BASE_SYSTEM_PROMPT,
+      QWEN3_MARKDOWN_INSTRUCTION,
+      QWEN3_CHAT_MODEL_OPTIONS,
+    ],
+    [
+      "gemma-3-1b-it-chat",
+      gemma3ChatAdapter,
+      GEMMA3_BASE_SYSTEM_PROMPT,
+      GEMMA3_MARKDOWN_INSTRUCTION,
+      BASE_CHAT_MODEL_OPTIONS,
+    ],
+  ] as const)(
+    "adds markdown and exact substring preservation instructions for %s",
+    (_id, adapter, basePrompt, markdownInstruction, modelOptions) => {
+      const invocation = adapter.buildInvocation(REQUEST, {
+        max_new_tokens: 64,
+        content_type: "markdown",
+        substrings_to_preserve: ["**world**", "babulfish"],
+        preservation_approach: "prompting",
+      })
 
-    expect(invocation.modelInput[0]?.content).toBe(
-      "You are a translation engine. Translate from en to es. " +
-        "Output only the translation. " +
-        "Preserve Markdown formatting and translate only human-readable prose. " +
-        "Preserve these exact substrings unchanged: [\"**world**\",\"babulfish\"].",
-    )
-    expect(invocation.modelOptions).toEqual(QWEN3_CHAT_MODEL_OPTIONS)
-  })
+      expect(invocation.modelInput[0]?.content).toBe(
+        `${basePrompt} ${markdownInstruction} ` +
+          "Preserve these exact substrings unchanged: [\"**world**\",\"babulfish\"].",
+      )
+      expect(invocation.modelOptions).toEqual(modelOptions)
+    },
+  )
 
   it("defaults substring preservation to prompting for chat adapters", () => {
     const invocation = gemma3ChatAdapter.buildInvocation(REQUEST, {
@@ -461,8 +497,7 @@ describe("chat adapters", () => {
     })
 
     expect(invocation.modelInput[0]?.content).toBe(
-      "You are a translation engine. Translate from en to es. " +
-        "Output only the translation. " +
+      `${GEMMA3_BASE_SYSTEM_PROMPT} ` +
         "Preserve these exact substrings unchanged: [\"**world**\"].",
     )
     expect(invocation.modelInput[1]?.content).toBe("Hello **world**")
@@ -470,7 +505,7 @@ describe("chat adapters", () => {
 
   it.each(CHAT_ADAPTER_FIXTURES)(
     "includes token-copy instruction when placeholders are active for %s",
-    (_id, adapter) => {
+    (_id, adapter, systemPrompt) => {
       const options = {
         max_new_tokens: 64,
         substrings_to_preserve: ["**world**"],
@@ -480,9 +515,7 @@ describe("chat adapters", () => {
       const token = expectSinglePreserveToken(invocation.modelInput[1].content)
 
       expect(invocation.modelInput[0]?.content).toBe(
-        "You are a translation engine. Translate from en to es. " +
-          "Output only the translation. " +
-          "Copy every preservation token exactly unchanged.",
+        `${systemPrompt} Copy every preservation token exactly unchanged.`,
       )
       expect(invocation.modelInput[1]?.content).toBe(`Hello ${token}`)
       expect(

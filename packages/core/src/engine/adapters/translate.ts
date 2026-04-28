@@ -134,21 +134,6 @@ export abstract class TranslateModelBaseAdapter<
     )
   }
 
-  protected preservedSubstringsPrompt(options: TranslationOptions): string | null {
-    const substrings = this.preservedSubstrings(options)
-    if (substrings.length === 0 || this.preservationApproach(options) !== "prompting") {
-      return null
-    }
-
-    return `Preserve these exact substrings unchanged: ${JSON.stringify(substrings)}.`
-  }
-
-  protected placeholderPreservationPrompt(options: TranslationOptions): string | null {
-    return this.usesPlaceholderPreservation(options)
-      ? "Copy every preservation token exactly unchanged."
-      : null
-  }
-
   private prepareRequest(
     request: TranslationRequest,
     options: TranslationOptions,
