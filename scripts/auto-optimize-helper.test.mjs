@@ -14,6 +14,7 @@ import path from "node:path"
 import { describe, it } from "node:test"
 import { fileURLToPath } from "node:url"
 
+import * as autoOptimizeHelper from "./auto-optimize-helper.mjs"
 import {
   EXPECTED_CASE_COUNT,
   appendAcceptedOptimizationLog,
@@ -29,6 +30,7 @@ import {
   formatFailedExperimentsPrompt,
   formatScoreImprovement,
   isAllowedAttemptPath,
+  mergeActiveBaselineSnapshot,
   parseInnerReportLine,
   parseRequestedModels,
   productDiffHashFromPatchText,
@@ -36,6 +38,7 @@ import {
   recentFailedExperiments,
   selectModelFromSnapshot,
   summarizeArtifactObject,
+  snapshotArtifactDirs,
   updateLastGoodScores,
 } from "./auto-optimize-helper.mjs"
 
@@ -112,6 +115,12 @@ const modelSummary = (modelId, score, overrides = {}) => ({
   artifactHash: `${modelId}-hash`,
 })
 
+const modelSummaryInDir = (modelId, score, artifactDir, overrides = {}) => ({
+  ...modelSummary(modelId, score, overrides),
+  artifact: `${artifactDir}/${modelId}.json`,
+  artifactHash: `${modelId}-${artifactDir}-hash`,
+})
+
 const writeExecutable = (filePath, contents) => {
   writeFileSync(filePath, contents)
   chmodSync(filePath, 0o755)
@@ -127,7 +136,25 @@ const onlyRunLogDir = (repo) => {
   return entries[0]
 }
 
+const readFirstExisting = (paths) => {
+  const filePath = paths.find((candidate) => existsSync(candidate))
+  assert.ok(filePath, `Expected one of these files to exist:\n${paths.join("\n")}`)
+  return readFileSync(filePath, "utf8")
+}
+
 const helperPath = fileURLToPath(new URL("./auto-optimize-helper.mjs", import.meta.url))
+
+const requiredHelperFunction = (name) => {
+  const helper = autoOptimizeHelper[name]
+  assert.equal(typeof helper, "function", `${name} must be exported by auto-optimize-helper.mjs`)
+  return helper
+}
+
+const sorted = (values) => [...values].sort((left, right) => left.localeCompare(right))
+
+const assertSameMembers = (actual, expected, label) => {
+  assert.deepEqual(sorted(actual), sorted(expected), label)
+}
 
 const helperShim = `#!/usr/bin/env node
 import crypto from "node:crypto"
@@ -137,11 +164,16 @@ import path from "node:path"
 const allModels = ["qwen-3-0.6b", "gemma-3-1b-it", "translategemma-4"]
 const command = process.argv[2]
 const args = process.argv.slice(3)
+const qwenIteration1Score = Number(process.env.MOCK_QWEN_ITERATION_1_SCORE ?? 0.66)
 const qwenScoresByIteration = new Map([
   [0, 0],
-  [1, 0.66],
+  [1, qwenIteration1Score],
   [2, 0.53],
   [3, 0.67],
+])
+const gemmaScoresByIteration = new Map([
+  [0, 0.8],
+  [2, 0.82],
 ])
 
 if (process.env.MOCK_LOG) {
@@ -178,7 +210,7 @@ const scoreFor = (model, outputDir) => {
   if (model === "qwen-3-0.6b") {
     return qwenScoresByIteration.get(verifyIteration(outputDir)) ?? 0.67
   }
-  if (model === "gemma-3-1b-it") return 0.8
+  if (model === "gemma-3-1b-it") return gemmaScoresByIteration.get(verifyIteration(outputDir)) ?? 0.8
   return 0.9
 }
 const modelSummary = (model, outputDir) => {
@@ -373,7 +405,71 @@ switch (command) {
   }
   case "ensure-reset-scope":
     break
+  case "reset-banned-paths":
+  case "cleanup-banned-paths":
+  case "resettable-banned-paths":
+  case "reset-banned-files":
+    break
+  case "target-adapter-path": {
+    const adapterPaths = {
+      "qwen-3-0.6b": "packages/core/src/engine/adapters/models/qwen-3-0-6b.ts",
+      "gemma-3-1b-it": "packages/core/src/engine/adapters/models/gemma-3-1b-it.ts",
+      "translategemma-4": "packages/core/src/engine/adapters/models/translategemma-4.ts",
+    }
+    console.log(adapterPaths[args[0]])
+    break
+  }
+  case "eval-models-for-changed-paths":
+  case "eval-models": {
+    console.log(args[0])
+    break
+  }
+  case "classify-changed-paths":
+    console.log(JSON.stringify({
+      productCodePaths: changedFiles(args[0] ?? "none"),
+      productTestPaths: [],
+      docsPaths: [],
+      resettableBannedPaths: [],
+      bannedPaths: [],
+      targetAdapterModels: [],
+    }))
+    break
+  case "changed-paths-nul": {
+    const kind = args[0]
+    if (kind === "product") {
+      process.stdout.write("packages/core/src/engine/adapters/chat.ts\\0")
+    } else if (kind === "docs-test") {
+      process.stdout.write("")
+    } else if (kind === "cleanup") {
+      process.stdout.write("")
+    } else {
+      console.error("unexpected changed-paths-nul kind " + kind)
+      process.exit(1)
+    }
+    break
+  }
+  case "changed-paths": {
+    const kind = args[0]
+    if (kind === "product") {
+      console.log("packages/core/src/engine/adapters/chat.ts")
+    } else if (kind === "docs-test" || kind === "cleanup") {
+      process.stdout.write("")
+    } else {
+      console.error("unexpected changed-paths kind " + kind)
+      process.exit(1)
+    }
+    break
+  }
+  case "snapshot-artifact-dirs": {
+    const snapshot = readJson(args[0])
+    const dirs = new Set(Object.values(snapshot.models).map((model) => path.dirname(model.artifact)))
+    console.log([...dirs].sort().join("\\n"))
+    break
+  }
   case "compare":
+    console.log(JSON.stringify(compare(args[0], readJson(args[1]), readJson(args[2]))))
+    break
+  case "compare-evaluated":
     console.log(JSON.stringify(compare(args[0], readJson(args[1]), readJson(args[2]))))
     break
   case "compare-status":
@@ -406,6 +502,26 @@ switch (command) {
     break
   case "update-last-good":
     break
+  case "merge-active-baseline": {
+    const [model, baselinePath, verifyPath] = args
+    const baseline = readJson(baselinePath)
+    const verify = readJson(verifyPath)
+    const models = { ...baseline.models, ...verify.models }
+    const modelsRequested = allModels.filter((modelId) => models[modelId])
+    const artifactDirs = Object.fromEntries(
+      modelsRequested.map((modelId) => [modelId, path.dirname(models[modelId].artifact)]),
+    )
+    const dirs = [...new Set(Object.values(artifactDirs))].sort()
+    console.log(JSON.stringify({
+      ...baseline,
+      artifactsDir: dirs.length === 1 ? dirs[0] : null,
+      artifactDirs,
+      mixedArtifacts: dirs.length > 1,
+      modelsRequested,
+      models,
+    }))
+    break
+  }
   default:
     console.error("unexpected helper command " + command)
     process.exit(1)
@@ -490,6 +606,22 @@ if (command === "diff") {
     process.exit(!isInnerWorktree && readState().dirty && !args.includes("--cached") ? 1 : 0)
   }
   if (args.includes("--cached")) process.exit(0)
+  if (args.some((arg) => arg.startsWith("--pathspec-from-file="))) {
+    if (isInnerWorktree) {
+      process.stdout.write("mock product patch iteration-" + innerIteration() + "\\n")
+    } else if (readState().dirty) {
+      process.stdout.write(readState().patch ?? "mock product patch\\n")
+    }
+    process.exit(0)
+  }
+  if (args.includes("--")) {
+    if (isInnerWorktree) {
+      process.stdout.write("mock product patch iteration-" + innerIteration() + "\\n")
+    } else if (readState().dirty) {
+      process.stdout.write(readState().patch ?? "mock product patch\\n")
+    }
+    process.exit(0)
+  }
   if (args.includes(":(exclude)docs/optimization/**")) {
     if (isInnerWorktree) {
       process.stdout.write("mock product patch iteration-" + innerIteration() + "\\n")
@@ -1170,6 +1302,33 @@ describe("auto optimizer helper", () => {
     assert.equal(lastGood.role, "bookkeeping-only")
     assert.equal(lastGood.acceptancePolicy, "active-baseline-snapshot")
     assert.equal(lastGood.models["qwen-3-0.6b"].score, 0.66)
+
+    const gemmaSnapshotPath = path.join(root, "gemma-snapshot.json")
+    writeFileSync(
+      gemmaSnapshotPath,
+      `${JSON.stringify({
+        ...snapshot({
+          "gemma-3-1b-it": modelSummaryInDir(
+            "gemma-3-1b-it",
+            0.8,
+            ".evals/web-gpu-gemma-verify",
+          ),
+        }),
+        artifactsDir: ".evals/web-gpu-gemma-verify",
+      })}\n`,
+    )
+
+    await updateLastGoodScores("gemma-3-1b-it", gemmaSnapshotPath, "def456", root)
+
+    const mixedLastGood = JSON.parse(
+      readFileSync(path.join(root, ".evals", "auto-optimizer", "last-good-scores.json"), "utf8"),
+    )
+    assert.equal(mixedLastGood.artifactsDir, null)
+    assert.equal(mixedLastGood.mixedArtifacts, true)
+    assert.deepEqual(mixedLastGood.artifactDirs, {
+      "qwen-3-0.6b": ".evals/web-gpu-test",
+      "gemma-3-1b-it": ".evals/web-gpu-gemma-verify",
+    })
   })
 
   it("builds a concise prompt evidence packet from a baseline artifact", () => {
@@ -1214,6 +1373,194 @@ describe("auto optimizer helper", () => {
     assert.match(prompt, /Failure evidence:/)
     assert.match(prompt, /failures by check:/)
     assert.match(prompt, /lowest scoring failed cases:/)
+  })
+
+  it("classifies target adapter paths separately from product, docs, and banned paths", () => {
+    const targetAdapterPath = requiredHelperFunction("targetAdapterPath")
+    const classifyChangedPaths = requiredHelperFunction("classifyChangedPaths")
+
+    assert.equal(
+      targetAdapterPath("qwen-3-0.6b"),
+      "packages/core/src/engine/adapters/models/qwen-3-0-6b.ts",
+    )
+    assert.equal(
+      targetAdapterPath("gemma-3-1b-it"),
+      "packages/core/src/engine/adapters/models/gemma-3-1b-it.ts",
+    )
+    assert.equal(
+      targetAdapterPath("translategemma-4"),
+      "packages/core/src/engine/adapters/models/translategemma-4.ts",
+    )
+
+    const classification = classifyChangedPaths([
+      "packages/core/src/engine/adapters/models/qwen-3-0-6b.ts",
+      "packages/core/src/engine/adapters/chat.ts",
+      "packages/core/src/engine/__tests__/translation-adapters.test.ts",
+      "packages/core/README.md",
+      "docs/optimization/qwen-3-0.6b-log.jsonl",
+      ".evals/web-gpu-candidate/qwen-3-0.6b.json",
+      "scripts/webgpu-eval.mjs",
+      "package.json",
+    ])
+
+    assertSameMembers(classification.targetAdapterModels, ["qwen-3-0.6b"], "target adapter models")
+    assertSameMembers(
+      classification.productCodePaths,
+      [
+        "packages/core/src/engine/adapters/chat.ts",
+        "packages/core/src/engine/adapters/models/qwen-3-0-6b.ts",
+      ],
+      "product code paths",
+    )
+    assertSameMembers(
+      classification.productTestPaths,
+      ["packages/core/src/engine/__tests__/translation-adapters.test.ts"],
+      "product test paths",
+    )
+    assertSameMembers(classification.docsPaths, ["packages/core/README.md"], "docs paths")
+    assertSameMembers(
+      classification.resettableBannedPaths,
+      [
+        ".evals/web-gpu-candidate/qwen-3-0.6b.json",
+        "docs/optimization/qwen-3-0.6b-log.jsonl",
+      ],
+      "resettable banned paths",
+    )
+    assertSameMembers(
+      classification.bannedPaths,
+      ["package.json", "scripts/webgpu-eval.mjs"],
+      "hard banned paths",
+    )
+  })
+
+  it("selects eval scope from product code paths, not docs or tests", () => {
+    const targetAdapterPath = requiredHelperFunction("targetAdapterPath")
+    const evalModelsForChangedPaths = requiredHelperFunction("evalModelsForChangedPaths")
+
+    assert.deepEqual(
+      evalModelsForChangedPaths("qwen-3-0.6b", [
+        targetAdapterPath("qwen-3-0.6b"),
+        "packages/core/src/engine/__tests__/translation-adapters.test.ts",
+        "packages/core/README.md",
+        "docs/optimization/qwen-3-0.6b-log.jsonl",
+      ]),
+      ["qwen-3-0.6b"],
+    )
+
+    assert.deepEqual(
+      evalModelsForChangedPaths("qwen-3-0.6b", [
+        "packages/core/src/engine/__tests__/translation-adapters.test.ts",
+        "packages/react/README.md",
+      ]),
+      ["qwen-3-0.6b"],
+    )
+
+    assert.deepEqual(
+      evalModelsForChangedPaths("qwen-3-0.6b", [
+        "packages/core/src/engine/adapters/chat.ts",
+      ]),
+      ["qwen-3-0.6b", "gemma-3-1b-it", "translategemma-4"],
+    )
+
+    assert.deepEqual(
+      evalModelsForChangedPaths("translategemma-4", [
+        targetAdapterPath("translategemma-4"),
+      ]),
+      ["translategemma-4"],
+    )
+  })
+
+  it("allows target-only verification to omit non-targets while all-model verification protects them", () => {
+    const baseline = snapshot({
+      "qwen-3-0.6b": modelSummary("qwen-3-0.6b", 0.2),
+      "gemma-3-1b-it": modelSummary("gemma-3-1b-it", 0.8),
+      "translategemma-4": modelSummary("translategemma-4", 0.9),
+    })
+    const targetOnly = snapshot({
+      "qwen-3-0.6b": modelSummary("qwen-3-0.6b", 0.3),
+    })
+
+    assert.equal(
+      compareSnapshots("qwen-3-0.6b", baseline, targetOnly, {
+        evaluatedModels: ["qwen-3-0.6b"],
+        verifyArtifactHashes: false,
+      }).status,
+      "pass",
+    )
+
+    const missingProtected = compareSnapshots("qwen-3-0.6b", baseline, targetOnly, {
+      evaluatedModels: ["qwen-3-0.6b", "gemma-3-1b-it", "translategemma-4"],
+      verifyArtifactHashes: false,
+    })
+    assert.equal(missingProtected.status, "stop")
+    assert.match(missingProtected.stops.join("\n"), /missing non-selected model gemma-3-1b-it/)
+
+    const protectedRegression = compareSnapshots(
+      "qwen-3-0.6b",
+      baseline,
+      snapshot({
+        "qwen-3-0.6b": modelSummary("qwen-3-0.6b", 0.3),
+        "gemma-3-1b-it": modelSummary("gemma-3-1b-it", 0.7),
+        "translategemma-4": modelSummary("translategemma-4", 0.9),
+      }),
+      {
+        evaluatedModels: ["qwen-3-0.6b", "gemma-3-1b-it", "translategemma-4"],
+        verifyArtifactHashes: false,
+      },
+    )
+    assert.equal(protectedRegression.status, "fail")
+    assert.match(protectedRegression.reasons.join("\n"), /gemma-3-1b-it score regressed/)
+  })
+
+  it("keeps mixed active baseline artifact metadata coherent after target-only accepts", () => {
+    const baselineDir = ".evals/web-gpu-baseline"
+    const targetVerifyDir = ".evals/web-gpu-qwen-verify"
+    const allVerifyDir = ".evals/web-gpu-all-verify"
+    const baseline = {
+      ...snapshot({
+        "qwen-3-0.6b": modelSummaryInDir("qwen-3-0.6b", 0.2, baselineDir),
+        "gemma-3-1b-it": modelSummaryInDir("gemma-3-1b-it", 0.8, baselineDir),
+        "translategemma-4": modelSummaryInDir("translategemma-4", 0.9, baselineDir),
+      }),
+      artifactsDir: baselineDir,
+    }
+    const targetOnly = {
+      ...snapshot({
+        "qwen-3-0.6b": modelSummaryInDir("qwen-3-0.6b", 0.3, targetVerifyDir),
+      }),
+      artifactsDir: targetVerifyDir,
+    }
+
+    const mixed = mergeActiveBaselineSnapshot("qwen-3-0.6b", baseline, targetOnly)
+
+    assert.equal(mixed.artifactsDir, null)
+    assert.equal(mixed.mixedArtifacts, true)
+    assert.deepEqual(mixed.artifactDirs, {
+      "qwen-3-0.6b": targetVerifyDir,
+      "gemma-3-1b-it": baselineDir,
+      "translategemma-4": baselineDir,
+    })
+    assert.equal(mixed.models["qwen-3-0.6b"].artifact, `${targetVerifyDir}/qwen-3-0.6b.json`)
+    assert.equal(mixed.models["gemma-3-1b-it"].artifact, `${baselineDir}/gemma-3-1b-it.json`)
+    assert.deepEqual(snapshotArtifactDirs(mixed), [baselineDir, targetVerifyDir].sort())
+
+    const allModelVerification = {
+      ...snapshot({
+        "qwen-3-0.6b": modelSummaryInDir("qwen-3-0.6b", 0.31, allVerifyDir),
+        "gemma-3-1b-it": modelSummaryInDir("gemma-3-1b-it", 0.81, allVerifyDir),
+        "translategemma-4": modelSummaryInDir("translategemma-4", 0.91, allVerifyDir),
+      }),
+      artifactsDir: allVerifyDir,
+    }
+    const unified = mergeActiveBaselineSnapshot("gemma-3-1b-it", mixed, allModelVerification)
+
+    assert.equal(unified.artifactsDir, allVerifyDir)
+    assert.equal(unified.mixedArtifacts, false)
+    assert.deepEqual(unified.artifactDirs, {
+      "qwen-3-0.6b": allVerifyDir,
+      "gemma-3-1b-it": allVerifyDir,
+      "translategemma-4": allVerifyDir,
+    })
   })
 
   it("allows product source paths for optimizer attempts", () => {
@@ -1383,7 +1730,7 @@ describe("auto optimizer helper", () => {
     assert.match(script, /if run_to_log "\$eval_log" pnpm eval:webgpu/)
     assert.match(script, /eval_status=\$\?/)
     assert.match(script, /if ! node "\$HELPER" validate-artifact "\$model" "\$output_dir"; then/)
-    assert.match(script, /See \$eval_log/)
+    assert.match(script, /See (?:\$eval_log|%s\\n' "\$model" "\$eval_status" "\$eval_log")/)
   })
 
   it("captures outer tests and evals quietly", () => {
@@ -1401,11 +1748,17 @@ describe("auto optimizer helper", () => {
     assert.match(script, /SELECTED_MODEL="\$\(node "\$HELPER" select-model "\$MODEL_ARG" "\$ACTIVE_BASELINE_JSON"\)"/)
     assert.match(script, /write_inner_prompt .*"\$ACTIVE_BASELINE_JSON"/)
     assert.match(script, /node "\$HELPER" failed-memory-prompt "\$selected_model" 6/)
-    assert.match(script, /VERIFY_EVAL_LOG_PREFIX="\$RUN_LOG_DIR\/iteration-\$\{iteration\}\.verify-eval"/)
-    assert.match(script, /cd "\$REPO"\n\s+run_eval_set "\$VERIFY_DIR" "\$VERIFY_EVAL_LOG_PREFIX"/)
-    assert.match(script, /node "\$HELPER" compare "\$SELECTED_MODEL" "\$ACTIVE_BASELINE_JSON" "\$VERIFY_JSON"/)
-    assert.match(script, /cp "\$VERIFY_JSON" "\$ACTIVE_BASELINE_JSON"/)
-    assert.match(script, /CANDIDATE_CAN_IMPROVE="yes"/)
+    assert.match(
+      script,
+      /VERIFY_EVAL_LOG_PREFIX="\$(?:RUN_LOG_DIR\/iteration-\$\{iteration\}\.|ITERATION_DIR\/)verify-eval"/,
+    )
+    assert.match(script, /cd "\$REPO"[\s\S]*run_eval_set "\$VERIFY_DIR" "\$VERIFY_EVAL_LOG_PREFIX"/)
+    assert.match(script, /node "\$HELPER" compare(?:-evaluated)? "\$SELECTED_MODEL" "\$ACTIVE_BASELINE_JSON" "\$VERIFY_JSON"/)
+    assert.match(
+      script,
+      /(?:cp "\$VERIFY_JSON" "\$ACTIVE_BASELINE_JSON"|merge-active-baseline "\$SELECTED_MODEL" "\$ACTIVE_BASELINE_JSON" "\$VERIFY_JSON")/,
+    )
+    assert.match(script, /update-last-good "\$SELECTED_MODEL" "\$ACTIVE_BASELINE_JSON" "\$COMMIT_SHA"/)
   })
 
   it("checks failed-memory duplicates before expensive verification work", () => {
@@ -1417,7 +1770,7 @@ describe("auto optimizer helper", () => {
     assert.notEqual(duplicateIndex, -1)
     assert.ok(duplicateIndex < testIndex)
     assert.ok(duplicateIndex < verifyIndex)
-    assert.match(script, /verification skipped: duplicate failed product diff/)
+    assert.match(script, /verification skipped:/)
     assert.match(script, /node "\$HELPER" append-failed-experiment/)
   })
 
@@ -1442,12 +1795,52 @@ describe("auto optimizer helper", () => {
     assert.match(script, /optimizer tmpdir:/)
     assert.match(script, /optimizer logs:/)
     assert.match(script, /run_eval_set "\$VERIFY_DIR" "\$VERIFY_EVAL_LOG_PREFIX"/)
-    assert.match(script, /ignoring inner docs patch; outer harness writes authoritative optimization log/)
     assert.match(script, /append_accepted_log "\$SELECTED_MODEL" "\$iteration" "\$SCORE_LINE"/)
     assert.match(script, /append_run_note "\$SELECTED_MODEL" "\$iteration" "\$SCORE_LINE"/)
     assert.match(script, /baseline_eval:%s verify_eval:%s/)
     assert.doesNotMatch(script, /auto-optimize: \$\{SELECTED_MODEL\} no improvement/)
     assert.doesNotMatch(script, /Append exactly one line to docs\/optimization/)
+  })
+
+  it("stores candidate artifacts and logs under a per-iteration run directory", () => {
+    const script = readFileSync(new URL("./auto-optimize.sh", import.meta.url), "utf8")
+
+    assert.match(script, /RUN_LOG_DIR="\$REPO\/\.evals\/auto-optimizer\/runs\//)
+    assert.match(
+      script,
+      /(?:ITERATION|ATTEMPT)[A-Z_]*DIR="[^"]*\$RUN_LOG_DIR\/iteration-\$\{iteration\}[^"]*"/,
+    )
+    assert.match(script, /mkdir -p "\$(?:ITERATION|ATTEMPT)[A-Z_]*DIR"/)
+    assert.match(script, /PROMPT_FILE="\$(?:ITERATION|ATTEMPT)[A-Z_]*DIR\/prompt\.md"/)
+    assert.match(script, /STDOUT_LOG="\$(?:ITERATION|ATTEMPT)[A-Z_]*DIR\/codex\.stdout\.jsonl"/)
+    assert.match(script, /STDERR_LOG="\$(?:ITERATION|ATTEMPT)[A-Z_]*DIR\/codex\.stderr\.log"/)
+    assert.match(script, /TEST_LOG="\$(?:ITERATION|ATTEMPT)[A-Z_]*DIR\/test\.log"/)
+    assert.match(script, /VERIFY_EVAL_LOG_PREFIX="\$(?:ITERATION|ATTEMPT)[A-Z_]*DIR\/verify-eval"/)
+    assert.match(script, /CANDIDATE_PATCH="\$(?:ITERATION|ATTEMPT)[A-Z_]*DIR\/product\.(?:patch|diff)"/)
+    assert.match(script, /DOCS(?:_TEST)?_PATCH="\$(?:ITERATION|ATTEMPT)[A-Z_]*DIR\/docs(?:-test)?\.(?:patch|diff)"/)
+    assert.match(script, /archive_inner_eval_artifacts "\$inner_repo" "\$CURRENT_ITERATION_DIR"/)
+    assert.match(script, /inner-eval-artifacts\/\.evals/)
+    assert.doesNotMatch(script, /\$RUN_LOG_DIR\/iteration-\$\{iteration\}\.(?:codex|report|test|summary|verify-eval)/)
+  })
+
+  it("cleans resettable banned files before outer tests and verification evals", () => {
+    const script = readFileSync(new URL("./auto-optimize.sh", import.meta.url), "utf8")
+    const classifyCleanupIndex = script.indexOf('write_changed_pathspec cleanup "$inner_repo" "$cleanup_pathspec"')
+    const cleanupIndex = script.indexOf('reset_inner_cleanup_paths "$inner_repo" "$base_sha" "$cleanup_pathspec"')
+    const createPatchesIndex = script.indexOf("create_inner_patches \\")
+    const testIndex = script.indexOf('run_to_log "$TEST_LOG" pnpm test')
+    const verifyIndex = script.indexOf('run_eval_set "$VERIFY_DIR" "$VERIFY_EVAL_LOG_PREFIX"')
+
+    assert.notEqual(classifyCleanupIndex, -1)
+    assert.notEqual(cleanupIndex, -1)
+    assert.notEqual(createPatchesIndex, -1)
+    assert.notEqual(testIndex, -1)
+    assert.notEqual(verifyIndex, -1)
+    assert.ok(classifyCleanupIndex < cleanupIndex, "banned paths must be classified before cleanup")
+    assert.ok(createPatchesIndex < testIndex, "inner cleanup must be part of patch creation before tests")
+    assert.ok(cleanupIndex < testIndex, "banned-file cleanup must run before pnpm test")
+    assert.ok(cleanupIndex < verifyIndex, "banned-file cleanup must run before verification eval")
+    assert.match(script, /node "\$HELPER" changed-paths-nul "\$kind" "\$repo"/)
   })
 
   it("smoke-tests quiet outer eval and test logging with mocked commands", () => {
@@ -1501,19 +1894,22 @@ describe("auto optimizer helper", () => {
     assert.match(result.stdout, /optimizer tmpdir:/)
     assert.match(result.stdout, /optimizer logs:/)
     assert.match(result.stdout, /baseline\.eval-qwen-3-0\.6b\.log/)
-    assert.match(result.stdout, /iteration-1\.test\.log/)
-    assert.match(result.stdout, /iteration-1\.verify-eval-qwen-3-0\.6b\.log/)
+    assert.match(result.stdout, /iteration-1(?:\.|\/)test\.log/)
+    assert.match(result.stdout, /iteration-1(?:\.|\/)verify-eval-qwen-3-0\.6b\.log/)
 
     const runLogDir = onlyRunLogDir(repo)
     const baselineLog = readFileSync(
       path.join(runLogDir, "baseline.eval-qwen-3-0.6b.log"),
       "utf8",
     )
-    const testLog = readFileSync(path.join(runLogDir, "iteration-1.test.log"), "utf8")
-    const verifyLog = readFileSync(
+    const testLog = readFirstExisting([
+      path.join(runLogDir, "iteration-1.test.log"),
+      path.join(runLogDir, "iteration-1", "test.log"),
+    ])
+    const verifyLog = readFirstExisting([
       path.join(runLogDir, "iteration-1.verify-eval-qwen-3-0.6b.log"),
-      "utf8",
-    )
+      path.join(runLogDir, "iteration-1", "verify-eval-qwen-3-0.6b.log"),
+    ])
 
     assert.match(baselineLog, /EVAL_STDOUT qwen-3-0\.6b/)
     assert.match(baselineLog, /EVAL_STDERR qwen-3-0\.6b/)
@@ -1530,9 +1926,9 @@ describe("auto optimizer helper", () => {
     assert.equal(acceptedLog.model, "qwen-3-0.6b")
     assert.equal(acceptedLog.scores.baseline, 0)
     assert.equal(acceptedLog.scores.candidate, 0.66)
-    assert.match(acceptedLog.logs.test, /iteration-1\.test\.log/)
+    assert.match(acceptedLog.logs.test, /iteration-1(?:\.|\/)test\.log/)
     assert.match(acceptedLog.logs.baseline_eval.join(","), /baseline\.eval-qwen-3-0\.6b\.log/)
-    assert.match(acceptedLog.logs.verify_eval.join(","), /iteration-1\.verify-eval-qwen-3-0\.6b\.log/)
+    assert.match(acceptedLog.logs.verify_eval.join(","), /iteration-1(?:\.|\/)verify-eval-qwen-3-0\.6b\.log/)
     assert.equal(
       existsSync(path.join(repo, "docs", "optimization", "qwen-3-0.6b-log.md")),
       false,
@@ -1556,6 +1952,64 @@ describe("auto optimizer helper", () => {
     assert.ok(baselineIndex < codexIndex)
     assert.ok(codexIndex < testIndex)
     assert.ok(testIndex < verifyIndex)
+  })
+
+  it("keeps per-model baseline eval refs after a target-only accept", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "auto-optimize-baseline-refs-"))
+    const repo = path.join(root, "repo")
+    const bin = path.join(root, "bin")
+    const tmp = path.join(root, "tmp")
+    const scriptsDir = path.join(repo, "scripts")
+    const commandLog = path.join(root, "commands.log")
+    const gitState = path.join(root, "git-state.json")
+    const optimizerScript = path.join(scriptsDir, "auto-optimize.sh")
+
+    mkdirSync(scriptsDir, { recursive: true })
+    mkdirSync(bin, { recursive: true })
+    mkdirSync(tmp, { recursive: true })
+    writeExecutable(
+      optimizerScript,
+      readFileSync(new URL("./auto-optimize.sh", import.meta.url), "utf8"),
+    )
+    writeFileSync(path.join(scriptsDir, "auto-optimize-helper.mjs"), helperShim)
+    writeExecutable(path.join(bin, "pnpm"), pnpmShim)
+    writeExecutable(path.join(bin, "git"), gitShim)
+    writeExecutable(path.join(bin, "codex"), codexShim)
+
+    const result = spawnSync(
+      "bash",
+      [optimizerScript, "all", "--iterations", "2"],
+      {
+        cwd: repo,
+        env: {
+          ...process.env,
+          MOCK_LOG: commandLog,
+          MOCK_GIT_STATE: gitState,
+          MOCK_QWEN_ITERATION_1_SCORE: "0.95",
+          PATH: `${bin}${path.delimiter}${process.env.PATH ?? ""}`,
+          TMPDIR: tmp,
+        },
+        encoding: "utf8",
+      },
+    )
+
+    assert.equal(
+      result.status,
+      0,
+      `stdout:\n${result.stdout}\nstderr:\n${result.stderr}`,
+    )
+
+    const gemmaLog = readFileSync(
+      path.join(repo, "docs", "optimization", "gemma-3-1b-it-log.jsonl"),
+      "utf8",
+    ).trim().split("\n").map((line) => JSON.parse(line))
+    assert.equal(gemmaLog.length, 1)
+    assert.equal(gemmaLog[0].iteration, 2)
+
+    const baselineRefs = gemmaLog[0].logs.baseline_eval.join(",")
+    assert.match(baselineRefs, /baseline\.eval-gemma-3-1b-it\.log/)
+    assert.match(baselineRefs, /iteration-1(?:\.|\/)verify-eval-qwen-3-0\.6b\.log/)
+    assert.doesNotMatch(baselineRefs, /iteration-1(?:\.|\/)verify-eval-gemma-3-1b-it\.log/)
   })
 
   it("keeps the active baseline at the last accepted score across failed iterations", () => {
@@ -1607,16 +2061,25 @@ describe("auto optimizer helper", () => {
 
     const tmpRoot = result.stdout.match(/optimizer tmpdir: (.+)/)?.[1]?.trim()
     assert.ok(tmpRoot, result.stdout)
-    const secondPrompt = readFileSync(path.join(tmpRoot, "iteration-2.prompt.md"), "utf8")
-    const thirdPrompt = readFileSync(path.join(tmpRoot, "iteration-3.prompt.md"), "utf8")
+    const runLogDir = onlyRunLogDir(repo)
+    const secondPrompt = readFirstExisting([
+      path.join(tmpRoot, "iteration-2.prompt.md"),
+      path.join(runLogDir, "iteration-2", "prompt.md"),
+    ])
+    const thirdPrompt = readFirstExisting([
+      path.join(tmpRoot, "iteration-3.prompt.md"),
+      path.join(runLogDir, "iteration-3", "prompt.md"),
+    ])
     assert.match(secondPrompt, /Current accepted score: 0\.66/)
     assert.match(thirdPrompt, /Current accepted score: 0\.66/)
     assert.doesNotMatch(thirdPrompt, /Current accepted score: 0\.53/)
     assert.match(thirdPrompt, /Rejected approaches:/)
     assert.match(thirdPrompt, /iteration 2: no improvement .*0\.66 -> 0\.53/)
 
-    const runLogDir = onlyRunLogDir(repo)
-    const secondSummary = readFileSync(path.join(runLogDir, "iteration-2.summary.log"), "utf8")
+    const secondSummary = readFirstExisting([
+      path.join(runLogDir, "iteration-2.summary.log"),
+      path.join(runLogDir, "iteration-2", "summary.log"),
+    ])
     assert.match(secondSummary, /no improvement/)
     assert.match(secondSummary, /0\.66 -> 0\.53/)
 
@@ -1649,7 +2112,7 @@ describe("auto optimizer helper", () => {
     assert.equal((commands.match(/git commit /g) ?? []).length, 2)
     assert.equal((commands.match(/helper update-last-good/g) ?? []).length, 2)
     assert.equal(commands.includes("run-start-baseline"), false)
-    assert.match(commands, /helper compare qwen-3-0\.6b .*current-baseline\.json .*iteration-2-verify\.json/)
-    assert.match(commands, /helper compare qwen-3-0\.6b .*current-baseline\.json .*iteration-3-verify\.json/)
+    assert.match(commands, /helper compare qwen-3-0\.6b .*current-baseline\.json .*iteration-2(?:-|\/)verify\.json/)
+    assert.match(commands, /helper compare qwen-3-0\.6b .*current-baseline\.json .*iteration-3(?:-|\/)verify\.json/)
   })
 })

@@ -73,6 +73,11 @@ const hardBlockedPackageFiles = new Set([
   "vite.config.ts",
   "tsup.config.ts",
 ])
+const modelAdapterPaths = Object.freeze({
+  "qwen-3-0.6b": "packages/core/src/engine/adapters/models/qwen-3-0-6b.ts",
+  "gemma-3-1b-it": "packages/core/src/engine/adapters/models/gemma-3-1b-it.ts",
+  "translategemma-4": "packages/core/src/engine/adapters/models/translategemma-4.ts",
+})
 
 class NeedsFreshArtifactsError extends Error {
   constructor(message) {
@@ -101,6 +106,24 @@ function isPackageFile(filePath, fileName) {
 
 function isPackageReadme(filePath) {
   return isPackageFile(filePath, "README.md")
+}
+
+function isDocsOptimizationPath(filePath) {
+  const normalized = normalizeAttemptPath(filePath)
+  return normalized === "docs/optimization" || normalized.startsWith(docsOptimizationPrefix)
+}
+
+function isTestPath(filePath) {
+  const normalized = normalizeAttemptPath(filePath)
+  const segments = normalized.split("/")
+  const baseName = segments.at(-1) ?? ""
+
+  return (
+    segments.includes("__tests__") ||
+    /\.(test|spec)\.[cm]?[jt]sx?$/.test(baseName) ||
+    baseName === "test.ts" ||
+    baseName === "test.tsx"
+  )
 }
 
 function isPackageValidationFile(filePath) {
@@ -179,6 +202,16 @@ function assertKnownModel(modelId) {
       `Unknown WebGPU eval model ${modelId}. Valid models: ${WEBGPU_EVAL_MODEL_IDS.join(", ")}.`,
     )
   }
+}
+
+export function targetAdapterPath(modelId) {
+  assertKnownModel(modelId)
+  return modelAdapterPaths[modelId]
+}
+
+function modelForTargetAdapterPath(filePath) {
+  const normalized = normalizeAttemptPath(filePath)
+  return Object.entries(modelAdapterPaths).find(([, adapterPath]) => adapterPath === normalized)?.[0] ?? null
 }
 
 export function parseRequestedModels(modelArg) {
@@ -310,11 +343,39 @@ function modelSummaryFromFile(modelId, outputDir, root = repoRoot) {
   }
 }
 
+function artifactDirsByModel(models, modelIds) {
+  return Object.fromEntries(
+    modelIds.map((modelId) => {
+      const model = requireRecord(models[modelId], `snapshot.models.${modelId}`)
+      if (typeof model.artifact !== "string" || model.artifact.length === 0) {
+        throw new Error(`snapshot.models.${modelId}.artifact must be a non-empty string.`)
+      }
+
+      return [modelId, path.posix.dirname(model.artifact)]
+    }),
+  )
+}
+
+function withArtifactMetadata(snapshot) {
+  const snapshotRecord = requireRecord(snapshot, "snapshot")
+  const models = requireRecord(snapshotRecord.models, "snapshot.models")
+  const modelsRequested = requireArray(snapshotRecord.modelsRequested, "snapshot.modelsRequested")
+  const artifactDirs = artifactDirsByModel(models, modelsRequested)
+  const uniqueDirs = uniqueSorted(Object.values(artifactDirs))
+
+  return {
+    ...snapshotRecord,
+    artifactsDir: uniqueDirs.length === 1 ? uniqueDirs[0] : null,
+    artifactDirs,
+    mixedArtifacts: uniqueDirs.length > 1,
+  }
+}
+
 export function createSnapshot(modelArg, outputDir, root = repoRoot) {
   const models = parseRequestedModels(modelArg)
   const { absoluteDir, relativeDir } = assertArtifactDir(outputDir, root)
 
-  return {
+  return withArtifactMetadata({
     schemaVersion: 1,
     createdAt: new Date().toISOString(),
     requestedModelArg: modelArg,
@@ -323,7 +384,7 @@ export function createSnapshot(modelArg, outputDir, root = repoRoot) {
     models: Object.fromEntries(
       models.map((modelId) => [modelId, modelSummaryFromFile(modelId, absoluteDir, root)]),
     ),
-  }
+  })
 }
 
 function latestWebGpuDir(root = repoRoot) {
@@ -457,8 +518,27 @@ export function compareSnapshots(selectedModel, baseline, verification, options 
   if (!baselineSelected) stops.push(`Baseline is missing selected model ${selectedModel}.`)
   if (!verifiedSelected) stops.push(`Verification is missing selected model ${selectedModel}.`)
 
-  if (options.verifyArtifactHashes !== false) {
-    for (const [modelId, model] of Object.entries(baselineModels)) {
+  const shouldVerifyArtifactHashes =
+    options.verifyArtifactHashes === true ||
+    (options.verifyArtifactHashes !== false && options.compareOnlyVerifiedModels !== true)
+  const evaluatedModelIds = Array.isArray(options.evaluatedModels)
+    ? options.evaluatedModels.map(String)
+    : null
+  const artifactHashModelIds = evaluatedModelIds !== null
+    ? options.verifyAllBaselineHashes === true
+      ? Object.keys(baselineModels)
+      : evaluatedModelIds
+    : options.verifyAllBaselineHashes === true
+    ? Object.keys(baselineModels)
+    : Object.keys(verifiedModels)
+
+  if (shouldVerifyArtifactHashes) {
+    for (const modelId of artifactHashModelIds) {
+      const model = baselineModels[modelId]
+      if (!model) {
+        stops.push(`Baseline is missing artifact hash source model ${modelId}.`)
+        continue
+      }
       if (!model.artifact || !model.artifactHash) {
         stops.push(`Baseline artifact hash is missing for ${modelId}.`)
         continue
@@ -481,8 +561,18 @@ export function compareSnapshots(selectedModel, baseline, verification, options 
     )
   }
 
-  for (const modelId of Object.keys(baselineModels)) {
+  const nonSelectedModels = evaluatedModelIds !== null
+    ? evaluatedModelIds
+    : options.compareOnlyVerifiedModels === true
+    ? Object.keys(verifiedModels)
+    : Object.keys(baselineModels)
+
+  for (const modelId of nonSelectedModels) {
     if (modelId === selectedModel) continue
+    if (!baselineModels[modelId]) {
+      stops.push(`Baseline is missing non-selected model ${modelId}.`)
+      continue
+    }
     compareNonSelectedModel(modelId, baselineModels[modelId], verifiedModels[modelId], reasons, stops)
   }
 
@@ -500,6 +590,14 @@ export function compareSnapshots(selectedModel, baseline, verification, options 
         }
       : null,
   }
+}
+
+export function compareEvaluatedSnapshots(selectedModel, baseline, verification, options = {}) {
+  return compareSnapshots(selectedModel, baseline, verification, {
+    verifyArtifactHashes: false,
+    ...options,
+    compareOnlyVerifiedModels: true,
+  })
 }
 
 function formatScore(score) {
@@ -707,6 +805,297 @@ export function changedFilesFromPatchText(patchText) {
 export function changedFilesFromPatchFile(patchPath) {
   const patch = readOptionalText(patchPath)
   return patch === null ? [] : changedFilesFromPatchText(patch)
+}
+
+function uniqueSorted(values) {
+  return [...new Set(values)].sort((left, right) => left.localeCompare(right))
+}
+
+export function isCandidateCleanupPath(filePath) {
+  const normalized = normalizeAttemptPath(filePath)
+  return isDocsOptimizationPath(normalized) || !isAllowedAttemptPath(normalized)
+}
+
+export function isProductCandidatePath(filePath) {
+  const normalized = normalizeAttemptPath(filePath)
+  return (
+    isAllowedAttemptPath(normalized) &&
+    productSourcePrefixes.some((prefix) => normalized.startsWith(prefix)) &&
+    !isTestPath(normalized)
+  )
+}
+
+export function isDocsOrTestCandidatePath(filePath) {
+  const normalized = normalizeAttemptPath(filePath)
+  return (
+    isAllowedAttemptPath(normalized) &&
+    !isProductCandidatePath(normalized) &&
+    !isDocsOptimizationPath(normalized)
+  )
+}
+
+export function classifyCandidatePath(filePath, selectedModel = null) {
+  const normalized = normalizeAttemptPath(filePath)
+
+  if (isCandidateCleanupPath(normalized)) return "banned"
+  if (selectedModel !== null && normalized === targetAdapterPath(selectedModel)) {
+    return "target-adapter"
+  }
+  if (Object.values(modelAdapterPaths).includes(normalized)) return "model-adapter"
+  if (isProductCandidatePath(normalized)) return "product"
+  if (isDocsOrTestCandidatePath(normalized)) return "docs-test"
+  return "ignored"
+}
+
+export const candidatePathKind = classifyCandidatePath
+export const classifyAttemptPath = classifyCandidatePath
+
+function changedAttemptPaths(root = repoRoot) {
+  return uniqueSorted(statusPaths(root).map(normalizeAttemptPath))
+}
+
+export function changedPathsByKind(kind, root = repoRoot) {
+  const paths = changedAttemptPaths(root)
+
+  if (kind === "cleanup" || kind === "banned") {
+    return paths.filter(isCandidateCleanupPath)
+  }
+  if (kind === "product") {
+    return paths.filter(isProductCandidatePath)
+  }
+  if (kind === "docs-test") {
+    return paths.filter(isDocsOrTestCandidatePath)
+  }
+  if (kind === "allowed") {
+    return paths.filter((filePath) => !isCandidateCleanupPath(filePath))
+  }
+
+  throw new Error(`Unknown changed path kind ${kind}.`)
+}
+
+function modelAndPaths(first, second) {
+  const ownValue = (value, names) => {
+    if (!isRecord(value)) return undefined
+    for (const name of names) {
+      if (Object.prototype.hasOwnProperty.call(value, name)) return value[name]
+    }
+    return undefined
+  }
+  const selectedFrom = (value) => {
+    if (typeof value === "string") return value
+    if (!isRecord(value)) return null
+    return ownValue(value, ["selectedModel", "targetModel", "model"]) ?? null
+  }
+  const pathsFrom = (value) => {
+    if (Array.isArray(value)) return value
+    if (!isRecord(value)) return []
+    const ownArray = (names) => {
+      const found = ownValue(value, names)
+      return Array.isArray(found) ? found : []
+    }
+    return [
+      ...ownArray(["allProductPaths", "candidateProductPaths"]),
+      ...ownArray(["productCodePaths"]),
+      ...ownArray(["targetAdapterPaths", "targetAdapter"]),
+      ...ownArray(["productPaths", "product"]),
+      ...ownArray(["productTestPaths", "productTests", "testPaths"]),
+      ...ownArray(["docsTestPaths", "docsTest"]),
+      ...ownArray(["docsPaths", "documentationPaths"]),
+      ...ownArray(["cleanupPaths", "bannedPaths", "banned"]),
+    ]
+  }
+
+  if (Array.isArray(first)) {
+    return {
+      selectedModel: selectedFrom(second),
+      changedPaths: first,
+    }
+  }
+
+  if (isRecord(first)) {
+    return {
+      selectedModel: selectedFrom(second) ?? selectedFrom(first),
+      changedPaths: pathsFrom(first),
+    }
+  }
+
+  return {
+    selectedModel: selectedFrom(first),
+    changedPaths: pathsFrom(second),
+  }
+}
+
+export function classifyChangedPaths(first, second = null) {
+  const { selectedModel, changedPaths } = modelAndPaths(first, second)
+  if (selectedModel !== null && selectedModel !== undefined) assertKnownModel(selectedModel)
+
+  const normalizedPaths = uniqueSorted(changedPaths.map(normalizeAttemptPath))
+  const cleanupPaths = normalizedPaths.filter(isCandidateCleanupPath)
+  const resettableBannedPaths = cleanupPaths.filter((filePath) =>
+    isDocsOptimizationPath(filePath) || filePath === ".evals" || filePath.startsWith(".evals/"),
+  )
+  const hardBannedPaths = cleanupPaths.filter((filePath) => !resettableBannedPaths.includes(filePath))
+  const allProductPaths = normalizedPaths.filter(isProductCandidatePath)
+  const productTestPaths = normalizedPaths.filter(
+    (filePath) => isAllowedAttemptPath(filePath) && isTestPath(filePath),
+  )
+  const docsPaths = normalizedPaths.filter(
+    (filePath) => isAllowedAttemptPath(filePath) && !isTestPath(filePath) && isPackageReadme(filePath),
+  )
+  const docsTestPaths = normalizedPaths.filter(isDocsOrTestCandidatePath)
+  const adapterPaths = new Set(Object.values(modelAdapterPaths))
+  const targetAdapter = selectedModel ? targetAdapterPath(selectedModel) : null
+  const targetAdapterPaths = targetAdapter
+    ? allProductPaths.filter((filePath) => filePath === targetAdapter)
+    : allProductPaths.filter((filePath) => adapterPaths.has(filePath))
+  const targetAdapterModels = uniqueSorted(
+    targetAdapterPaths
+      .map(modelForTargetAdapterPath)
+      .filter((modelId) => modelId !== null),
+  )
+  const productPaths = allProductPaths
+  const nonAdapterProductPaths = allProductPaths.filter((filePath) => !adapterPaths.has(filePath))
+  const sharedProductPaths = targetAdapter
+    ? allProductPaths.filter((filePath) => filePath !== targetAdapter)
+    : nonAdapterProductPaths
+
+  const result = {
+    selectedModel,
+    cleanupPaths,
+    bannedPaths: hardBannedPaths,
+    cleanup: cleanupPaths,
+    banned: hardBannedPaths,
+    resettableBannedPaths,
+    resettableBanned: resettableBannedPaths,
+    resettablePaths: resettableBannedPaths,
+    hardBannedPaths,
+    hardBanned: hardBannedPaths,
+    resetPaths: cleanupPaths,
+    cleanupResetPaths: cleanupPaths,
+    invalidPaths: cleanupPaths,
+    bannedFilePaths: cleanupPaths,
+    allProductPaths,
+    candidateProductPaths: allProductPaths,
+    productPaths,
+    product: productPaths,
+    productCodePaths: productPaths,
+    nonAdapterProductPaths,
+    productTestPaths,
+    productTests: productTestPaths,
+    testPaths: productTestPaths,
+    docsPaths,
+    documentationPaths: docsPaths,
+    docsTestPaths,
+    docsTest: docsTestPaths,
+    docsOrTestPaths: docsTestPaths,
+    testOrDocsPaths: docsTestPaths,
+    targetAdapterPaths,
+    targetAdapterModels,
+    targetModels: targetAdapterModels,
+    targetAdapterModelIds: targetAdapterModels,
+    targetAdapter: targetAdapterPaths,
+    targetAdapters: targetAdapterPaths,
+    targetModelAdapterPaths: targetAdapterPaths,
+    adapterPaths: targetAdapterPaths,
+    modelAdapterPaths: targetAdapterPaths,
+    sharedProductPaths,
+    sharedProduct: sharedProductPaths,
+  }
+
+  return result
+}
+
+export function selectEvalModelsForProductPatch(selectedModel, productPatchPath) {
+  assertKnownModel(selectedModel)
+  const changedFiles = changedFilesFromPatchFile(productPatchPath)
+  return selectEvalModelsForChangedProductPaths(selectedModel, changedFiles)
+}
+
+export function selectEvalModelsForChangedProductPaths(selectedModel, changedFiles) {
+  assertKnownModel(selectedModel)
+  const normalizedFiles = uniqueSorted(changedFiles.map(normalizeAttemptPath))
+  if (normalizedFiles.length === 0) return []
+
+  const targetAdapter = modelAdapterPaths[selectedModel]
+  return normalizedFiles.length === 1 && normalizedFiles[0] === targetAdapter
+    ? [selectedModel]
+    : [...WEBGPU_EVAL_MODEL_IDS]
+}
+
+export const evalScopeForChangedProductPaths = selectEvalModelsForChangedProductPaths
+
+export function evalModelsForChangedPaths(first, second) {
+  const directModelList = (value) => {
+    if (Array.isArray(value) && value.every((entry) => WEBGPU_EVAL_MODEL_IDS.includes(entry))) {
+      return uniqueSorted(value)
+    }
+    if (!isRecord(value)) return []
+    const models = ["evalModels", "targetAdapterModels", "targetModels", "targetAdapterModelIds"]
+      .find((name) => Object.prototype.hasOwnProperty.call(value, name))
+    const modelValues = models ? value[models] : undefined
+    return Array.isArray(modelValues) && modelValues.every((entry) => WEBGPU_EVAL_MODEL_IDS.includes(entry))
+      ? uniqueSorted(modelValues)
+      : []
+  }
+  const directModels = directModelList(first)
+  if (directModels.length > 0) return directModels
+
+  const { selectedModel, changedPaths } = modelAndPaths(first, second)
+  const productPaths = uniqueSorted(changedPaths.map(normalizeAttemptPath)).filter(isProductCandidatePath)
+  const inferredModels = uniqueSorted(
+    productPaths
+      .map(modelForTargetAdapterPath)
+      .filter((modelId) => modelId !== null),
+  )
+
+  if (!selectedModel) {
+    const indirectModels = directModelList(second)
+    if (indirectModels.length > 0) return indirectModels
+    return productPaths.length === 1 && inferredModels.length === 1
+      ? inferredModels
+      : productPaths.length > 0
+        ? [...WEBGPU_EVAL_MODEL_IDS]
+        : []
+  }
+
+  if (productPaths.length === 0) return [selectedModel]
+  return selectEvalModelsForChangedProductPaths(selectedModel, productPaths)
+}
+
+export function mergeActiveBaselineSnapshot(selectedModel, baseline, verification) {
+  const baselineRecord = requireRecord(baseline, "baseline")
+  const verificationRecord = requireRecord(verification, "verification")
+  const baselineModels = requireRecord(baselineRecord.models, "baseline.models")
+  const verifiedModels = requireRecord(verificationRecord.models, "verification.models")
+  const verifiedSelected = verifiedModels[selectedModel]
+
+  if (!verifiedSelected) {
+    throw new Error(`Verification is missing selected model ${selectedModel}.`)
+  }
+
+  const mergedModels = {
+    ...baselineModels,
+    ...verifiedModels,
+  }
+
+  return withArtifactMetadata({
+    ...baselineRecord,
+    createdAt: new Date().toISOString(),
+    modelsRequested: WEBGPU_EVAL_MODEL_IDS.filter(
+      (modelId) => mergedModels[modelId],
+    ),
+    models: mergedModels,
+  })
+}
+
+export function snapshotArtifactDirs(snapshot) {
+  const models = requireRecord(snapshot.models, "snapshot.models")
+  return uniqueSorted(
+    Object.values(models)
+      .map((model) => requireRecord(model, "snapshot.models[]").artifact)
+      .filter((artifact) => typeof artifact === "string" && artifact.length > 0)
+      .map((artifact) => path.posix.dirname(artifact)),
+  )
 }
 
 function failedExperimentsPath(root = repoRoot) {
@@ -1051,6 +1440,23 @@ export async function updateLastGoodScores(selectedModel, snapshotPath, commitSh
     ? readJson(scoresPath)
     : { schemaVersion: 1, models: {} }
   const updatedAt = new Date().toISOString()
+  const nextModels = {
+    ...(isRecord(existing.models) ? existing.models : {}),
+    [selectedModel]: {
+      score: model.score,
+      pass: model.pass,
+      passedCases: model.passedCases,
+      totalCases: model.totalCases,
+      hardFailureCount: model.hardFailureCount,
+      artifact: model.artifact,
+      commitSha,
+      timestamp: updatedAt,
+      scoreBreakdown: model.scoreBreakdown,
+    },
+  }
+  const storedModelIds = WEBGPU_EVAL_MODEL_IDS.filter((modelId) => nextModels[modelId])
+  const artifactDirs = artifactDirsByModel(nextModels, storedModelIds)
+  const uniqueDirs = uniqueSorted(Object.values(artifactDirs))
   const next = {
     ...existing,
     schemaVersion: 1,
@@ -1058,21 +1464,10 @@ export async function updateLastGoodScores(selectedModel, snapshotPath, commitSh
     source: "auto-optimizer",
     role: "bookkeeping-only",
     acceptancePolicy: "active-baseline-snapshot",
-    artifactsDir: snapshot.artifactsDir,
-    models: {
-      ...(isRecord(existing.models) ? existing.models : {}),
-      [selectedModel]: {
-        score: model.score,
-        pass: model.pass,
-        passedCases: model.passedCases,
-        totalCases: model.totalCases,
-        hardFailureCount: model.hardFailureCount,
-        artifact: model.artifact,
-        commitSha,
-        timestamp: updatedAt,
-        scoreBreakdown: model.scoreBreakdown,
-      },
-    },
+    artifactsDir: uniqueDirs.length === 1 ? uniqueDirs[0] : null,
+    artifactDirs,
+    mixedArtifacts: uniqueDirs.length > 1,
+    models: nextModels,
   }
 
   writeJsonAtomic(scoresPath, next)
@@ -1083,7 +1478,11 @@ function printPromptSummary(selectedModel, snapshot) {
   if (!model) throw new Error(`Snapshot is missing ${selectedModel}.`)
 
   console.log(`Requested models: ${snapshot.modelsRequested.join(", ")}`)
-  console.log(`Current accepted artifact dir: ${snapshot.artifactsDir}`)
+  if (snapshot.artifactsDir) {
+    console.log(`Current accepted artifact dir: ${snapshot.artifactsDir}`)
+  } else {
+    console.log(`Current accepted artifact dirs: ${snapshotArtifactDirs(snapshot).join(", ")}`)
+  }
   console.log(`Selected model: ${selectedModel}`)
   console.log(`Current accepted score: ${model.score}`)
   console.log(`Current accepted artifact: ${model.artifact}`)
@@ -1196,7 +1595,25 @@ async function main(argv) {
     )
   } else if (command === "compare") {
     console.log(
-      JSON.stringify(compareSnapshots(argv[1], readSnapshot(argv[2]), readSnapshot(argv[3])), null, 2),
+      JSON.stringify(
+        compareEvaluatedSnapshots(argv[1], readSnapshot(argv[2]), readSnapshot(argv[3]), {
+          verifyArtifactHashes: true,
+          verifyAllBaselineHashes: true,
+        }),
+        null,
+        2,
+      ),
+    )
+  } else if (command === "compare-evaluated") {
+    console.log(
+      JSON.stringify(
+        compareEvaluatedSnapshots(argv[1], readSnapshot(argv[2]), readSnapshot(argv[3]), {
+          verifyArtifactHashes: true,
+          verifyAllBaselineHashes: true,
+        }),
+        null,
+        2,
+      ),
     )
   } else if (command === "compare-status") {
     console.log(readJson(argv[1]).status)
@@ -1212,6 +1629,25 @@ async function main(argv) {
     const selected = readJson(argv[1]).selected
     if (!selected) throw new Error("Comparison has no selected model summary.")
     console.log(selected.artifact)
+  } else if (command === "changed-paths") {
+    console.log(changedPathsByKind(argv[1], optionalRoot(argv[2])).join("\n"))
+  } else if (command === "changed-paths-nul") {
+    const paths = changedPathsByKind(argv[1], optionalRoot(argv[2]))
+    process.stdout.write(paths.join("\0"))
+    if (paths.length > 0) process.stdout.write("\0")
+  } else if (command === "eval-models") {
+    const models = selectEvalModelsForProductPatch(argv[1], argv[2])
+    if (models.length > 0) console.log(models.join("\n"))
+  } else if (command === "merge-active-baseline") {
+    console.log(
+      JSON.stringify(
+        mergeActiveBaselineSnapshot(argv[1], readSnapshot(argv[2]), readSnapshot(argv[3])),
+        null,
+        2,
+      ),
+    )
+  } else if (command === "snapshot-artifact-dirs") {
+    console.log(snapshotArtifactDirs(readSnapshot(argv[1])).join("\n"))
   } else if (command === "candidate-count") {
     console.log(attemptPaths(optionalRoot(argv[1])).length)
   } else if (command === "ensure-reset-scope") {
@@ -1228,7 +1664,9 @@ async function main(argv) {
         "Usage: node scripts/auto-optimize-helper.mjs <command> ...",
         "Commands: models, validate-options, latest-snapshot, snapshot, validate-artifact,",
         "select-model, prompt-summary, prompt-evidence, compare, compare-status,",
-        "compare-new-score, compare-score-improvement, compare-reasons, compare-artifact, candidate-count,",
+        "compare-evaluated, compare-new-score, compare-score-improvement, compare-reasons,",
+        "compare-artifact, changed-paths, changed-paths-nul, eval-models, merge-active-baseline,",
+        "snapshot-artifact-dirs, candidate-count,",
         "failed-memory-prompt, failed-memory-duplicate, append-failed-experiment, append-accepted-log,",
         "ensure-reset-scope, commit-paths, update-last-good",
       ].join("\n"),

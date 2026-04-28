@@ -9,11 +9,12 @@ RUN_LOG_DIR="$REPO/.evals/auto-optimizer/runs/$(basename "$TMP_ROOT")"
 FAILED_LEDGER="docs/optimization/failed-experiments.jsonl"
 INNER_WORKTREES=()
 CODEX_YOLO_ARGS=()
+CURRENT_ITERATION_DIR=""
 
 cleanup_inner_worktrees() {
   for worktree in "${INNER_WORKTREES[@]:-}"; do
     if [[ -d "$worktree" ]]; then
-      rm -rf "$worktree"
+      remove_inner_worktree "$worktree"
     fi
   done
 }
@@ -140,10 +141,10 @@ mkdir -p "$RUN_LOG_DIR"
 printf 'optimizer tmpdir: %s\n' "$TMP_ROOT"
 printf 'optimizer logs: %s\n' "$RUN_LOG_DIR"
 
-REQUESTED_MODELS=()
+ALL_MODELS=()
 while IFS= read -r model; do
-  REQUESTED_MODELS+=("$model")
-done < <(node "$HELPER" models "$MODEL_ARG")
+  ALL_MODELS+=("$model")
+done < <(node "$HELPER" models all)
 
 ensure_failed_ledger_tracked
 
@@ -171,9 +172,11 @@ run_to_log() {
 run_eval_set() {
   local output_dir="$1"
   local log_prefix="$2"
+  shift 2
+  local models=("$@")
   mkdir -p "$output_dir"
 
-  for model in "${REQUESTED_MODELS[@]}"; do
+  for model in "${models[@]}"; do
     printf 'running headed WebGPU eval for %s -> %s\n' "$model" "$output_dir"
     local eval_log="${log_prefix}-${model}.log"
     printf '    output: %s\n' "$eval_log"
@@ -185,7 +188,8 @@ run_eval_set() {
     fi
 
     if ! node "$HELPER" validate-artifact "$model" "$output_dir"; then
-      stop_for_driver "WebGPU eval for $model exited $eval_status and did not produce a valid schemaVersion 1 artifact. See $eval_log"
+      printf >&2 'WebGPU eval for %s exited %s and did not produce a valid schemaVersion 1 artifact. See %s\n' "$model" "$eval_status" "$eval_log"
+      return 1
     fi
   done
 }
@@ -197,8 +201,9 @@ create_baseline_snapshot() {
   output_dir="$REPO/.evals/web-gpu-$(timestamp)-auto-baseline-$$"
 
   printf 'creating fresh run baseline -> %s\n' "$output_dir"
-  run_eval_set "$output_dir" "$log_prefix"
-  node "$HELPER" snapshot "$MODEL_ARG" "$output_dir" > "$snapshot_file" ||
+  run_eval_set "$output_dir" "$log_prefix" "${ALL_MODELS[@]}" ||
+    stop_for_driver "Fresh headed eval artifacts could not be validated."
+  node "$HELPER" snapshot all "$output_dir" > "$snapshot_file" ||
     stop_for_driver "Fresh headed eval artifacts could not be validated."
 }
 
@@ -236,8 +241,8 @@ create_inner_worktree() {
   local base_sha="$1"
   local iteration="$2"
   local attempt_index="$3"
+  local install_log="$4"
   INNER_REPO="$TMP_ROOT/worktree-${iteration}-${attempt_index}"
-  local install_log="$RUN_LOG_DIR/iteration-${iteration}-attempt-${attempt_index}.install.log"
 
   git clone --quiet --no-hardlinks "$REPO" "$INNER_REPO"
   git -C "$INNER_REPO" checkout --quiet --detach "$base_sha"
@@ -247,7 +252,22 @@ create_inner_worktree() {
 
 remove_inner_worktree() {
   local inner_repo="$1"
+  archive_inner_eval_artifacts "$inner_repo" "$CURRENT_ITERATION_DIR"
   rm -rf "$inner_repo"
+}
+
+archive_inner_eval_artifacts() {
+  local inner_repo="$1"
+  local iteration_dir="$2"
+
+  if [[ -z "$iteration_dir" || ! -d "$inner_repo/.evals" ]]; then
+    return 0
+  fi
+
+  local destination="$iteration_dir/inner-eval-artifacts/.evals"
+  rm -rf "$destination"
+  mkdir -p "$(dirname "$destination")"
+  cp -R "$inner_repo/.evals" "$destination"
 }
 
 install_inner_dependencies() {
@@ -283,33 +303,123 @@ ensure_inner_attempt_scope() {
   fi
 }
 
+write_changed_pathspec() {
+  local kind="$1"
+  local repo="$2"
+  local pathspec_file="$3"
+
+  node "$HELPER" changed-paths-nul "$kind" "$repo" > "$pathspec_file"
+}
+
+diff_for_pathspec() {
+  local repo="$1"
+  local base_sha="$2"
+  local pathspec_file="$3"
+  local diff_file="$4"
+  local paths=()
+
+  if [[ ! -s "$pathspec_file" ]]; then
+    : > "$diff_file"
+    return
+  fi
+
+  while IFS= read -r -d '' diff_path; do
+    [[ -n "$diff_path" ]] && paths+=("$diff_path")
+  done < "$pathspec_file"
+
+  if [[ "${#paths[@]}" -eq 0 ]]; then
+    : > "$diff_file"
+  else
+    git -C "$repo" diff --binary "$base_sha" -- "${paths[@]}" > "$diff_file" || true
+  fi
+}
+
+capture_inner_raw_diff() {
+  local inner_repo="$1"
+  local base_sha="$2"
+  local raw_diff="$3"
+
+  git -C "$inner_repo" add -N -- . >/dev/null 2>&1 || true
+  git -C "$inner_repo" diff --binary "$base_sha" -- . > "$raw_diff" || true
+}
+
+reset_inner_cleanup_paths() {
+  local inner_repo="$1"
+  local base_sha="$2"
+  local pathspec_file="$3"
+
+  [[ -s "$pathspec_file" ]] || return 0
+
+  while IFS= read -r -d '' cleanup_path; do
+    [[ -n "$cleanup_path" ]] || continue
+
+    if git -C "$inner_repo" ls-files --error-unmatch -- "$cleanup_path" >/dev/null 2>&1; then
+      git -C "$inner_repo" restore --source="$base_sha" --staged --worktree -- "$cleanup_path" ||
+        return 1
+    else
+      rm -rf -- "$inner_repo/$cleanup_path" || return 1
+    fi
+  done < "$pathspec_file"
+}
+
+create_import_patch() {
+  local product_patch="$1"
+  local docs_test_patch="$2"
+  local import_patch="$3"
+
+  : > "$import_patch"
+  [[ -s "$product_patch" ]] && cat "$product_patch" >> "$import_patch"
+  [[ -s "$docs_test_patch" ]] && cat "$docs_test_patch" >> "$import_patch"
+  return 0
+}
+
 create_inner_patches() {
   local inner_repo="$1"
   local base_sha="$2"
-  local product_patch="$3"
-  local docs_patch="$4"
+  local raw_diff="$3"
+  local banned_patch="$4"
+  local product_patch="$5"
+  local docs_test_patch="$6"
+  local import_patch="$7"
+  local cleanup_pathspec="$8"
+  local product_pathspec="$9"
+  local docs_test_pathspec="${10}"
 
   git -C "$inner_repo" add -N -- . >/dev/null 2>&1 || true
-  git -C "$inner_repo" diff --binary "$base_sha" -- . ':(exclude)docs/optimization/**' > "$product_patch"
-  git -C "$inner_repo" diff --binary "$base_sha" -- docs/optimization/ > "$docs_patch"
+  git -C "$inner_repo" diff --binary "$base_sha" -- . > "$raw_diff" || true
+
+  write_changed_pathspec cleanup "$inner_repo" "$cleanup_pathspec"
+  diff_for_pathspec "$inner_repo" "$base_sha" "$cleanup_pathspec" "$banned_patch"
+  reset_inner_cleanup_paths "$inner_repo" "$base_sha" "$cleanup_pathspec" ||
+    stop_for_driver "Could not safely reset banned candidate paths. See $banned_patch"
+
+  git -C "$inner_repo" add -N -- . >/dev/null 2>&1 || true
+  write_changed_pathspec cleanup "$inner_repo" "$cleanup_pathspec.after"
+  if [[ -s "$cleanup_pathspec.after" ]]; then
+    node "$HELPER" changed-paths cleanup "$inner_repo" > "$cleanup_pathspec.after.txt" || true
+    stop_for_driver "Banned candidate paths remain after cleanup. See $cleanup_pathspec.after.txt"
+  fi
+
+  ensure_inner_attempt_scope "$inner_repo"
+  write_changed_pathspec product "$inner_repo" "$product_pathspec"
+  write_changed_pathspec docs-test "$inner_repo" "$docs_test_pathspec"
+  diff_for_pathspec "$inner_repo" "$base_sha" "$product_pathspec" "$product_patch"
+  diff_for_pathspec "$inner_repo" "$base_sha" "$docs_test_pathspec" "$docs_test_patch"
+  create_import_patch "$product_patch" "$docs_test_patch" "$import_patch"
 }
 
 import_inner_patches() {
   local base_sha="$1"
-  local product_patch="$2"
-  local docs_patch="$3"
-  local import_product="$4"
+  local import_patch="$2"
+  local import_product="$3"
 
   ensure_main_clean_before_import "$base_sha"
-  if [[ "$import_product" == "yes" && -s "$product_patch" ]]; then
-    git -C "$REPO" apply --check "$product_patch" ||
-      stop_for_driver "Candidate product patch cannot be applied cleanly: $product_patch"
+  if [[ "$import_product" == "yes" && -s "$import_patch" ]]; then
+    git -C "$REPO" apply --check "$import_patch" ||
+      stop_for_driver "Candidate patch cannot be applied cleanly: $import_patch"
   fi
-  if [[ "$import_product" == "yes" && -s "$product_patch" ]]; then
-    git -C "$REPO" apply "$product_patch"
-  fi
-  if [[ -s "$docs_patch" ]]; then
-    printf '    ignoring inner docs patch; outer harness writes authoritative optimization log: %s\n' "$docs_patch"
+  if [[ "$import_product" == "yes" && -s "$import_patch" ]]; then
+    git -C "$REPO" apply "$import_patch"
   fi
   node "$HELPER" ensure-reset-scope ||
     stop_for_driver "Imported candidate has changes outside optimizer-owned product/docs paths."
@@ -514,6 +624,81 @@ log_ref() {
   fi
 }
 
+copy_eval_logs() {
+  local destination="$1"
+  local log_prefix="$2"
+  shift 2
+  local models=("$@")
+
+  mkdir -p "$destination"
+  for model in "${models[@]}"; do
+    local eval_log="${log_prefix}-${model}.log"
+    if [[ -e "$eval_log" ]]; then
+      cp "$eval_log" "$destination/"
+    fi
+  done
+}
+
+active_baseline_eval_prefix_path() {
+  local model="$1"
+  printf '%s/%s' "$ACTIVE_BASELINE_EVAL_PREFIX_DIR" "$model"
+}
+
+set_active_baseline_eval_log_prefixes() {
+  local log_prefix="$1"
+  shift
+  local models=("$@")
+
+  mkdir -p "$ACTIVE_BASELINE_EVAL_PREFIX_DIR"
+  for model in "${models[@]}"; do
+    printf '%s\n' "$log_prefix" > "$(active_baseline_eval_prefix_path "$model")"
+  done
+}
+
+active_baseline_eval_log_prefix() {
+  local model="$1"
+  local prefix_file
+  local log_prefix=""
+  prefix_file="$(active_baseline_eval_prefix_path "$model")"
+
+  if [[ -r "$prefix_file" ]]; then
+    IFS= read -r log_prefix < "$prefix_file" || true
+  fi
+
+  printf '%s' "$log_prefix"
+}
+
+copy_active_baseline_eval_logs() {
+  local destination="$1"
+  shift
+  local models=("$@")
+
+  mkdir -p "$destination"
+  for model in "${models[@]}"; do
+    local log_prefix
+    log_prefix="$(active_baseline_eval_log_prefix "$model")"
+    [[ -n "$log_prefix" ]] || continue
+
+    local eval_log="${log_prefix}-${model}.log"
+    if [[ -e "$eval_log" ]]; then
+      cp "$eval_log" "$destination/"
+    fi
+  done
+}
+
+copy_snapshot_artifacts() {
+  local snapshot_file="$1"
+  local destination="$2"
+
+  mkdir -p "$destination"
+  while IFS= read -r artifact_dir; do
+    [[ -n "$artifact_dir" ]] || continue
+    if [[ -d "$REPO/$artifact_dir" ]]; then
+      cp -R "$REPO/$artifact_dir" "$destination/"
+    fi
+  done < <(node "$HELPER" snapshot-artifact-dirs "$snapshot_file")
+}
+
 one_line_file() {
   local file_path="$1"
   local fallback="$2"
@@ -527,6 +712,8 @@ one_line_file() {
 
 eval_log_refs() {
   local log_prefix="$1"
+  shift
+  local models=("$@")
   local refs=()
 
   if [[ -z "$log_prefix" ]]; then
@@ -534,7 +721,30 @@ eval_log_refs() {
     return
   fi
 
-  for model in "${REQUESTED_MODELS[@]}"; do
+  for model in "${models[@]}"; do
+    local eval_log="${log_prefix}-${model}.log"
+    if [[ -e "$eval_log" ]]; then
+      refs+=("$(relative_log_path "$eval_log")")
+    fi
+  done
+
+  if [[ "${#refs[@]}" -eq 0 ]]; then
+    printf 'none'
+  else
+    local IFS=','
+    printf '%s' "${refs[*]}"
+  fi
+}
+
+active_baseline_eval_refs() {
+  local models=("$@")
+  local refs=()
+
+  for model in "${models[@]}"; do
+    local log_prefix
+    log_prefix="$(active_baseline_eval_log_prefix "$model")"
+    [[ -n "$log_prefix" ]] || continue
+
     local eval_log="${log_prefix}-${model}.log"
     if [[ -e "$eval_log" ]]; then
       refs+=("$(relative_log_path "$eval_log")")
@@ -557,8 +767,8 @@ append_accepted_log() {
   local stdout_log="$5"
   local stderr_log="$6"
   local test_log="$7"
-  local baseline_eval_log_prefix="$8"
-  local verify_eval_log_prefix="$9"
+  local baseline_eval_refs="$8"
+  local verify_eval_refs="$9"
   local baseline_json="${10}"
   local verify_json="${11}"
   local compare_json="${12}"
@@ -574,13 +784,13 @@ append_accepted_log() {
     "$stdout_log" \
     "$stderr_log" \
     "$test_log" \
-    "$(eval_log_refs "$baseline_eval_log_prefix")" \
-    "$(eval_log_refs "$verify_eval_log_prefix")"
+    "$baseline_eval_refs" \
+    "$verify_eval_refs"
 }
 
 run_summary_path() {
   local iteration="$1"
-  printf '%s/iteration-%s.summary.log' "$RUN_LOG_DIR" "$iteration"
+  printf '%s/iteration-%s/summary.log' "$RUN_LOG_DIR" "$iteration"
 }
 
 append_run_note() {
@@ -591,8 +801,8 @@ append_run_note() {
   local stdout_log="$5"
   local stderr_log="$6"
   local test_log="$7"
-  local baseline_eval_log_prefix="$8"
-  local verify_eval_log_prefix="$9"
+  local baseline_eval_refs="$8"
+  local verify_eval_refs="$9"
   local run_note
   run_note="$(run_summary_path "$iteration")"
   local report
@@ -607,8 +817,8 @@ append_run_note() {
     "$(log_ref "$stderr_log")" \
     "$(log_ref "$stdout_log")" \
     "$(log_ref "$test_log")" \
-    "$(eval_log_refs "$baseline_eval_log_prefix")" \
-    "$(eval_log_refs "$verify_eval_log_prefix")" > "$run_note"
+    "$baseline_eval_refs" \
+    "$verify_eval_refs" > "$run_note"
 }
 
 append_failed_experiment() {
@@ -619,8 +829,8 @@ append_failed_experiment() {
   local stdout_log="$5"
   local stderr_log="$6"
   local test_log="$7"
-  local baseline_eval_log_prefix="$8"
-  local verify_eval_log_prefix="$9"
+  local baseline_eval_refs="$8"
+  local verify_eval_refs="$9"
   local candidate_patch="${10}"
   local baseline_json="${11}"
   local verify_json="${12}"
@@ -641,43 +851,58 @@ append_failed_experiment() {
     "$stdout_log" \
     "$stderr_log" \
     "$test_log" \
-    "$(eval_log_refs "$baseline_eval_log_prefix")" \
-    "$(eval_log_refs "$verify_eval_log_prefix")" \
+    "$baseline_eval_refs" \
+    "$verify_eval_refs" \
     "$run_note" \
     "$candidate_evaluated"
 }
 
 ACTIVE_BASELINE_JSON="$TMP_ROOT/current-baseline.json"
-ACTIVE_BASELINE_EVAL_LOG_PREFIX=""
+ACTIVE_BASELINE_EVAL_PREFIX_DIR="$TMP_ROOT/active-baseline-eval-prefixes"
+mkdir -p "$RUN_LOG_DIR/baseline"
+mkdir -p "$ACTIVE_BASELINE_EVAL_PREFIX_DIR"
 BASELINE_EVAL_LOG_PREFIX="$RUN_LOG_DIR/baseline.eval"
 create_baseline_snapshot "$ACTIVE_BASELINE_JSON" "$BASELINE_EVAL_LOG_PREFIX"
-ACTIVE_BASELINE_EVAL_LOG_PREFIX="$BASELINE_EVAL_LOG_PREFIX"
+set_active_baseline_eval_log_prefixes "$BASELINE_EVAL_LOG_PREFIX" "${ALL_MODELS[@]}"
 
 for ((iteration = 1; iteration <= ITERATIONS; iteration += 1)); do
+  ITERATION_DIR="$RUN_LOG_DIR/iteration-${iteration}"
+  CURRENT_ITERATION_DIR="$ITERATION_DIR"
+  mkdir -p "$ITERATION_DIR"
   SELECTED_MODEL="$(node "$HELPER" select-model "$MODEL_ARG" "$ACTIVE_BASELINE_JSON")"
   ATTEMPT_BASE_SHA="$(git rev-parse HEAD)"
-  ITERATION_BASELINE_EVAL_LOG_PREFIX="$ACTIVE_BASELINE_EVAL_LOG_PREFIX"
+  cp "$ACTIVE_BASELINE_JSON" "$ITERATION_DIR/active-baseline.json"
+  copy_snapshot_artifacts "$ACTIVE_BASELINE_JSON" "$ITERATION_DIR/eval-artifacts/baseline"
+  copy_active_baseline_eval_logs "$ITERATION_DIR/eval-logs/baseline" "${ALL_MODELS[@]}"
 
   printf '====================== iteration %s/%s ======================\n' "$iteration" "$ITERATIONS"
   printf -- "- selected '%s'\n" "$SELECTED_MODEL"
 
   COMMIT_SHA=""
   SCORE_LINE="no improvement"
-  PROMPT_FILE="$TMP_ROOT/iteration-${iteration}.prompt.md"
-  STDOUT_LOG="$RUN_LOG_DIR/iteration-${iteration}.codex.stdout.jsonl"
-  STDERR_LOG="$RUN_LOG_DIR/iteration-${iteration}.codex.stderr.log"
-  REPORT_FILE="$RUN_LOG_DIR/iteration-${iteration}.report.txt"
-  TEST_LOG="$RUN_LOG_DIR/iteration-${iteration}.test.log"
-  VERIFY_EVAL_LOG_PREFIX="$RUN_LOG_DIR/iteration-${iteration}.verify-eval"
-  CANDIDATE_CAN_IMPROVE="no"
+  PROMPT_FILE="$ITERATION_DIR/prompt.md"
+  STDOUT_LOG="$ITERATION_DIR/codex.stdout.jsonl"
+  STDERR_LOG="$ITERATION_DIR/codex.stderr.log"
+  REPORT_FILE="$ITERATION_DIR/report.txt"
+  TEST_LOG="$ITERATION_DIR/test.log"
+  VERIFY_EVAL_LOG_PREFIX="$ITERATION_DIR/verify-eval"
   CANDIDATE_EVALUATED="no"
   SKIP_VERIFY="no"
   VERIFY_JSON="none"
   COMPARE_JSON="none"
-  CANDIDATE_PATCH="$TMP_ROOT/iteration-${iteration}.product.patch"
-  DOCS_PATCH="$TMP_ROOT/iteration-${iteration}.docs.patch"
+  RAW_DIFF="$ITERATION_DIR/raw.diff"
+  BANNED_PATCH="$ITERATION_DIR/banned.diff"
+  CANDIDATE_PATCH="$ITERATION_DIR/product.diff"
+  DOCS_TEST_PATCH="$ITERATION_DIR/docs-test.diff"
+  IMPORT_PATCH="$ITERATION_DIR/import.diff"
+  CLEANUP_PATHSPEC="$ITERATION_DIR/banned-paths.nul"
+  PRODUCT_PATHSPEC="$ITERATION_DIR/product-paths.nul"
+  DOCS_TEST_PATHSPEC="$ITERATION_DIR/docs-test-paths.nul"
+  VERIFY_MODELS=()
+  BASELINE_EVAL_REFS="$(active_baseline_eval_refs "${ALL_MODELS[@]}")"
+  VERIFY_EVAL_REFS="none"
 
-  create_inner_worktree "$ATTEMPT_BASE_SHA" "$iteration" "1"
+  create_inner_worktree "$ATTEMPT_BASE_SHA" "$iteration" "1" "$ITERATION_DIR/install.log"
   write_inner_prompt "$PROMPT_FILE" "$INNER_REPO" "$SELECTED_MODEL" "$ACTIVE_BASELINE_JSON" "$iteration" "$ITERATIONS" "$REPORT_FILE"
   printf -- "- codex running...\n"
   printf '    stderr: %s // stdout: %s\n' "$STDERR_LOG" "$STDOUT_LOG"
@@ -686,6 +911,8 @@ for ((iteration = 1; iteration <= ITERATIONS; iteration += 1)); do
   run_codex_attempt "$INNER_REPO" "$PROMPT_FILE" "$STDOUT_LOG" "$STDERR_LOG"
   CODEX_STATUS=$?
   set -e
+
+  capture_inner_raw_diff "$INNER_REPO" "$ATTEMPT_BASE_SHA" "$RAW_DIFF"
 
   if grep -q 'BLOCKED:' "$STDOUT_LOG" "$STDERR_LOG" 2>/dev/null; then
     remove_inner_worktree "$INNER_REPO"
@@ -700,8 +927,17 @@ for ((iteration = 1; iteration <= ITERATIONS; iteration += 1)); do
     stop_for_driver "codex exec rejected the required flags. See $STDERR_LOG"
   fi
 
-  ensure_inner_attempt_scope "$INNER_REPO"
-  create_inner_patches "$INNER_REPO" "$ATTEMPT_BASE_SHA" "$CANDIDATE_PATCH" "$DOCS_PATCH"
+  create_inner_patches \
+    "$INNER_REPO" \
+    "$ATTEMPT_BASE_SHA" \
+    "$RAW_DIFF" \
+    "$BANNED_PATCH" \
+    "$CANDIDATE_PATCH" \
+    "$DOCS_TEST_PATCH" \
+    "$IMPORT_PATCH" \
+    "$CLEANUP_PATHSPEC" \
+    "$PRODUCT_PATHSPEC" \
+    "$DOCS_TEST_PATHSPEC"
   remove_inner_worktree "$INNER_REPO"
 
   print_change_blurb "$REPORT_FILE" "$STDOUT_LOG"
@@ -709,58 +945,80 @@ for ((iteration = 1; iteration <= ITERATIONS; iteration += 1)); do
 
   if [[ "$CODEX_STATUS" -ne 0 ]]; then
     SCORE_LINE="no improvement (codex exited ${CODEX_STATUS})"
-    import_inner_patches "$ATTEMPT_BASE_SHA" "$CANDIDATE_PATCH" "$DOCS_PATCH" "no"
+    SKIP_VERIFY="yes"
+    import_inner_patches "$ATTEMPT_BASE_SHA" "$IMPORT_PATCH" "no"
   elif [[ ! -s "$CANDIDATE_PATCH" ]]; then
     SCORE_LINE="no improvement (no product diff)"
-    import_inner_patches "$ATTEMPT_BASE_SHA" "$CANDIDATE_PATCH" "$DOCS_PATCH" "no"
+    SKIP_VERIFY="yes"
+    import_inner_patches "$ATTEMPT_BASE_SHA" "$IMPORT_PATCH" "no"
   else
     DUPLICATE_FAILED_DIFF="$(node "$HELPER" failed-memory-duplicate "$SELECTED_MODEL" "$CANDIDATE_PATCH")"
     if [[ -n "$DUPLICATE_FAILED_DIFF" ]]; then
       SCORE_LINE="no improvement (${DUPLICATE_FAILED_DIFF})"
       SKIP_VERIFY="yes"
-      import_inner_patches "$ATTEMPT_BASE_SHA" "$CANDIDATE_PATCH" "$DOCS_PATCH" "no"
+      import_inner_patches "$ATTEMPT_BASE_SHA" "$IMPORT_PATCH" "no"
     else
-      import_inner_patches "$ATTEMPT_BASE_SHA" "$CANDIDATE_PATCH" "$DOCS_PATCH" "yes"
+      import_inner_patches "$ATTEMPT_BASE_SHA" "$IMPORT_PATCH" "yes"
 
       printf -- "- tests running...\n"
       printf '    output: %s\n' "$TEST_LOG"
       if ! run_to_log "$TEST_LOG" pnpm test; then
         SCORE_LINE="no improvement (tests failed)"
-        reset_candidate_product_patch "$CANDIDATE_PATCH"
+        SKIP_VERIFY="yes"
+        reset_candidate_product_patch "$IMPORT_PATCH"
         ensure_product_changes_reset
-      else
-        CANDIDATE_CAN_IMPROVE="yes"
       fi
     fi
   fi
 
   if [[ "$SKIP_VERIFY" == "yes" ]]; then
-    printf -- "- verification skipped: duplicate failed product diff\n"
+    printf -- "- verification skipped: %s\n" "$SCORE_LINE"
   else
-    VERIFY_DIR="$REPO/.evals/web-gpu-$(timestamp)-auto-verify-${SELECTED_MODEL}-${iteration}-$$"
-    cd "$REPO"
-    run_eval_set "$VERIFY_DIR" "$VERIFY_EVAL_LOG_PREFIX"
-    VERIFY_JSON="$TMP_ROOT/iteration-${iteration}-verify.json"
-    node "$HELPER" snapshot "$MODEL_ARG" "$VERIFY_DIR" > "$VERIFY_JSON" ||
-      stop_for_driver "Verification artifacts could not be validated."
-
-    COMPARE_JSON="$TMP_ROOT/iteration-${iteration}-compare.json"
-    node "$HELPER" compare "$SELECTED_MODEL" "$ACTIVE_BASELINE_JSON" "$VERIFY_JSON" > "$COMPARE_JSON"
-    COMPARE_STATUS="$(node "$HELPER" compare-status "$COMPARE_JSON")"
-
-    if [[ "$COMPARE_STATUS" == "stop" ]]; then
-      if [[ "$CANDIDATE_CAN_IMPROVE" == "yes" ]]; then
-        reset_candidate_product_patch "$CANDIDATE_PATCH"
-        ensure_product_changes_reset
-      fi
-      stop_for_driver "Verification could not prove the contract. See $COMPARE_JSON"
+    while IFS= read -r model; do
+      VERIFY_MODELS+=("$model")
+    done < <(node "$HELPER" eval-models "$SELECTED_MODEL" "$CANDIDATE_PATCH")
+    if [[ "${#VERIFY_MODELS[@]}" -eq 0 ]]; then
+      stop_for_driver "Candidate was marked verifiable without cleaned product paths."
     fi
 
-    if [[ "$CANDIDATE_CAN_IMPROVE" == "yes" ]]; then
+    VERIFY_DIR="$REPO/.evals/web-gpu-$(timestamp)-auto-verify-${SELECTED_MODEL}-${iteration}-$$"
+    cd "$REPO"
+    VERIFY_EVAL_REFS="$(eval_log_refs "$VERIFY_EVAL_LOG_PREFIX" "${VERIFY_MODELS[@]}")"
+    if ! run_eval_set "$VERIFY_DIR" "$VERIFY_EVAL_LOG_PREFIX" "${VERIFY_MODELS[@]}"; then
+      VERIFY_EVAL_REFS="$(eval_log_refs "$VERIFY_EVAL_LOG_PREFIX" "${VERIFY_MODELS[@]}")"
+      copy_eval_logs "$ITERATION_DIR/eval-logs/verify" "$VERIFY_EVAL_LOG_PREFIX" "${VERIFY_MODELS[@]}"
+      mkdir -p "$ITERATION_DIR/eval-artifacts/verify"
+      [[ -d "$VERIFY_DIR" ]] && cp -R "$VERIFY_DIR" "$ITERATION_DIR/eval-artifacts/verify/"
+      SCORE_LINE="no improvement (artifact validation failed)"
+      reset_candidate_product_patch "$IMPORT_PATCH"
+      ensure_product_changes_reset
+    else
+      VERIFY_EVAL_REFS="$(eval_log_refs "$VERIFY_EVAL_LOG_PREFIX" "${VERIFY_MODELS[@]}")"
+      VERIFY_JSON="$ITERATION_DIR/verify.json"
+      if [[ "${#VERIFY_MODELS[@]}" -eq 1 ]]; then
+        node "$HELPER" snapshot "${VERIFY_MODELS[0]}" "$VERIFY_DIR" > "$VERIFY_JSON" ||
+          stop_for_driver "Verification artifacts could not be snapshotted after validation."
+      else
+        node "$HELPER" snapshot all "$VERIFY_DIR" > "$VERIFY_JSON" ||
+          stop_for_driver "Verification artifacts could not be snapshotted after validation."
+      fi
+      copy_snapshot_artifacts "$VERIFY_JSON" "$ITERATION_DIR/eval-artifacts/verify"
+      copy_eval_logs "$ITERATION_DIR/eval-logs/verify" "$VERIFY_EVAL_LOG_PREFIX" "${VERIFY_MODELS[@]}"
+
+      COMPARE_JSON="$ITERATION_DIR/compare.json"
+      node "$HELPER" compare "$SELECTED_MODEL" "$ACTIVE_BASELINE_JSON" "$VERIFY_JSON" > "$COMPARE_JSON"
+      COMPARE_STATUS="$(node "$HELPER" compare-status "$COMPARE_JSON")"
+
+      if [[ "$COMPARE_STATUS" == "stop" ]]; then
+        reset_candidate_product_patch "$IMPORT_PATCH"
+        ensure_product_changes_reset
+        stop_for_driver "Verification could not prove the contract. See $COMPARE_JSON"
+      fi
+
       CANDIDATE_EVALUATED="yes"
       if [[ "$COMPARE_STATUS" != "pass" ]]; then
         SCORE_LINE="no improvement ($(node "$HELPER" compare-reasons "$COMPARE_JSON"))"
-        reset_candidate_product_patch "$CANDIDATE_PATCH"
+        reset_candidate_product_patch "$IMPORT_PATCH"
         ensure_product_changes_reset
       else
         NEW_SCORE="$(node "$HELPER" compare-new-score "$COMPARE_JSON")"
@@ -769,24 +1027,25 @@ for ((iteration = 1; iteration <= ITERATIONS; iteration += 1)); do
     fi
   fi
 
-  append_run_note "$SELECTED_MODEL" "$iteration" "$SCORE_LINE" "$REPORT_FILE" "$STDOUT_LOG" "$STDERR_LOG" "$TEST_LOG" "$ITERATION_BASELINE_EVAL_LOG_PREFIX" "$VERIFY_EVAL_LOG_PREFIX"
+  append_run_note "$SELECTED_MODEL" "$iteration" "$SCORE_LINE" "$REPORT_FILE" "$STDOUT_LOG" "$STDERR_LOG" "$TEST_LOG" "$BASELINE_EVAL_REFS" "$VERIFY_EVAL_REFS"
 
   if [[ "$SCORE_LINE" == no\ improvement* ]]; then
-    append_failed_experiment "$SELECTED_MODEL" "$iteration" "$SCORE_LINE" "$REPORT_FILE" "$STDOUT_LOG" "$STDERR_LOG" "$TEST_LOG" "$ITERATION_BASELINE_EVAL_LOG_PREFIX" "$VERIFY_EVAL_LOG_PREFIX" "$CANDIDATE_PATCH" "$ACTIVE_BASELINE_JSON" "$VERIFY_JSON" "$COMPARE_JSON" "$CANDIDATE_EVALUATED"
+    append_failed_experiment "$SELECTED_MODEL" "$iteration" "$SCORE_LINE" "$REPORT_FILE" "$STDOUT_LOG" "$STDERR_LOG" "$TEST_LOG" "$BASELINE_EVAL_REFS" "$VERIFY_EVAL_REFS" "$CANDIDATE_PATCH" "$ACTIVE_BASELINE_JSON" "$VERIFY_JSON" "$COMPARE_JSON" "$CANDIDATE_EVALUATED"
     COMMIT_SHA=""
   else
-    append_accepted_log "$SELECTED_MODEL" "$iteration" "$SCORE_LINE" "$REPORT_FILE" "$STDOUT_LOG" "$STDERR_LOG" "$TEST_LOG" "$ITERATION_BASELINE_EVAL_LOG_PREFIX" "$VERIFY_EVAL_LOG_PREFIX" "$ACTIVE_BASELINE_JSON" "$VERIFY_JSON" "$COMPARE_JSON"
-    PATHSPEC_FILE="$TMP_ROOT/iteration-${iteration}-commit-paths.nul"
+    append_accepted_log "$SELECTED_MODEL" "$iteration" "$SCORE_LINE" "$REPORT_FILE" "$STDOUT_LOG" "$STDERR_LOG" "$TEST_LOG" "$BASELINE_EVAL_REFS" "$VERIFY_EVAL_REFS" "$ACTIVE_BASELINE_JSON" "$VERIFY_JSON" "$COMPARE_JSON"
+    PATHSPEC_FILE="$ITERATION_DIR/commit-paths.nul"
     if ! changed_paths_for_commit "$PATHSPEC_FILE"; then
       stop_for_driver "No optimizer-owned files changed after iteration ${iteration}."
     fi
-    ensure_main_candidate_unchanged "$ATTEMPT_BASE_SHA" "$CANDIDATE_PATCH"
+    ensure_main_candidate_unchanged "$ATTEMPT_BASE_SHA" "$IMPORT_PATCH"
     git add --pathspec-from-file="$PATHSPEC_FILE" --pathspec-file-nul
     git commit -m "auto-optimize: ${SELECTED_MODEL} ${NEW_SCORE}" >/dev/null
     COMMIT_SHA="$(git rev-parse --short HEAD)"
-    cp "$VERIFY_JSON" "$ACTIVE_BASELINE_JSON"
-    ACTIVE_BASELINE_EVAL_LOG_PREFIX="$VERIFY_EVAL_LOG_PREFIX"
-    node "$HELPER" update-last-good "$SELECTED_MODEL" "$VERIFY_JSON" "$COMMIT_SHA"
+    node "$HELPER" merge-active-baseline "$SELECTED_MODEL" "$ACTIVE_BASELINE_JSON" "$VERIFY_JSON" > "$ITERATION_DIR/accepted-baseline.json"
+    cp "$ITERATION_DIR/accepted-baseline.json" "$ACTIVE_BASELINE_JSON"
+    set_active_baseline_eval_log_prefixes "$VERIFY_EVAL_LOG_PREFIX" "${VERIFY_MODELS[@]}"
+    node "$HELPER" update-last-good "$SELECTED_MODEL" "$ACTIVE_BASELINE_JSON" "$COMMIT_SHA"
   fi
 
   printf -- "- score: %s\n" "$SCORE_LINE"
