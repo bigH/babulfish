@@ -12,8 +12,7 @@
   },
   "dependencies": {
     "@babulfish/core": "workspace:*",
-    "@babulfish/styles": "workspace:*",
-    "@huggingface/transformers": "^4.0.0"
+    "@babulfish/styles": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.8.3",

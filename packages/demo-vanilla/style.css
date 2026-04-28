@@ -416,84 +416,6 @@ button:disabled {
   word-break: break-word;
 }
 
-.phi4-spike {
-  display: grid;
-  gap: 1rem;
-  margin-top: 1.5rem;
-  padding: 1.25rem;
-}
-
-.phi4-spike-header {
-  display: grid;
-  gap: 0.45rem;
-  max-width: 54rem;
-}
-
-.phi4-spike-copy,
-.phi4-spike-warning,
-.phi4-output-card p,
-.phi4-log-card p {
-  color: var(--text-soft);
-  font-size: 0.93rem;
-}
-
-.phi4-spike-warning {
-  color: #8a4f08;
-}
-
-.phi4-spike-controls {
-  display: grid;
-  gap: 0.75rem;
-}
-
-.phi4-spike-status {
-  display: grid;
-  gap: 1rem;
-}
-
-.phi4-status-card,
-.phi4-output-card,
-.phi4-log-card {
-  display: grid;
-  gap: 0.75rem;
-  padding: 1rem;
-}
-
-.phi4-status-card h3,
-.phi4-output-card h3,
-.phi4-log-card h3 {
-  font-size: 1rem;
-}
-
-#phi4-model-id,
-#phi4-profile-summary,
-#phi4-browser-summary,
-#phi4-runtime-summary,
-#phi4-results,
-#phi4-log {
-  font-family: ui-monospace, "SFMono-Regular", "SF Mono", Menlo, monospace;
-}
-
-#phi4-results,
-#phi4-log {
-  min-height: 10rem;
-  max-height: 24rem;
-  overflow: auto;
-  padding: 0.9rem 1rem;
-  border: 1px solid var(--border);
-  border-radius: 0.8rem;
-  background: #fff;
-  color: var(--text);
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
-#phi4-load,
-#phi4-run,
-#phi4-dispose {
-  width: 100%;
-}
-
 @media (min-width: 880px) {
   .runtime-controls {
     grid-template-columns: minmax(0, 1.05fr) minmax(0, 1.45fr);
@@ -524,16 +446,6 @@ button:disabled {
 
   .layout {
     grid-template-columns: minmax(0, 1.55fr) minmax(20rem, 0.95fr);
-    align-items: start;
-  }
-
-  .phi4-spike-controls {
-    grid-template-columns: minmax(16rem, 1.35fr) minmax(16rem, 1.2fr) repeat(3, minmax(0, 1fr));
-    align-items: end;
-  }
-
-  .phi4-spike-status {
-    grid-template-columns: minmax(18rem, 0.95fr) minmax(0, 1.35fr);
     align-items: start;
   }
 

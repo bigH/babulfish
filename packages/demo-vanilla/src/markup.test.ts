@@ -30,14 +30,10 @@ describe("demo-vanilla markup", () => {
     expect(document.querySelector("article.panel")?.classList.contains("surface-card")).toBe(true)
     expect(document.querySelector("aside.panel-accent")?.classList.contains("surface-card")).toBe(true)
     expect(document.querySelector("#status")?.classList.contains("surface-card")).toBe(true)
-    expect(document.querySelector(".phi4-spike")?.classList.contains("surface-card")).toBe(true)
   })
 
-  it("applies the shared surface-inset class to the proof blocks and spike shells", () => {
+  it("applies the shared surface-inset class to the proof blocks", () => {
     expect(document.querySelector(".structured-proof")?.classList.contains("surface-inset")).toBe(true)
     expect(document.querySelector(".raw-proof")?.classList.contains("surface-inset")).toBe(true)
-    expect(document.querySelector(".phi4-status-card")?.classList.contains("surface-inset")).toBe(true)
-    expect(document.querySelector(".phi4-output-card")?.classList.contains("surface-inset")).toBe(true)
-    expect(document.querySelector(".phi4-log-card")?.classList.contains("surface-inset")).toBe(true)
   })
 })
