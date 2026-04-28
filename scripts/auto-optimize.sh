@@ -130,6 +130,8 @@ configure_codex_yolo_args
 node "$HELPER" validate-options "$MODEL_ARG" "$ITERATIONS"
 mkdir -p "$TMP_ROOT"
 mkdir -p "$RUN_LOG_DIR"
+printf 'optimizer tmpdir: %s\n' "$TMP_ROOT"
+printf 'optimizer logs: %s\n' "$RUN_LOG_DIR"
 
 REQUESTED_MODELS=()
 while IFS= read -r model; do
@@ -145,17 +147,6 @@ if [[ -n "$PREEXISTING_UNTRACKED" ]]; then
   stop_for_driver "Untracked files exist before the optimizer starts: $PREEXISTING_UNTRACKED"
 fi
 
-run_with_log() {
-  local log_file="$1"
-  shift
-
-  set +e
-  "$@" 2>&1 | tee "$log_file"
-  local command_status=${PIPESTATUS[0]}
-  set -e
-  return "$command_status"
-}
-
 run_to_log() {
   local log_file="$1"
   shift
@@ -169,55 +160,34 @@ run_to_log() {
 
 run_eval_set() {
   local output_dir="$1"
-  local log_prefix="${2:-}"
+  local log_prefix="$2"
   mkdir -p "$output_dir"
 
   for model in "${REQUESTED_MODELS[@]}"; do
     printf 'running headed WebGPU eval for %s -> %s\n' "$model" "$output_dir"
+    local eval_log="${log_prefix}-${model}.log"
+    printf '    output: %s\n' "$eval_log"
     local eval_status
-    if [[ -n "$log_prefix" ]]; then
-      local eval_log="${log_prefix}-${model}.log"
-      printf '    output: %s\n' "$eval_log"
-      if run_with_log "$eval_log" pnpm eval:webgpu -- --model "$model" --headed --output-dir "$output_dir"; then
-        eval_status=0
-      else
-        eval_status=$?
-      fi
+    if run_to_log "$eval_log" pnpm eval:webgpu -- --model "$model" --headed --output-dir "$output_dir"; then
+      eval_status=0
     else
-      set +e
-      pnpm eval:webgpu -- --model "$model" --headed --output-dir "$output_dir"
       eval_status=$?
-      set -e
     fi
 
     if ! node "$HELPER" validate-artifact "$model" "$output_dir"; then
-      stop_for_driver "WebGPU eval for $model exited $eval_status and did not produce a valid schemaVersion 1 artifact."
+      stop_for_driver "WebGPU eval for $model exited $eval_status and did not produce a valid schemaVersion 1 artifact. See $eval_log"
     fi
   done
 }
 
-ensure_baseline_snapshot() {
+create_baseline_snapshot() {
   local snapshot_file="$1"
-  local purpose="$2"
-  local latest_error="$TMP_ROOT/latest-${purpose}.err"
-
-  set +e
-  node "$HELPER" latest-snapshot "$MODEL_ARG" > "$snapshot_file" 2> "$latest_error"
-  local latest_status=$?
-  set -e
-
-  if [[ "$latest_status" -eq 0 ]]; then
-    return
-  fi
-
-  if [[ "$latest_status" -ne 3 ]]; then
-    stop_for_driver "$(cat "$latest_error")"
-  fi
-
-  printf 'latest artifacts are missing or stale: %s\n' "$(cat "$latest_error")"
+  local log_prefix="$2"
   local output_dir
-  output_dir="$REPO/.evals/web-gpu-$(timestamp)-auto-${purpose}-$$"
-  run_eval_set "$output_dir" "$RUN_LOG_DIR/${purpose}.eval"
+  output_dir="$REPO/.evals/web-gpu-$(timestamp)-auto-baseline-$$"
+
+  printf 'creating fresh run baseline -> %s\n' "$output_dir"
+  run_eval_set "$output_dir" "$log_prefix"
   node "$HELPER" snapshot "$MODEL_ARG" "$output_dir" > "$snapshot_file" ||
     stop_for_driver "Fresh headed eval artifacts could not be validated."
 }
@@ -502,36 +472,6 @@ changed_paths_for_commit() {
   [[ -s "$pathspec_file" ]]
 }
 
-print_patch_diff() {
-  local patch_file="$1"
-  local empty_message="$2"
-
-  if [[ ! -s "$patch_file" ]]; then
-    printf '    %s\n' "$empty_message"
-    return
-  fi
-
-  if command -v delta >/dev/null 2>&1; then
-    delta --paging=never --color-only < "$patch_file" | sed 's/^/    /'
-  else
-    sed 's/^/    /' "$patch_file"
-  fi
-}
-
-print_docs_diff() {
-  local commit_sha="$1"
-  if [[ -z "$commit_sha" ]]; then
-    printf '    (no docs diff)\n'
-    return
-  fi
-
-  if command -v delta >/dev/null 2>&1; then
-    git show --stat --patch "$commit_sha" -- docs/optimization/ | delta --paging=never --color-only | sed 's/^/    /'
-  else
-    git show --stat --patch "$commit_sha" -- docs/optimization/ | sed 's/^/    /'
-  fi
-}
-
 print_change_blurb() {
   local report_file="$1"
   local stdout_log="$2"
@@ -583,7 +523,7 @@ eval_log_refs() {
 
   for model in "${REQUESTED_MODELS[@]}"; do
     local eval_log="${log_prefix}-${model}.log"
-    if [[ -s "$eval_log" ]]; then
+    if [[ -e "$eval_log" ]]; then
       refs+=("$(relative_log_path "$eval_log")")
     fi
   done
@@ -604,13 +544,14 @@ append_docs_note() {
   local stdout_log="$5"
   local stderr_log="$6"
   local test_log="$7"
-  local eval_log_prefix="$8"
+  local baseline_eval_log_prefix="$8"
+  local verify_eval_log_prefix="$9"
 
   mkdir -p "$REPO/docs/optimization"
   local report
   report="$(one_line_file "$report_file" "no report")"
 
-  printf '%s iteration=%s model=%s result="%s" summary="%s" logs="codex_stderr:%s codex_stdout:%s test:%s eval:%s"\n' \
+  printf '%s iteration=%s model=%s result="%s" summary="%s" logs="codex_stderr:%s codex_stdout:%s test:%s baseline_eval:%s verify_eval:%s"\n' \
     "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" \
     "$iteration" \
     "$selected_model" \
@@ -619,13 +560,15 @@ append_docs_note() {
     "$(log_ref "$stderr_log")" \
     "$(log_ref "$stdout_log")" \
     "$(log_ref "$test_log")" \
-    "$(eval_log_refs "$eval_log_prefix")" >> "$REPO/docs/optimization/${selected_model}-log.md"
+    "$(eval_log_refs "$baseline_eval_log_prefix")" \
+    "$(eval_log_refs "$verify_eval_log_prefix")" >> "$REPO/docs/optimization/${selected_model}-log.md"
 }
 
-for ((iteration = 1; iteration <= ITERATIONS; iteration += 1)); do
-  BASELINE_JSON="$TMP_ROOT/iteration-${iteration}-baseline.json"
-  ensure_baseline_snapshot "$BASELINE_JSON" "baseline-${iteration}"
+BASELINE_JSON="$TMP_ROOT/run-start-baseline.json"
+BASELINE_EVAL_LOG_PREFIX="$RUN_LOG_DIR/baseline.eval"
+create_baseline_snapshot "$BASELINE_JSON" "$BASELINE_EVAL_LOG_PREFIX"
 
+for ((iteration = 1; iteration <= ITERATIONS; iteration += 1)); do
   SELECTED_MODEL="$(node "$HELPER" select-model "$MODEL_ARG" "$BASELINE_JSON")"
   ATTEMPT_BASE_SHA="$(git rev-parse HEAD)"
 
@@ -639,7 +582,8 @@ for ((iteration = 1; iteration <= ITERATIONS; iteration += 1)); do
   STDERR_LOG="$RUN_LOG_DIR/iteration-${iteration}.codex.stderr.log"
   REPORT_FILE="$RUN_LOG_DIR/iteration-${iteration}.report.txt"
   TEST_LOG="$RUN_LOG_DIR/iteration-${iteration}.test.log"
-  VERIFY_EVAL_LOG_PREFIX=""
+  VERIFY_EVAL_LOG_PREFIX="$RUN_LOG_DIR/iteration-${iteration}.verify-eval"
+  CANDIDATE_CAN_IMPROVE="no"
   CANDIDATE_PATCH="$TMP_ROOT/iteration-${iteration}.product.patch"
   DOCS_PATCH="$TMP_ROOT/iteration-${iteration}.docs.patch"
 
@@ -672,8 +616,6 @@ for ((iteration = 1; iteration <= ITERATIONS; iteration += 1)); do
 
   print_change_blurb "$REPORT_FILE" "$STDOUT_LOG"
   printf '\n'
-  print_patch_diff "$CANDIDATE_PATCH" "(no product diff)"
-  printf '\n'
 
   if [[ "$CODEX_STATUS" -ne 0 ]]; then
     SCORE_LINE="no improvement (codex exited ${CODEX_STATUS})"
@@ -686,40 +628,46 @@ for ((iteration = 1; iteration <= ITERATIONS; iteration += 1)); do
 
     printf -- "- tests running...\n"
     printf '    output: %s\n' "$TEST_LOG"
-    if ! run_with_log "$TEST_LOG" pnpm test; then
+    if ! run_to_log "$TEST_LOG" pnpm test; then
       SCORE_LINE="no improvement (tests failed)"
       reset_candidate_product_patch "$CANDIDATE_PATCH"
       ensure_product_changes_reset
     else
-      VERIFY_DIR="$REPO/.evals/web-gpu-$(timestamp)-auto-verify-${SELECTED_MODEL}-${iteration}-$$"
-      VERIFY_EVAL_LOG_PREFIX="$RUN_LOG_DIR/iteration-${iteration}.verify-eval"
-      run_eval_set "$VERIFY_DIR" "$VERIFY_EVAL_LOG_PREFIX"
-      VERIFY_JSON="$TMP_ROOT/iteration-${iteration}-verify.json"
-      node "$HELPER" snapshot "$MODEL_ARG" "$VERIFY_DIR" > "$VERIFY_JSON" ||
-        stop_for_driver "Verification artifacts could not be validated."
-
-      COMPARE_JSON="$TMP_ROOT/iteration-${iteration}-compare.json"
-      node "$HELPER" compare "$SELECTED_MODEL" "$BASELINE_JSON" "$VERIFY_JSON" > "$COMPARE_JSON"
-      COMPARE_STATUS="$(node "$HELPER" compare-status "$COMPARE_JSON")"
-
-      if [[ "$COMPARE_STATUS" == "stop" ]]; then
-        reset_candidate_product_patch "$CANDIDATE_PATCH"
-        ensure_product_changes_reset
-        stop_for_driver "Verification could not prove the contract. See $COMPARE_JSON"
-      fi
-
-      if [[ "$COMPARE_STATUS" != "pass" ]]; then
-        SCORE_LINE="no improvement ($(node "$HELPER" compare-reasons "$COMPARE_JSON"))"
-        reset_candidate_product_patch "$CANDIDATE_PATCH"
-        ensure_product_changes_reset
-      else
-        NEW_SCORE="$(node "$HELPER" compare-new-score "$COMPARE_JSON")"
-        SCORE_LINE="$(node "$HELPER" compare-score-improvement "$COMPARE_JSON")"
-      fi
+      CANDIDATE_CAN_IMPROVE="yes"
     fi
   fi
 
-  append_docs_note "$SELECTED_MODEL" "$iteration" "$SCORE_LINE" "$REPORT_FILE" "$STDOUT_LOG" "$STDERR_LOG" "$TEST_LOG" "$VERIFY_EVAL_LOG_PREFIX"
+  VERIFY_DIR="$REPO/.evals/web-gpu-$(timestamp)-auto-verify-${SELECTED_MODEL}-${iteration}-$$"
+  cd "$REPO"
+  run_eval_set "$VERIFY_DIR" "$VERIFY_EVAL_LOG_PREFIX"
+  VERIFY_JSON="$TMP_ROOT/iteration-${iteration}-verify.json"
+  node "$HELPER" snapshot "$MODEL_ARG" "$VERIFY_DIR" > "$VERIFY_JSON" ||
+    stop_for_driver "Verification artifacts could not be validated."
+
+  COMPARE_JSON="$TMP_ROOT/iteration-${iteration}-compare.json"
+  node "$HELPER" compare "$SELECTED_MODEL" "$BASELINE_JSON" "$VERIFY_JSON" > "$COMPARE_JSON"
+  COMPARE_STATUS="$(node "$HELPER" compare-status "$COMPARE_JSON")"
+
+  if [[ "$COMPARE_STATUS" == "stop" ]]; then
+    if [[ "$CANDIDATE_CAN_IMPROVE" == "yes" ]]; then
+      reset_candidate_product_patch "$CANDIDATE_PATCH"
+      ensure_product_changes_reset
+    fi
+    stop_for_driver "Verification could not prove the contract. See $COMPARE_JSON"
+  fi
+
+  if [[ "$CANDIDATE_CAN_IMPROVE" == "yes" ]]; then
+    if [[ "$COMPARE_STATUS" != "pass" ]]; then
+      SCORE_LINE="no improvement ($(node "$HELPER" compare-reasons "$COMPARE_JSON"))"
+      reset_candidate_product_patch "$CANDIDATE_PATCH"
+      ensure_product_changes_reset
+    else
+      NEW_SCORE="$(node "$HELPER" compare-new-score "$COMPARE_JSON")"
+      SCORE_LINE="$(node "$HELPER" compare-score-improvement "$COMPARE_JSON")"
+    fi
+  fi
+
+  append_docs_note "$SELECTED_MODEL" "$iteration" "$SCORE_LINE" "$REPORT_FILE" "$STDOUT_LOG" "$STDERR_LOG" "$TEST_LOG" "$BASELINE_EVAL_LOG_PREFIX" "$VERIFY_EVAL_LOG_PREFIX"
 
   PATHSPEC_FILE="$TMP_ROOT/iteration-${iteration}-commit-paths.nul"
   if ! changed_paths_for_commit "$PATHSPEC_FILE"; then
@@ -728,12 +676,12 @@ for ((iteration = 1; iteration <= ITERATIONS; iteration += 1)); do
 
   if [[ "$SCORE_LINE" == no\ improvement* ]]; then
     git add --pathspec-from-file="$PATHSPEC_FILE" --pathspec-file-nul
-    git commit -m "auto-optimize: ${SELECTED_MODEL} no improvement"
+    git commit -m "auto-optimize: ${SELECTED_MODEL} no improvement" >/dev/null
     COMMIT_SHA="$(git rev-parse --short HEAD)"
   else
     ensure_main_candidate_unchanged "$ATTEMPT_BASE_SHA" "$CANDIDATE_PATCH"
     git add --pathspec-from-file="$PATHSPEC_FILE" --pathspec-file-nul
-    git commit -m "auto-optimize: ${SELECTED_MODEL} ${NEW_SCORE}"
+    git commit -m "auto-optimize: ${SELECTED_MODEL} ${NEW_SCORE}" >/dev/null
     COMMIT_SHA="$(git rev-parse --short HEAD)"
     node "$HELPER" update-last-good "$SELECTED_MODEL" "$VERIFY_JSON" "$COMMIT_SHA"
   fi
@@ -744,7 +692,5 @@ for ((iteration = 1; iteration <= ITERATIONS; iteration += 1)); do
   else
     printf -- "- commit: none\n"
   fi
-  printf '\n'
-  print_docs_diff "$COMMIT_SHA"
   printf '\n'
 done
