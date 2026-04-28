@@ -478,7 +478,7 @@ ensure_main_candidate_unchanged() {
   git -C "$REPO" add -N -- . >/dev/null 2>&1 || true
   git -C "$REPO" diff --binary "$base_sha" -- . ':(exclude)docs/optimization/**' > "$current_patch"
 
-  if ! cmp -s "$expected_patch" "$current_patch"; then
+  if ! node "$HELPER" patches-equivalent "$expected_patch" "$current_patch"; then
     stop_for_driver "Main product diff changed after candidate import. See $expected_patch and $current_patch"
   fi
 }

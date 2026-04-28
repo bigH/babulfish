@@ -19,6 +19,7 @@ import {
   EXPECTED_CASE_COUNT,
   appendAcceptedOptimizationLog,
   appendFailedExperiment,
+  areGitPatchesEquivalent,
   buildAcceptedOptimizationRecord,
   buildPromptEvidence,
   buildFailedExperimentRecord,
@@ -197,6 +198,26 @@ const patchHash = (patchPath) => {
   if (!patchPath || patchPath === "none" || !fs.existsSync(patchPath)) return null
   const patch = fs.readFileSync(patchPath)
   return patch.length === 0 ? null : crypto.createHash("sha256").update(patch).digest("hex")
+}
+const canonicalPatch = (patch) => {
+  const matches = [...patch.matchAll(/^diff --git .+$/gm)]
+  if (matches.length === 0) return patch
+
+  const preamble = patch.slice(0, matches[0].index)
+  const chunks = matches.map((match, index) => ({
+    header: match[0],
+    text: patch.slice(match.index, matches[index + 1]?.index ?? patch.length),
+  }))
+
+  return [
+    preamble,
+    ...chunks
+      .sort(
+        (left, right) =>
+          left.header.localeCompare(right.header) || left.text.localeCompare(right.text),
+      )
+      .map((chunk) => chunk.text),
+  ].join("")
 }
 const changedFiles = (patchPath) => {
   if (!patchPath || !fs.existsSync(patchPath) || fs.readFileSync(patchPath, "utf8").length === 0) return []
@@ -480,6 +501,11 @@ switch (command) {
     break
   case "commit-paths":
     process.stdout.write("packages/core/src/engine/adapters/chat.ts\\0docs/optimization/qwen-3-0.6b-log.jsonl\\0")
+    break
+  case "patches-equivalent":
+    if (canonicalPatch(fs.readFileSync(args[0], "utf8")) !== canonicalPatch(fs.readFileSync(args[1], "utf8"))) {
+      process.exit(1)
+    }
     break
   case "compare-new-score":
     console.log(readJson(args[0]).selected.newScore)
@@ -1236,6 +1262,38 @@ describe("auto optimizer helper", () => {
     ])
   })
 
+  it("compares git patches independent of file diff order", () => {
+    const adapterPatch = [
+      "diff --git a/packages/core/src/engine/adapters/models/qwen.ts b/packages/core/src/engine/adapters/models/qwen.ts",
+      "index 1111111..2222222 100644",
+      "--- a/packages/core/src/engine/adapters/models/qwen.ts",
+      "+++ b/packages/core/src/engine/adapters/models/qwen.ts",
+      "@@ -1 +1 @@",
+      "-old prompt",
+      "+new prompt",
+      "",
+    ].join("\n")
+    const testPatch = [
+      "diff --git a/packages/core/src/engine/__tests__/engine.test.ts b/packages/core/src/engine/__tests__/engine.test.ts",
+      "index 3333333..4444444 100644",
+      "--- a/packages/core/src/engine/__tests__/engine.test.ts",
+      "+++ b/packages/core/src/engine/__tests__/engine.test.ts",
+      "@@ -1 +1 @@",
+      "-old test",
+      "+new test",
+      "",
+    ].join("\n")
+
+    assert.equal(areGitPatchesEquivalent(adapterPatch + testPatch, testPatch + adapterPatch), true)
+    assert.equal(
+      areGitPatchesEquivalent(
+        adapterPatch + testPatch,
+        testPatch + adapterPatch.replace("new prompt", "other prompt"),
+      ),
+      false,
+    )
+  })
+
   it("stops when an accepted baseline artifact hash changes", () => {
     const root = mkdtempSync(path.join(tmpdir(), "auto-optimizer-hash-test-"))
     const artifactDir = path.join(root, ".evals", "web-gpu-hash-test")
@@ -1740,6 +1798,13 @@ describe("auto optimizer helper", () => {
     assert.match(script, /run_to_log "\$eval_log" pnpm eval:webgpu/)
     assert.doesNotMatch(script, /\btee\b/)
     assert.doesNotMatch(script, /run_with_log/)
+  })
+
+  it("allows candidate patch files to differ only by file diff order", () => {
+    const script = readFileSync(new URL("./auto-optimize.sh", import.meta.url), "utf8")
+
+    assert.match(script, /node "\$HELPER" patches-equivalent "\$expected_patch" "\$current_patch"/)
+    assert.doesNotMatch(script, /cmp -s "\$expected_patch" "\$current_patch"/)
   })
 
   it("runs selection, prompts, and comparison against the active baseline", () => {

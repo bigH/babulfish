@@ -773,6 +773,45 @@ export function productDiffHashFromPatchFile(patchPath) {
   return createHash("sha256").update(patch).digest("hex")
 }
 
+export function canonicalizeGitPatchText(patchText) {
+  const diffHeaderPattern = /^diff --git .+$/gm
+  const matches = [...patchText.matchAll(diffHeaderPattern)]
+
+  if (matches.length === 0) return patchText
+
+  const preamble = patchText.slice(0, matches[0].index)
+  const chunks = matches.map((match, index) => {
+    const start = match.index
+    const end = matches[index + 1]?.index ?? patchText.length
+
+    return {
+      header: match[0],
+      text: patchText.slice(start, end),
+    }
+  })
+
+  return [
+    preamble,
+    ...chunks
+      .sort(
+        (left, right) =>
+          left.header.localeCompare(right.header) || left.text.localeCompare(right.text),
+      )
+      .map((chunk) => chunk.text),
+  ].join("")
+}
+
+export function areGitPatchesEquivalent(leftPatchText, rightPatchText) {
+  return canonicalizeGitPatchText(leftPatchText) === canonicalizeGitPatchText(rightPatchText)
+}
+
+export function areGitPatchFilesEquivalent(leftPatchPath, rightPatchPath) {
+  return areGitPatchesEquivalent(
+    readFileSync(leftPatchPath, "utf8"),
+    readFileSync(rightPatchPath, "utf8"),
+  )
+}
+
 function unquoteGitPath(filePath) {
   if (filePath.startsWith("\"") && filePath.endsWith("\"")) {
     try {
@@ -1656,6 +1695,8 @@ async function main(argv) {
     const paths = committableAttemptPaths(optionalRoot(argv[1]))
     process.stdout.write(paths.join("\0"))
     if (paths.length > 0) process.stdout.write("\0")
+  } else if (command === "patches-equivalent") {
+    if (!areGitPatchFilesEquivalent(argv[1], argv[2])) process.exit(1)
   } else if (command === "update-last-good") {
     await updateLastGoodScores(argv[1], argv[2], argv[3])
   } else {
@@ -1668,7 +1709,7 @@ async function main(argv) {
         "compare-artifact, changed-paths, changed-paths-nul, eval-models, merge-active-baseline,",
         "snapshot-artifact-dirs, candidate-count,",
         "failed-memory-prompt, failed-memory-duplicate, append-failed-experiment, append-accepted-log,",
-        "ensure-reset-scope, commit-paths, update-last-good",
+        "ensure-reset-scope, commit-paths, patches-equivalent, update-last-good",
       ].join("\n"),
     )
   }
