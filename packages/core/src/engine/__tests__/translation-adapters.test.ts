@@ -673,10 +673,43 @@ describe("chat adapters", () => {
     expect(
       gemma3ChatAdapter.extractText(
         request,
-        { max_new_tokens: 64 },
+        { max_new_tokens: 64, content_type: "raw" },
         [{ generated_text: generatedText }],
       ).text,
     ).toBe(generatedText.trim())
+  })
+
+  it("repairs implicit Gemma block markdown without changing raw prompt intent", () => {
+    const request = {
+      text:
+        "## Nota de versión\n" +
+        "- Mantén `WebGPU` activado.\n" +
+        "- Revisa [la guía](/docs/runtime).",
+      source: { code: "es" },
+      target: { code: "en" },
+    } satisfies TranslationRequest
+
+    const invocation = gemma3ChatAdapter.buildInvocation(request, OPTIONS)
+
+    expect(invocation.modelInput[1]?.content).toBe(
+      "Translate this text to English (en).\n" +
+        "Return only the translated text.\n\n" +
+        "Source:\n" +
+        request.text,
+    )
+    expect(
+      gemma3ChatAdapter.extractText(request, OPTIONS, [
+        {
+          generated_text:
+            "Version update: Keep `WebGPU` enabled. Review `/docs/runtime`.",
+        },
+      ]),
+    ).toEqual({
+      text:
+        "## Version update\n" +
+        "- Keep `WebGPU` enabled.\n" +
+        "- Review [la guía](/docs/runtime).",
+    })
   })
 
   it("auto-prompts Qwen to preserve product and technical spans", () => {

@@ -44,6 +44,13 @@ const HEADING_PATTERN = /^(\s*)(#{1,6})(\s+)(.*)$/u
 const UNORDERED_LIST_PATTERN = /^(\s*)([-+*])(\s+)(.*)$/u
 const ORDERED_LIST_PATTERN = /^(\s*)(\d+)([.)])(\s+)(.*)$/u
 const BLOCKQUOTE_PATTERN = /^(\s*>+\s?)(.*)$/u
+const BLOCK_MARKDOWN_PATTERNS = Object.freeze([
+  HEADING_PATTERN,
+  UNORDERED_LIST_PATTERN,
+  ORDERED_LIST_PATTERN,
+  BLOCKQUOTE_PATTERN,
+  FENCED_CODE_START_PATTERN,
+])
 
 type MarkdownLineShape =
   | { readonly kind: "plain" }
@@ -220,16 +227,97 @@ function restoreMissingCodeFence(source: string, translated: string): string {
   return [...before, ...codeLines, ...after].join("\n")
 }
 
+function isBlockMarkdownLine(line: string): boolean {
+  return BLOCK_MARKDOWN_PATTERNS.some((pattern) => pattern.test(line))
+}
+
+function hasBlockMarkdownSyntax(text: string): boolean {
+  return text.split(MARKDOWN_LINE_SPLIT_PATTERN).some(isBlockMarkdownLine)
+}
+
+function withoutBlankLines(lines: readonly string[]): readonly string[] {
+  return lines.filter((line) => line.trim().length > 0)
+}
+
+function splitFirstHeadingChunk(
+  sourceLines: readonly string[],
+  text: string,
+): readonly string[] {
+  if (lineShape(sourceLines[0] ?? "").kind !== "heading") return [text]
+
+  const colon = /^(.{3,80}?):\s+(.+)$/u.exec(text)
+  if (colon) return [colon[1]!.trim(), colon[2]!.trim()]
+
+  const dash = /^(.{3,80}?)\s[-–—]\s(.+)$/u.exec(text)
+  return dash ? [dash[1]!.trim(), dash[2]!.trim()] : [text]
+}
+
+function splitSentenceChunks(text: string): readonly string[] {
+  return text
+    .split(/(?<=[.!?。！？؟])\s+/u)
+    .map((chunk) => chunk.trim())
+    .filter((chunk) => chunk.length > 0)
+}
+
+function fitChunkCount(
+  chunks: readonly string[],
+  count: number,
+): readonly string[] | null {
+  if (chunks.length < count) return null
+  if (chunks.length === count) return chunks
+
+  return [...chunks.slice(0, count - 1), chunks.slice(count - 1).join(" ")]
+}
+
+function splitCollapsedMarkdownTranslation(
+  sourceLines: readonly string[],
+  translatedLines: readonly string[],
+): readonly string[] | null {
+  const visibleSourceLines = withoutBlankLines(sourceVisibleMarkdownLines(sourceLines))
+  if (
+    visibleSourceLines.length <= translatedLines.length ||
+    translatedLines.some(isFencedCodeStart)
+  ) {
+    return null
+  }
+
+  const text = translatedLines.join(" ").replace(/\s+/gu, " ").trim()
+  if (text.length === 0) return null
+
+  const headingChunks = splitFirstHeadingChunk(visibleSourceLines, text)
+  const first = headingChunks[0]
+  if (!first) return null
+
+  const rest = headingChunks.slice(1)
+  const chunks = [
+    first,
+    ...splitSentenceChunks(rest.length === 0 ? "" : rest.join(" ")),
+  ].filter((chunk): chunk is string => chunk.length > 0)
+
+  return fitChunkCount(chunks, visibleSourceLines.length)
+}
+
 function restoreSourceLineShapes(source: string, translated: string): string {
   const sourceLines = normalizeMarkdownAnswerText(source).split(MARKDOWN_LINE_SPLIT_PATTERN)
   const translatedLines = translated.split(MARKDOWN_LINE_SPLIT_PATTERN)
 
   if (sourceLines.length !== translatedLines.length) {
     const visibleSourceLines = sourceVisibleMarkdownLines(sourceLines)
-    if (visibleSourceLines.length !== translatedLines.length) return translated
+    const collapsedLines = splitCollapsedMarkdownTranslation(
+      sourceLines,
+      translatedLines,
+    )
+    const repairLines =
+      collapsedLines ??
+      (visibleSourceLines.length === translatedLines.length ? translatedLines : null)
 
-    return translatedLines
-      .map((line, index) => applyLineShape(line, visibleSourceLines[index]!))
+    if (!repairLines) return translated
+
+    const shapeSourceLines =
+      collapsedLines === null ? visibleSourceLines : withoutBlankLines(visibleSourceLines)
+
+    return repairLines
+      .map((line, index) => applyLineShape(line, shapeSourceLines[index]!))
       .join("\n")
   }
 
@@ -265,6 +353,10 @@ function restoreDroppedMarkdownLink(translated: string, link: MarkdownLink): str
   const hrefEnd = hrefStart + link.href.length
   const previousChar = translated[hrefStart - 1]
   const nextChar = translated[hrefEnd]
+  if (previousChar === "`" && nextChar === "`") {
+    return `${translated.slice(0, hrefStart - 1)}[${link.label}](${link.href})${translated.slice(hrefEnd + 1)}`
+  }
+
   if (previousChar === "(" && nextChar === ")") return translated
 
   return `${translated.slice(0, hrefStart)}[${link.label}](${link.href})${translated.slice(hrefEnd)}`
@@ -370,6 +462,16 @@ function repairGemmaMarkdown(source: string, translated: string): string {
   )
 }
 
+function shouldRepairGemmaMarkdown(
+  request: TranslationRequest,
+  options: TranslationOptions,
+): boolean {
+  return (
+    options.content_type === "markdown" ||
+    (options.content_type === undefined && hasBlockMarkdownSyntax(request.text))
+  )
+}
+
 function isIdentifierBoundary(char: string | undefined): boolean {
   return char === undefined || !/[A-Za-z0-9_@./-]/u.test(char)
 }
@@ -460,7 +562,7 @@ export class Gemma3ChatAdapter extends ChatModelBaseAdapter {
       output,
     )
 
-    if (options.content_type !== "markdown") return result
+    if (!shouldRepairGemmaMarkdown(request, options)) return result
 
     return { text: repairGemmaMarkdown(request.text, result.text) }
   }
