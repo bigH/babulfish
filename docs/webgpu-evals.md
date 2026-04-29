@@ -23,7 +23,7 @@ pnpm eval:webgpu -- --content-type dom --language-pair en-es
 pnpm eval:webgpu -- --source-language en --target-language fr
 pnpm eval:webgpu -- --source-class synthetic_template
 pnpm eval:webgpu -- --split general --source-class public_benchmark
-pnpm eval:webgpu -- --split holdout --holdout-reason "release gate"
+pnpm eval:webgpu -- --split holdout
 pnpm eval:webgpu -- --output-dir .evals/manual-webgpu-run
 ```
 
@@ -35,7 +35,7 @@ The runner starts the vanilla Vite demo with COOP/COEP headers, launches Chromiu
 
 Text and Markdown cases run through `translateText()`. DOM cases run through `translateTo(..., { root })` against an isolated per-case fixture so selector and attribute checks exercise the DOM path. DOM artifacts capture the eval root `outerHTML`, which keeps root-level `dir` assertions visible.
 
-The default local report run uses `--split targeted,general`. `holdout` is excluded unless explicitly selected, and selecting it requires `--holdout-reason`.
+The default local report run uses `--split targeted,general`. `holdout` is excluded unless explicitly selected.
 
 The corpus currently contains 117 cases:
 
@@ -125,9 +125,9 @@ Reference similarity uses a local chrF-style character n-gram F-score over norma
 
 No LLM judge is used as the primary score.
 
-Artifacts include both raw scoring and clean headline scoring. Raw `model.score` scores exactly the selected cases. `model.cleanHeadlineScore` excludes `public_benchmark` and `public_web` cases, reports the excluded case IDs, and is the score to quote for clean local reporting. Private `general` cases remain included. `model.scoreGroupSummaries` groups score summaries only by `split` and `sourceClass`; `model.caseGroupSummaries` remains the non-score triage breakdown by split/content/category/language/source class.
+Artifacts include both raw scoring and clean headline scoring. Raw `model.score` scores exactly the selected cases. `model.cleanHeadlineScore` excludes `public_benchmark` and `public_web` cases, reports the excluded case IDs, and is the score to quote for clean local reporting. Private `general` cases remain included. `model.caseGroupSummaries` includes pass/fail counts and scores by split/content type/category/language/source class. `model.scoreGroupSummaries` keeps the coarser score summary by `split` and `sourceClass`.
 
-Holdout artifacts also record auditable run metadata:
+Artifacts also record run metadata:
 
 - runner
 - timestamp
@@ -193,13 +193,25 @@ Sample artifact shape:
         "category": "markdown",
         "languagePair": "en-es",
         "sourceClass": "missing",
+        "score": 0.87,
+        "scoreBreakdown": {
+          "weightedCheckScore": 0.9,
+          "passedCaseRatio": 0.75,
+          "referenceSimilarity": 0.84,
+          "hardFailureCount": 0,
+          "failureReason": null
+        },
+        "failuresByCategory": {
+          "markdown": 1
+        },
+        "failuresByCheck": {
+          "markdown-link-href:/docs/runtime": 1
+        },
         "total": 4,
         "passed": 3,
         "failed": 1,
         "hardFailures": 0,
-        "failuresByCheck": {
-          "markdown-link-href:/docs/runtime": 1
-        }
+        "pass": false
       }
     ],
     "scoreGroupSummaries": [

@@ -23,26 +23,11 @@ describe("webgpu eval cli", () => {
     assert.match(options.outputDir, /\.evals[/\\]web-gpu-/)
   })
 
-  it("requires a reason when holdout is explicitly selected", () => {
-    assert.throws(
-      () => parseArgs(["--split", "holdout"]),
-      /--split holdout requires --holdout-reason/,
-    )
-    assert.throws(
-      () => parseArgs(["--split", "targeted,holdout"]),
-      /--split holdout requires --holdout-reason/,
-    )
-
-    const options = parseArgs([
-      "--split",
-      "holdout",
-      "--holdout-reason",
-      "release gate",
-      "--references-exposed",
-    ])
+  it("allows holdout runs without a reason", () => {
+    const options = parseArgs(["--split", "holdout", "--references-exposed"])
 
     assert.deepEqual(options.filters, { split: ["holdout"] })
-    assert.equal(options.holdoutReason, "release gate")
+    assert.equal(options.holdoutReason, null)
     assert.equal(options.referencesExposed, true)
   })
 
@@ -52,8 +37,6 @@ describe("webgpu eval cli", () => {
       "gemma-3-1b-it",
       "--split",
       "holdout",
-      "--holdout-reason",
-      "release gate",
       "--references-exposed",
     ])
     const metadata = createRunMetadata("gemma-3-1b-it", options)
@@ -61,7 +44,7 @@ describe("webgpu eval cli", () => {
     assert.equal(metadata.runner, "webgpu-eval-cli")
     assert.equal(metadata.modelId, "gemma-3-1b-it")
     assert.deepEqual(metadata.filters, { split: ["holdout"] })
-    assert.equal(metadata.reason, "release gate")
+    assert.equal(metadata.reason, null)
     assert.equal(metadata.referencesExposed, true)
     assert.match(metadata.timestamp, /^\d{4}-\d{2}-\d{2}T/)
   })

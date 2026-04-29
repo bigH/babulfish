@@ -54,6 +54,13 @@ const scoreBreakdown = (overrides = {}) => ({
 
 const evalCase = (id, pass = true) => ({
   id,
+  split: "targeted",
+  category: "plain",
+  sourceLanguage: "en",
+  targetLanguage: "es",
+  contentType: "text",
+  sourceClass: "first_party_authored",
+  score: pass ? 1 : 0,
   pass,
   checks: [
     { name: "non-empty-output", pass: true },
@@ -75,6 +82,46 @@ const cases = Array.from({ length: EXPECTED_CASE_COUNT }, (_, index) =>
 const casesWithFailedCase = (failedId) =>
   cases.map((testCase) => testCase.id === failedId ? evalCase(failedId, false) : testCase)
 
+const caseGroupSummary = (overrides = {}) => ({
+  score: 1,
+  scoreBreakdown: scoreBreakdown({
+    weightedCheckScore: 1,
+    passedCaseRatio: 1,
+    referenceSimilarity: 1,
+  }),
+  failuresByCategory: {},
+  failuresByCheck: {},
+  split: "targeted",
+  contentType: "text",
+  category: "plain",
+  languagePair: "en-es",
+  sourceClass: "first_party_authored",
+  total: EXPECTED_CASE_COUNT,
+  passed: EXPECTED_CASE_COUNT,
+  failed: 0,
+  hardFailures: 0,
+  pass: true,
+  ...overrides,
+})
+
+const scoreGroupSummary = (overrides = {}) => ({
+  score: 1,
+  scoreBreakdown: scoreBreakdown({
+    weightedCheckScore: 1,
+    passedCaseRatio: 1,
+    referenceSimilarity: 1,
+  }),
+  failuresByCategory: {},
+  failuresByCheck: {},
+  split: "targeted",
+  sourceClass: "first_party_authored",
+  total: EXPECTED_CASE_COUNT,
+  passed: EXPECTED_CASE_COUNT,
+  failed: 0,
+  pass: true,
+  ...overrides,
+})
+
 const artifact = (modelId, overrides = {}) => ({
   schemaVersion: 1,
   pass: false,
@@ -89,6 +136,8 @@ const artifact = (modelId, overrides = {}) => ({
     cases,
     failuresByCategory: {},
     failuresByCheck: {},
+    caseGroupSummaries: [caseGroupSummary()],
+    scoreGroupSummaries: [scoreGroupSummary()],
     error: null,
     ...overrides.model,
   },
@@ -163,6 +212,7 @@ import fs from "node:fs"
 import path from "node:path"
 
 const allModels = ["qwen-3-0.6b", "gemma-3-1b-it", "translategemma-4"]
+const expectedCaseCount = ${EXPECTED_CASE_COUNT}
 const command = process.argv[2]
 const args = process.argv.slice(3)
 const qwenIteration1Score = Number(process.env.MOCK_QWEN_ITERATION_1_SCORE ?? 0.66)
@@ -240,8 +290,8 @@ const modelSummary = (model, outputDir) => {
     score,
     pass: score > 0.6,
     modelPass: score > 0.6,
-    passedCases: Math.round(score * 38),
-    totalCases: 38,
+    passedCases: Math.round(score * expectedCaseCount),
+    totalCases: expectedCaseCount,
     hardFailureCount: 0,
     scoreBreakdown: { weightedCheckScore: score },
     failuresByCategory: {},
@@ -714,6 +764,24 @@ describe("auto optimizer helper", () => {
     const successful = summarizeArtifactObject(artifact("qwen-3-0.6b"), "qwen-3-0.6b")
     assert.equal(successful.score, 0.25)
     assert.equal(successful.totalCases, EXPECTED_CASE_COUNT)
+    assert.equal(successful.checkOutcomes[0].split, "targeted")
+    assert.equal(successful.checkOutcomes[0].contentType, "text")
+    assert.equal(successful.checkOutcomes[0].languagePair, "en-es")
+    assert.equal(successful.checkOutcomes[0].score, 1)
+    assert.equal(successful.caseGroupSummaries[0].score, 1)
+    assert.equal(successful.scoreGroupSummaries[0].score, 1)
+
+    const normalizedLegacyGroups = summarizeArtifactObject(
+      artifact("qwen-3-0.6b", {
+        model: {
+          caseGroupSummaries: [],
+          scoreGroupSummaries: [],
+        },
+      }),
+      "qwen-3-0.6b",
+    )
+    assert.equal(normalizedLegacyGroups.caseGroupSummaries[0].score, 1)
+    assert.equal(normalizedLegacyGroups.scoreGroupSummaries[0].score, 1)
 
     const loadFailure = summarizeArtifactObject(
       artifact("qwen-3-0.6b", {
@@ -726,6 +794,8 @@ describe("auto optimizer helper", () => {
             failureReason: "load: forced failure",
           }),
           cases: [],
+          caseGroupSummaries: [],
+          scoreGroupSummaries: [],
           error: { class: "load", message: "forced failure" },
         },
       }),
@@ -745,7 +815,7 @@ describe("auto optimizer helper", () => {
           artifact("gemma-3-1b-it", { model: { cases: [evalCase("too-few")] } }),
           "gemma-3-1b-it",
         ),
-      /38 cases/,
+      new RegExp(`${EXPECTED_CASE_COUNT} cases`),
     )
   })
 
@@ -763,7 +833,7 @@ describe("auto optimizer helper", () => {
         scoreBreakdown: { hardFailureCount: 10 },
       }),
       "gemma-3-1b-it": modelSummary("gemma-3-1b-it", 0, {
-        scoreBreakdown: { hardFailureCount: 38 },
+        scoreBreakdown: { hardFailureCount: EXPECTED_CASE_COUNT },
       }),
       "translategemma-4": modelSummary("translategemma-4", 0.9),
     })
@@ -1786,6 +1856,8 @@ describe("auto optimizer helper", () => {
     const script = readFileSync(new URL("./auto-optimize.sh", import.meta.url), "utf8")
 
     assert.match(script, /if run_to_log "\$eval_log" pnpm eval:webgpu/)
+    assert.match(script, /--split targeted,general,holdout/)
+    assert.doesNotMatch(script, /--holdout-reason/)
     assert.match(script, /eval_status=\$\?/)
     assert.match(script, /if ! node "\$HELPER" validate-artifact "\$model" "\$output_dir"; then/)
     assert.match(script, /See (?:\$eval_log|%s\\n' "\$model" "\$eval_status" "\$eval_log")/)
@@ -1796,6 +1868,7 @@ describe("auto optimizer helper", () => {
 
     assert.match(script, /run_to_log "\$TEST_LOG" pnpm test/)
     assert.match(script, /run_to_log "\$eval_log" pnpm eval:webgpu/)
+    assert.match(script, /pnpm eval:webgpu -- --model "\$model" --headed --split targeted,general,holdout --output-dir "\$output_dir"/)
     assert.doesNotMatch(script, /\btee\b/)
     assert.doesNotMatch(script, /run_with_log/)
   })
@@ -2023,6 +2096,8 @@ describe("auto optimizer helper", () => {
     )
 
     const commands = readFileSync(commandLog, "utf8")
+    assert.match(commands, /pnpm eval:webgpu -- --model qwen-3-0\.6b --headed --split targeted,general,holdout --output-dir/)
+    assert.doesNotMatch(commands, /--holdout-reason/)
     const baselineIndex = commands.indexOf("auto-baseline")
     const codexIndex = commands.indexOf("codex exec -C")
     const testIndex = commands.indexOf("pnpm test")

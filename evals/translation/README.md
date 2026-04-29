@@ -39,7 +39,7 @@ Current corpus count after PR 6:
 
 The PR 4 grouped `targeted` expansion adds 15 markdown, 18 text/preservation-family, and 16 DOM cases. They are all private `targeted` cases with full provenance and use only existing deterministic PR 2 check types.
 
-The PR 5 clean holdout seed adds 6 text, 6 markdown, and 6 DOM cases. The seed is intentionally 18 cases rather than the phase-1 target of 36 because the repo does not contain concrete evidence of bilingual reviewer capacity for a larger reviewed batch. Every PR 5 case is private, `holdout_approved`, auditable through concrete source origins, and excluded from default local runs unless selected explicitly with a holdout reason.
+The PR 5 clean holdout seed adds 6 text, 6 markdown, and 6 DOM cases. The seed is intentionally 18 cases rather than the phase-1 target of 36 because the repo does not contain concrete evidence of bilingual reviewer capacity for a larger reviewed batch. Every PR 5 case is private, `holdout_approved`, auditable through concrete source origins, and excluded from default local runs unless selected explicitly.
 
 Grouped provenance is validated before live evals run:
 
@@ -50,7 +50,7 @@ Grouped provenance is validated before live evals run:
 
 PR 6 expands the public-source `general` set to 12 public or mixed-exposure cases. They keep `category: "calibration-public"` as a provenance signal. They are contamination-marked regression/comparability probes, not clean holdout material, and clean headline scoring excludes them by source class. The original PR 3 `sentinel-public-*` fixtures remain in the set to keep provenance and reporting gates covered.
 
-PR 2 adds deterministic opt-in checks only. It does not add provenance gates, score grouping, holdout policy, or corpus expansion; those belong to later PRs from [`docs/plans/eval-corpus-expansion.md`](../../docs/plans/eval-corpus-expansion.md).
+Deterministic checks are opt-in so legacy case scoring stays stable.
 
 New opt-in checks include:
 
@@ -65,4 +65,4 @@ Score reporting now has two layers:
 - Raw model scoring still scores exactly the selected cases.
 - Clean headline scoring excludes `public_benchmark` and `public_web` cases and reports excluded case IDs.
 
-Score groups are aggregated only by `split` and `sourceClass`. The older artifact case-group summaries remain non-score triage summaries by split, content type, category, language pair, and source class.
+Score groups are aggregated by `split` and `sourceClass`. Artifact case-group summaries also include pass/fail counts and scores by split, content type, category, language pair, and source class.

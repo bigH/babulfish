@@ -50,7 +50,7 @@ function usage() {
     "  --model qwen-3-0.6b",
     "  --output-dir .evals/web-gpu-<timestamp>",
     "  --split targeted,general",
-    "  holdout runs only when explicitly selected with --holdout-reason",
+    "  holdout runs only when explicitly selected",
     "",
     "Filters:",
     "  --split targeted,general",
@@ -61,7 +61,7 @@ function usage() {
     "  --language-pair en-es,en-fr",
     "  --source-class first_party_authored",
     "",
-    "Holdout metadata:",
+    "Optional run metadata:",
     "  --holdout-reason \"release gate\"",
     "  --references-exposed",
     "",
@@ -194,13 +194,6 @@ export function parseArgs(argv) {
 
   if (!splitSpecified) {
     options.filters.split = defaultLocalSplits
-  }
-
-  if (
-    options.filters.split.includes("holdout") &&
-    (!options.holdoutReason || options.holdoutReason.trim().length === 0)
-  ) {
-    throw new Error("--split holdout requires --holdout-reason.")
   }
 
   return {

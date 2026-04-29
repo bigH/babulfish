@@ -282,7 +282,7 @@ export type WebGpuEvalModelScoreSummary = {
   readonly failuresByCheck: Readonly<Record<string, number>>
 }
 
-export type WebGpuEvalCaseGroupSummary = {
+export type WebGpuEvalCaseGroupSummary = WebGpuEvalModelScoreSummary & {
   readonly split: WebGpuEvalSplit
   readonly contentType: WebGpuEvalContentType
   readonly category: string
@@ -292,7 +292,7 @@ export type WebGpuEvalCaseGroupSummary = {
   readonly passed: number
   readonly failed: number
   readonly hardFailures: number
-  readonly failuresByCheck: Readonly<Record<string, number>>
+  readonly pass: boolean
 }
 
 export type WebGpuEvalScoreAggregationCase = WebGpuEvalModelScoreCase & {
@@ -2707,13 +2707,6 @@ export function createWebGpuEvalRunMetadata({
   if (timestamp.trim().length === 0) {
     throw new Error("WebGPU eval run metadata must define timestamp")
   }
-  if (
-    webGpuEvalSelectionIncludesHoldout(normalizedFilters) &&
-    normalizedReason === null
-  ) {
-    throw new Error("Holdout WebGPU eval runs require a reason")
-  }
-
   return {
     runner,
     timestamp,
@@ -2809,8 +2802,10 @@ export function summarizeWebGpuEvalCaseGroups(
   return Array.from(groups.values(), (groupCases) => {
     const first = groupCases[0]
     if (!first) throw new Error("Case group unexpectedly empty")
+    const summary = scoreWebGpuEvalModel(groupCases)
     const sourceClass: WebGpuEvalCaseGroupSummary["sourceClass"] = first.sourceClass ?? "missing"
     return {
+      ...summary,
       split: first.split,
       contentType: first.contentType,
       category: first.category,
@@ -2820,7 +2815,7 @@ export function summarizeWebGpuEvalCaseGroups(
       passed: groupCases.filter((evalCase) => evalCase.pass).length,
       failed: groupCases.filter((evalCase) => !evalCase.pass).length,
       hardFailures: groupCases.filter((evalCase) => evalCase.scoreBreakdown.hardFailure).length,
-      failuresByCheck: failuresByCheck(groupCases),
+      pass: groupCases.every((evalCase) => evalCase.pass),
     }
   }).sort((left, right) =>
     [

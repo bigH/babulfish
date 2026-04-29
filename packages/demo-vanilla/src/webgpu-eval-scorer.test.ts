@@ -1282,7 +1282,7 @@ describe("webgpu eval scorer", () => {
     expect(Object.keys(groups[0] ?? {})).not.toContain("contentType")
   })
 
-  it("defaults local runs away from holdout and requires holdout metadata", () => {
+  it("defaults local runs away from holdout and allows holdout without a reason", () => {
     expect(defaultWebGpuEvalSelection()).toEqual({ split: ["targeted", "general"] })
 
     expect(createWebGpuEvalRunMetadata({
@@ -1298,14 +1298,19 @@ describe("webgpu eval scorer", () => {
       referencesExposed: false,
     })
 
-    expect(() =>
-      createWebGpuEvalRunMetadata({
-        runner: "unit-test",
-        timestamp: "2026-04-28T12:00:00.000Z",
-        modelId: "qwen-3-0.6b",
-        filters: { split: ["holdout"] },
-      }),
-    ).toThrow("Holdout WebGPU eval runs require a reason")
+    expect(createWebGpuEvalRunMetadata({
+      runner: "unit-test",
+      timestamp: "2026-04-28T12:00:00.000Z",
+      modelId: "qwen-3-0.6b",
+      filters: { split: ["holdout"] },
+    })).toEqual({
+      runner: "unit-test",
+      timestamp: "2026-04-28T12:00:00.000Z",
+      modelId: "qwen-3-0.6b",
+      filters: { split: ["holdout"] },
+      reason: null,
+      referencesExposed: false,
+    })
 
     expect(createWebGpuEvalRunMetadata({
       runner: "unit-test",
@@ -1367,7 +1372,7 @@ describe("webgpu eval scorer", () => {
     }).map((evalCase) => evalCase.id)).toEqual(["targeted-markdown"])
   })
 
-  it("creates grouped artifact summaries without score grouping", () => {
+  it("creates grouped artifact summaries with per-type scores", () => {
     const groups = summarizeWebGpuEvalCaseGroups([
       {
         split: "targeted",
@@ -1410,16 +1415,28 @@ describe("webgpu eval scorer", () => {
         category: "markdown",
         languagePair: "en-es",
         sourceClass: "synthetic_template",
+        score: 0.5,
+        scoreBreakdown: {
+          weightedCheckScore: 0.5,
+          passedCaseRatio: 0.5,
+          referenceSimilarity: 0.5,
+          hardFailureCount: 1,
+          failureReason: null,
+        },
+        failuresByCategory: {
+          markdown: 1,
+        },
+        failuresByCheck: {
+          "markdown-heading:h2": 1,
+        },
         total: 2,
         passed: 1,
         failed: 1,
         hardFailures: 1,
-        failuresByCheck: {
-          "markdown-heading:h2": 1,
-        },
+        pass: false,
       },
     ])
-    expect(Object.keys(groups[0] ?? {})).not.toContain("score")
+    expect(Object.keys(groups[0] ?? {})).toContain("score")
   })
 
   it("scores model-level environment and load failures as zero", () => {

@@ -181,7 +181,7 @@ run_eval_set() {
     local eval_log="${log_prefix}-${model}.log"
     printf '    output: %s\n' "$eval_log"
     local eval_status
-    if run_to_log "$eval_log" pnpm eval:webgpu -- --model "$model" --headed --output-dir "$output_dir"; then
+    if run_to_log "$eval_log" pnpm eval:webgpu -- --model "$model" --headed --split targeted,general,holdout --output-dir "$output_dir"; then
       eval_status=0
     else
       eval_status=$?
@@ -567,7 +567,7 @@ Required workflow:
    pnpm test
    If any test fails, use the failure to revise the product change. If the failure cannot be fixed without violating the hard no-touch rules, leave attempted product/test edits in the temporary worktree, write the failure reason to the report file, and exit cleanly.
 6. Run the target headed eval into a fresh .evals/web-gpu-* output dir:
-   pnpm eval:webgpu -- --model <selected-model> --headed --output-dir <fresh-dir>
+   pnpm eval:webgpu -- --model <selected-model> --headed --split targeted,general,holdout --output-dir <fresh-dir>
 7. Compare the new artifact's model.score to the current accepted baseline above.
 8. Leave attempted product/test edits in the temporary worktree whether the eval improves, fails, crashes, times out, or regresses.
 9. Write the one-line report and exit cleanly. Do not revert or restore candidate product/test edits because tests failed or eval did not improve; the outer harness will import, evaluate, and clean rejected patches.

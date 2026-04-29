@@ -20,8 +20,12 @@ export const WEBGPU_EVAL_MODEL_IDS = Object.freeze([
   "translategemma-4",
 ])
 
-export const EXPECTED_CASE_COUNT = 38
+export const EXPECTED_CASE_COUNT = 117
 const NON_SELECTED_SCORE_REGRESSION_TOLERANCE = 0.01
+// Mirrors packages/demo-vanilla/src/webgpu-eval-scorer.ts for snapshot normalization.
+const MODEL_CHECK_SCORE_WEIGHT = 0.7
+const MODEL_PASSED_CASE_RATIO_WEIGHT = 0.2
+const MODEL_REFERENCE_SIMILARITY_WEIGHT = 0.1
 
 const scriptPath = fileURLToPath(import.meta.url)
 const repoRoot = path.resolve(path.dirname(scriptPath), "..")
@@ -177,6 +181,13 @@ function requireBoolean(value, label) {
   return value
 }
 
+function requireString(value, label) {
+  if (typeof value !== "string" || value.length === 0) {
+    throw new Error(`${label} must be a non-empty string.`)
+  }
+  return value
+}
+
 function requireArray(value, label) {
   if (!Array.isArray(value)) throw new Error(`${label} must be an array.`)
   return value
@@ -255,9 +266,40 @@ function caseCheckOutcomes(cases) {
     .map((evalCase) => {
       const record = requireRecord(evalCase, "model.cases[]")
       const scoreBreakdown = isRecord(record.scoreBreakdown) ? record.scoreBreakdown : {}
+      const sourceLanguage = requireString(record.sourceLanguage, `case ${record.id}.sourceLanguage`)
+      const targetLanguage = requireString(record.targetLanguage, `case ${record.id}.targetLanguage`)
       return {
-        id: String(record.id),
-        pass: record.pass === true,
+        id: requireString(record.id, "case.id"),
+        split: requireString(record.split, `case ${record.id}.split`),
+        category: requireString(record.category, `case ${record.id}.category`),
+        contentType: requireString(record.contentType, `case ${record.id}.contentType`),
+        sourceLanguage,
+        targetLanguage,
+        languagePair: `${sourceLanguage}-${targetLanguage}`,
+        sourceClass:
+          typeof record.sourceClass === "string" && record.sourceClass.length > 0
+            ? record.sourceClass
+            : "missing",
+        pass: requireBoolean(record.pass, `case ${record.id}.pass`),
+        score: requireFiniteNumber(record.score, `case ${record.id}.score`),
+        scoreBreakdown: {
+          checkScore: requireFiniteNumber(
+            scoreBreakdown.checkScore,
+            `case ${record.id}.scoreBreakdown.checkScore`,
+          ),
+          referenceSimilarity: requireFiniteNumber(
+            scoreBreakdown.referenceSimilarity,
+            `case ${record.id}.scoreBreakdown.referenceSimilarity`,
+          ),
+          hardFailure: requireBoolean(
+            scoreBreakdown.hardFailure,
+            `case ${record.id}.scoreBreakdown.hardFailure`,
+          ),
+          hardFailureReason:
+            typeof scoreBreakdown.hardFailureReason === "string"
+              ? scoreBreakdown.hardFailureReason
+              : null,
+        },
         hardFailureReason:
           typeof scoreBreakdown.hardFailureReason === "string"
             ? scoreBreakdown.hardFailureReason
@@ -273,6 +315,137 @@ function caseCheckOutcomes(cases) {
       }
     })
     .sort((left, right) => left.id.localeCompare(right.id))
+}
+
+function average(values) {
+  if (values.length === 0) return 0
+  return values.reduce((sum, value) => sum + value, 0) / values.length
+}
+
+function roundScore(score) {
+  return Math.round(Math.max(0, Math.min(1, score)) * 1_000_000) / 1_000_000
+}
+
+function incrementCounter(counter, key) {
+  counter[key] = (counter[key] ?? 0) + 1
+}
+
+function failuresByOutcomeCategory(outcomes) {
+  const failures = {}
+  for (const outcome of outcomes) {
+    if (!outcome.pass) incrementCounter(failures, outcome.category)
+  }
+  return failures
+}
+
+function failuresByOutcomeCheck(outcomes) {
+  const failures = {}
+  for (const outcome of outcomes) {
+    for (const check of outcome.checks) {
+      if (!check.pass) incrementCounter(failures, check.name)
+    }
+  }
+  return failures
+}
+
+function scoreOutcomes(outcomes) {
+  const weightedCheckScore = roundScore(
+    average(outcomes.map((outcome) => outcome.scoreBreakdown.checkScore)),
+  )
+  const passedCaseRatio = roundScore(
+    outcomes.length === 0 ? 0 : outcomes.filter((outcome) => outcome.pass).length / outcomes.length,
+  )
+  const referenceSimilarity = roundScore(
+    average(outcomes.map((outcome) => outcome.scoreBreakdown.referenceSimilarity)),
+  )
+  const hardFailureCount = outcomes.filter(
+    (outcome) => outcome.scoreBreakdown.hardFailure,
+  ).length
+
+  return {
+    score: roundScore(
+      weightedCheckScore * MODEL_CHECK_SCORE_WEIGHT +
+        passedCaseRatio * MODEL_PASSED_CASE_RATIO_WEIGHT +
+        referenceSimilarity * MODEL_REFERENCE_SIMILARITY_WEIGHT,
+    ),
+    scoreBreakdown: {
+      weightedCheckScore,
+      passedCaseRatio,
+      referenceSimilarity,
+      hardFailureCount,
+      failureReason: null,
+    },
+    failuresByCategory: failuresByOutcomeCategory(outcomes),
+    failuresByCheck: failuresByOutcomeCheck(outcomes),
+  }
+}
+
+function groupedOutcomes(outcomes, keyFor) {
+  const groups = new Map()
+  for (const outcome of outcomes) {
+    const key = keyFor(outcome)
+    groups.set(key, [...(groups.get(key) ?? []), outcome])
+  }
+  return [...groups.values()]
+}
+
+function summarizeCaseGroups(outcomes) {
+  return groupedOutcomes(
+    outcomes,
+    (outcome) => [
+      outcome.split,
+      outcome.contentType,
+      outcome.category,
+      outcome.languagePair,
+      outcome.sourceClass,
+    ].join("\u0000"),
+  ).map((groupOutcomes) => {
+    const first = groupOutcomes[0]
+    return {
+      ...scoreOutcomes(groupOutcomes),
+      split: first.split,
+      contentType: first.contentType,
+      category: first.category,
+      languagePair: first.languagePair,
+      sourceClass: first.sourceClass,
+      total: groupOutcomes.length,
+      passed: groupOutcomes.filter((outcome) => outcome.pass).length,
+      failed: groupOutcomes.filter((outcome) => !outcome.pass).length,
+      hardFailures: groupOutcomes.filter((outcome) => outcome.scoreBreakdown.hardFailure).length,
+      pass: groupOutcomes.every((outcome) => outcome.pass),
+    }
+  }).sort((left, right) =>
+    [
+      left.split.localeCompare(right.split),
+      left.contentType.localeCompare(right.contentType),
+      left.category.localeCompare(right.category),
+      left.languagePair.localeCompare(right.languagePair),
+      left.sourceClass.localeCompare(right.sourceClass),
+    ].find((comparison) => comparison !== 0) ?? 0,
+  )
+}
+
+function summarizeScoreGroups(outcomes) {
+  return groupedOutcomes(
+    outcomes,
+    (outcome) => [outcome.split, outcome.sourceClass].join("\u0000"),
+  ).map((groupOutcomes) => {
+    const first = groupOutcomes[0]
+    return {
+      ...scoreOutcomes(groupOutcomes),
+      split: first.split,
+      sourceClass: first.sourceClass,
+      total: groupOutcomes.length,
+      passed: groupOutcomes.filter((outcome) => outcome.pass).length,
+      failed: groupOutcomes.filter((outcome) => !outcome.pass).length,
+      pass: groupOutcomes.every((outcome) => outcome.pass),
+    }
+  }).sort((left, right) =>
+    [
+      left.split.localeCompare(right.split),
+      left.sourceClass.localeCompare(right.sourceClass),
+    ].find((comparison) => comparison !== 0) ?? 0,
+  )
 }
 
 export function summarizeArtifactObject(artifact, expectedModelId) {
@@ -314,6 +487,9 @@ export function summarizeArtifactObject(artifact, expectedModelId) {
     model.failuresByCheck ?? {},
     `${expectedModelId}.model.failuresByCheck`,
   )
+  const checkOutcomes = caseCheckOutcomes(cases)
+  const caseGroups = summarizeCaseGroups(checkOutcomes)
+  const scoreGroups = summarizeScoreGroups(checkOutcomes)
 
   return {
     score,
@@ -326,7 +502,9 @@ export function summarizeArtifactObject(artifact, expectedModelId) {
     failuresByCategory,
     failuresByCheck,
     error: normalizeCaseError(modelError),
-    checkOutcomes: caseCheckOutcomes(cases),
+    checkOutcomes,
+    caseGroupSummaries: caseGroups,
+    scoreGroupSummaries: scoreGroups,
   }
 }
 
