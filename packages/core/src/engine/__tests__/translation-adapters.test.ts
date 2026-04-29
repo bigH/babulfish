@@ -55,7 +55,7 @@ const GEMMA3_BASE_SYSTEM_PROMPT =
   "You are a translation engine. Translate from en to es. Output only the translation."
 const GEMMA3_MARKDOWN_INSTRUCTION =
   "Preserve Markdown formatting and translate only human-readable prose."
-const PRESERVE_TOKEN_PATTERN = /\u27EAbf-preserve:[^\u27EB]+\u27EB/gu
+const PRESERVE_TOKEN_PATTERN = /__BF_PRESERVE_\d+_\d+__/gu
 const CHAT_ADAPTER_FIXTURES = [
   [
     "qwen-3-0.6b-chat",

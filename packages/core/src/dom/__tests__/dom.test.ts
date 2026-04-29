@@ -161,8 +161,8 @@ const STRUCTURED_TEXT_CONFIG: DOMTranslatorConfig["structuredText"] = {
   selector: ".structured",
 }
 
-const TEST_PRESERVE_TOKEN_PREFIX = "\u27EAbf-preserve:"
-const TEST_PRESERVE_TOKEN_SUFFIX = "\u27EB"
+const TEST_PRESERVE_TOKEN_PREFIX = "__BF_PRESERVE_"
+const TEST_PRESERVE_TOKEN_SUFFIX = "__"
 const TEST_STRUCTURED_TOKEN_PREFIX = "\u27EAbf-st:"
 const TEST_STRUCTURED_TOKEN_SUFFIX = "\u27EB"
 

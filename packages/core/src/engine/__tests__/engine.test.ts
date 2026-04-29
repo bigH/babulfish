@@ -31,7 +31,7 @@ import {
 
 const mockLoadPipeline = vi.mocked(loadPipeline)
 const originalGlobals = captureGlobalDescriptors()
-const PRESERVE_TOKEN_PATTERN = /\u27EAbf-preserve:[^\u27EB]+\u27EB/gu
+const PRESERVE_TOKEN_PATTERN = /__BF_PRESERVE_\d+_\d+__/gu
 
 // ---------------------------------------------------------------------------
 // Helpers

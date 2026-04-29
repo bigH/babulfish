@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest"
 import { insertPlaceholders, restorePlaceholders } from "../preserve.js"
 
 const placeholder = (key: string, index: number): string =>
-  `${String.fromCodePoint(0x27ea)}bf-preserve:${key}:${index}${String.fromCodePoint(0x27eb)}`
+  `__BF_PRESERVE_${key}_${index}__`
 
 describe("preserve placeholders", () => {
   it("ignores empty and duplicate matches from preserve matchers", () => {
@@ -58,7 +58,7 @@ describe("preserve placeholders", () => {
   it("ignores internal placeholder tokens surfaced by later matchers", () => {
     const { masked, slots } = insertPlaceholders("Ship Chime", [
       "Chime",
-      (text) => text.match(/\u27EAbf-preserve:[^\u27EB]+\u27EB/g) ?? [],
+      (text) => text.match(/__BF_PRESERVE_\d+_\d+__/g) ?? [],
     ])
 
     expect(masked).toBe(`Ship ${placeholder("0", 0)}`)

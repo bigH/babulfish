@@ -3,15 +3,15 @@ export type PreservationSlot = {
   readonly value: string
 }
 
-const PLACEHOLDER_PREFIX = "\u27EAbf-preserve:"
-const PLACEHOLDER_SUFFIX = "\u27EB"
+const PLACEHOLDER_PREFIX = "__BF_PRESERVE_"
+const PLACEHOLDER_SUFFIX = "__"
 
 export const preservationPlaceholder = (key: string, index: number): string =>
-  `${PLACEHOLDER_PREFIX}${key}:${index}${PLACEHOLDER_SUFFIX}`
+  `${PLACEHOLDER_PREFIX}${key}_${index}${PLACEHOLDER_SUFFIX}`
 
 export function createPreservationPlaceholderKey(source: string): string {
   let nextKey = 0
-  while (source.includes(`${PLACEHOLDER_PREFIX}${nextKey}:`)) {
+  while (source.includes(`${PLACEHOLDER_PREFIX}${nextKey}_`)) {
     nextKey++
   }
   return String(nextKey)

@@ -24,7 +24,7 @@ import {
 
 const mockLoadPipeline = vi.mocked(loadPipeline)
 const APP_FIXTURE = '<div id="app"><p>Hello</p></div>'
-const PRESERVE_TOKEN_PATTERN = /\u27EAbf-preserve:[^\u27EB]+\u27EB/gu
+const PRESERVE_TOKEN_PATTERN = /__BF_PRESERVE_\d+_\d+__/gu
 const originalGlobals = captureGlobalDescriptors()
 
 // ---------------------------------------------------------------------------
