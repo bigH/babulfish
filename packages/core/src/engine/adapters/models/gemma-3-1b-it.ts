@@ -44,6 +44,8 @@ const HEADING_PATTERN = /^(\s*)(#{1,6})(\s+)(.*)$/u
 const UNORDERED_LIST_PATTERN = /^(\s*)([-+*])(\s+)(.*)$/u
 const ORDERED_LIST_PATTERN = /^(\s*)(\d+)([.)])(\s+)(.*)$/u
 const BLOCKQUOTE_PATTERN = /^(\s*>+\s?)(.*)$/u
+const TABLE_SEPARATOR_PATTERN = /^\s*\|?\s*:?-{3,}:?\s*(?:\|\s*:?-{3,}:?\s*)+\|?\s*$/u
+const INLINE_MARKDOWN_PATTERN = /(?:!\[[^\]\n]*\]\([^)]+\)|\[[^\]\n]+\]\([^)]+\)|`[^`\n]+`|\*\*[^*\n]+\*\*)/u
 const BLOCK_MARKDOWN_PATTERNS = Object.freeze([
   HEADING_PATTERN,
   UNORDERED_LIST_PATTERN,
@@ -63,6 +65,16 @@ type MarkdownLink = {
   readonly full: string
   readonly label: string
   readonly href: string
+}
+
+type MarkdownImage = {
+  readonly full: string
+  readonly alt: string
+  readonly src: string
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")
 }
 
 function collectMatches(text: string, pattern: RegExp): string[] {
@@ -235,6 +247,20 @@ function hasBlockMarkdownSyntax(text: string): boolean {
   return text.split(MARKDOWN_LINE_SPLIT_PATTERN).some(isBlockMarkdownLine)
 }
 
+function hasMarkdownTableSyntax(text: string): boolean {
+  return text.split(MARKDOWN_LINE_SPLIT_PATTERN).some((line) =>
+    TABLE_SEPARATOR_PATTERN.test(line),
+  )
+}
+
+function hasMarkdownSyntax(text: string): boolean {
+  return (
+    hasBlockMarkdownSyntax(text) ||
+    hasMarkdownTableSyntax(text) ||
+    INLINE_MARKDOWN_PATTERN.test(text)
+  )
+}
+
 function withoutBlankLines(lines: readonly string[]): readonly string[] {
   return lines.filter((line) => line.trim().length > 0)
 }
@@ -331,6 +357,8 @@ function collectMarkdownLinks(text: string): readonly MarkdownLink[] {
   const links: MarkdownLink[] = []
 
   for (const match of text.matchAll(/\[([^\]\n]+)\]\(([^)\s]+)\)/gu)) {
+    if (text[match.index - 1] === "!") continue
+
     const full = match[0]
     const label = match[1]!
     const href = match[2]!
@@ -382,6 +410,116 @@ function restoreDroppedMarkdownLinks(source: string, translated: string): string
   }
 
   return restoreDroppedMarkdownLinksInText(translated, collectMarkdownLinks(source))
+}
+
+function collectMarkdownImages(text: string): readonly MarkdownImage[] {
+  const seen = new Set<string>()
+  const images: MarkdownImage[] = []
+
+  for (const match of text.matchAll(/!\[([^\]\n]*)\]\(([^)\s]+)\)/gu)) {
+    const full = match[0]
+    const alt = match[1]!
+    const src = match[2]!
+    if (seen.has(full)) continue
+    seen.add(full)
+    images.push({ full, alt, src })
+  }
+
+  return images
+}
+
+function imageSyntaxForSrc(src: string): RegExp {
+  return new RegExp(`!\\[[^\\]\\n]*\\]\\(${escapeRegExp(src)}\\)`, "u")
+}
+
+function linkSyntaxForSrc(src: string): RegExp {
+  return new RegExp(`(?<!!)\\[([^\\]\\n]*)\\]\\(${escapeRegExp(src)}\\)`, "u")
+}
+
+function restoreDroppedMarkdownImage(
+  translated: string,
+  image: MarkdownImage,
+): string {
+  if (translated.includes(image.full) || imageSyntaxForSrc(image.src).test(translated)) {
+    return translated
+  }
+
+  const link = linkSyntaxForSrc(image.src).exec(translated)
+  if (link) {
+    const alt = link[1] ?? image.alt
+    return `${translated.slice(0, link.index)}![${alt}](${image.src})${translated.slice(link.index + link[0].length)}`
+  }
+
+  return appendBeforeTrailingPunctuation(translated, image.full)
+}
+
+function hasMarkdownImageForSrc(text: string, src: string): boolean {
+  return imageSyntaxForSrc(src).test(text)
+}
+
+function restoreDroppedMarkdownImagesInText(
+  translated: string,
+  images: readonly MarkdownImage[],
+): string {
+  return images.reduce(restoreDroppedMarkdownImage, translated)
+}
+
+function sourceMarkdownImageLines(
+  sourceLines: readonly string[],
+): readonly { readonly index: number; readonly image: MarkdownImage }[] {
+  return sourceLines.flatMap((line, index) =>
+    collectMarkdownImages(line)
+      .filter((image) => line.trim() === image.full)
+      .map((image) => ({ index, image })),
+  )
+}
+
+function insertMissingMarkdownImageLines(
+  translated: string,
+  sourceLines: readonly string[],
+): string {
+  const sourceImageLines = sourceMarkdownImageLines(sourceLines)
+  if (sourceImageLines.length === 0) return translated
+
+  const lines = translated.split(MARKDOWN_LINE_SPLIT_PATTERN)
+  let inserted = 0
+
+  for (const { index, image } of sourceImageLines) {
+    const current = lines.join("\n")
+    if (current.includes(image.full) || hasMarkdownImageForSrc(current, image.src)) {
+      continue
+    }
+
+    const link = linkSyntaxForSrc(image.src).exec(current)
+    if (link) {
+      const restored = restoreDroppedMarkdownImage(current, image)
+      lines.splice(0, lines.length, ...restored.split(MARKDOWN_LINE_SPLIT_PATTERN))
+      continue
+    }
+
+    lines.splice(Math.min(index + inserted, lines.length), 0, image.full)
+    inserted++
+  }
+
+  return lines.join("\n")
+}
+
+function restoreDroppedMarkdownImages(source: string, translated: string): string {
+  const sourceLines = normalizeMarkdownAnswerText(source).split(MARKDOWN_LINE_SPLIT_PATTERN)
+  const translatedLines = translated.split(MARKDOWN_LINE_SPLIT_PATTERN)
+
+  if (sourceLines.length === translatedLines.length) {
+    return translatedLines
+      .map((line, index) =>
+        restoreDroppedMarkdownImagesInText(line, collectMarkdownImages(sourceLines[index]!)),
+      )
+      .join("\n")
+  }
+
+  return restoreDroppedMarkdownImagesInText(
+    insertMissingMarkdownImageLines(translated, sourceLines),
+    collectMarkdownImages(source),
+  )
 }
 
 type InlineMarkdownSpan = {
@@ -514,15 +652,18 @@ function restoreDroppedInlineMarkdownWrappers(
 }
 
 function repairGemmaMarkdown(source: string, translated: string): string {
-  return restoreDroppedMarkdownLinks(
+  return restoreDroppedMarkdownImages(
     source,
-    restoreMissingInlineCodeSpans(
+    restoreDroppedMarkdownLinks(
       source,
-      restoreDroppedInlineMarkdownWrappers(
+      restoreMissingInlineCodeSpans(
         source,
-        restoreMissingCodeFence(
+        restoreDroppedInlineMarkdownWrappers(
           source,
-          restoreSourceLineShapes(source, normalizeMarkdownAnswerText(translated)),
+          restoreMissingCodeFence(
+            source,
+            restoreSourceLineShapes(source, normalizeMarkdownAnswerText(translated)),
+          ),
         ),
       ),
     ),
@@ -535,7 +676,7 @@ function shouldRepairGemmaMarkdown(
 ): boolean {
   return (
     options.content_type === "markdown" ||
-    (options.content_type === undefined && hasBlockMarkdownSyntax(request.text))
+    (options.content_type === undefined && hasMarkdownSyntax(request.text))
   )
 }
 

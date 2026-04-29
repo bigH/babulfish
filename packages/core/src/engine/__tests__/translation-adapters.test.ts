@@ -738,6 +738,121 @@ describe("chat adapters", () => {
     })
   })
 
+  it("keeps Gemma markdown images as images when the model drops the bang", () => {
+    const request = {
+      text:
+        "| Item | Status |\n" +
+        "|---|---|\n" +
+        "| WebGPU | Ready |\n" +
+        "![runtime diagram](/img/runtime-flow.png)",
+      source: { code: "en" },
+      target: { code: "es" },
+    } satisfies TranslationRequest
+
+    expect(
+      gemma3ChatAdapter.extractText(
+        request,
+        { max_new_tokens: 64, content_type: "markdown" },
+        [
+          {
+            generated_text:
+              "| Item | Estado |\n" +
+              "|---|---|\n" +
+              "| WebGPU | Listo |\n" +
+              "[diagrama de runtime](/img/runtime-flow.png)",
+          },
+        ],
+      ),
+    ).toEqual({
+      text:
+        "| Item | Estado |\n" +
+        "|---|---|\n" +
+        "| WebGPU | Listo |\n" +
+        "![diagrama de runtime](/img/runtime-flow.png)",
+    })
+  })
+
+  it("repairs implicit Gemma table markdown with images", () => {
+    const request = {
+      text:
+        "| Item | Status |\n" +
+        "|---|---|\n" +
+        "| WebGPU | Ready |\n" +
+        "![runtime diagram](/img/runtime-flow.png)",
+      source: { code: "en" },
+      target: { code: "es" },
+    } satisfies TranslationRequest
+
+    expect(
+      gemma3ChatAdapter.extractText(request, OPTIONS, [
+        {
+          generated_text:
+            "| Item | Estado |\n" +
+            "|---|---|\n" +
+            "| WebGPU | Listo |",
+        },
+      ]),
+    ).toEqual({
+      text:
+        "| Item | Estado |\n" +
+        "|---|---|\n" +
+        "| WebGPU | Listo |\n" +
+        "![runtime diagram](/img/runtime-flow.png)",
+    })
+  })
+
+  it("restores dropped Gemma markdown image syntax and source", () => {
+    const request = {
+      text:
+        "## Runtime\n" +
+        "Keep WebGPU ready.\n" +
+        "![runtime diagram](/img/runtime-flow.png)",
+      source: { code: "en" },
+      target: { code: "fr" },
+    } satisfies TranslationRequest
+
+    expect(
+      gemma3ChatAdapter.extractText(
+        request,
+        { max_new_tokens: 64, content_type: "markdown" },
+        [
+          {
+            generated_text:
+              "## Runtime\n" +
+              "Gardez `WebGPU` prêt.",
+          },
+        ],
+      ),
+    ).toEqual({
+      text:
+        "## Runtime\n" +
+        "Gardez `WebGPU` prêt.\n" +
+        "![runtime diagram](/img/runtime-flow.png)",
+    })
+  })
+
+  it("leaves surviving Gemma markdown images unchanged", () => {
+    const request = {
+      text: "![runtime diagram](/img/runtime-flow.png)",
+      source: { code: "en" },
+      target: { code: "es" },
+    } satisfies TranslationRequest
+
+    expect(
+      gemma3ChatAdapter.extractText(
+        request,
+        { max_new_tokens: 64, content_type: "markdown" },
+        [
+          {
+            generated_text: "![diagrama de runtime](/img/runtime-flow.png)",
+          },
+        ],
+      ),
+    ).toEqual({
+      text: "![diagrama de runtime](/img/runtime-flow.png)",
+    })
+  })
+
   it("repairs implicit Gemma block markdown without changing raw prompt intent", () => {
     const request = {
       text:
