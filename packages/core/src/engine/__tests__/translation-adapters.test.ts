@@ -52,9 +52,25 @@ const QWEN3_MARKDOWN_USER_PROMPT =
 const QWEN3_MARKDOWN_INSTRUCTION =
   "Preserve Markdown formatting markers exactly, including headings, emphasis, code spans, links, and lists; translate only human-readable prose."
 const GEMMA3_BASE_SYSTEM_PROMPT =
-  "You are a translation engine. Translate from en to es. Output only the translation."
+  "You are a translation engine. Translate from English (en) to Spanish (es). " +
+  "Output only the translation. " +
+  "Translate short UI labels, buttons, headings, and sentence fragments naturally; do not copy source text just because it is short. " +
+  "Keep brand names, product names, code identifiers, URLs, numbers, and preserved terms unchanged; translate the surrounding prose. " +
+  "Use Spanish (es) vocabulary and script; do not answer in any other language. " +
+  "Do not return the source unchanged when it contains translatable prose."
+const GEMMA3_BASE_USER_PROMPT =
+  "Translate this text to Spanish (es).\n" +
+  "Return only the translated text.\n\n" +
+  "Source:\n" +
+  "Hello **world**"
+const GEMMA3_MARKDOWN_USER_PROMPT =
+  "Translate this Markdown to Spanish (es).\n" +
+  "Keep Markdown syntax, tables, headings, lists, blockquotes, images, links, code fences, and code spans structurally intact.\n" +
+  "Return only the translated Markdown.\n\n" +
+  "Source:\n" +
+  "Hello **world**"
 const GEMMA3_MARKDOWN_INSTRUCTION =
-  "Preserve Markdown formatting and translate only human-readable prose."
+  "Preserve Markdown formatting markers exactly, including headings, tables, blockquotes, images, links, code fences, code spans, emphasis, and lists; translate only human-readable prose."
 const PRESERVE_TOKEN_PATTERN = /__BF_PRESERVE_\d+_\d+__/gu
 const CHAT_ADAPTER_FIXTURES = [
   [
@@ -68,7 +84,7 @@ const CHAT_ADAPTER_FIXTURES = [
     "gemma-3-1b-it-chat",
     gemma3ChatAdapter,
     GEMMA3_BASE_SYSTEM_PROMPT,
-    "Hello **world**",
+    GEMMA3_BASE_USER_PROMPT,
     BASE_CHAT_MODEL_OPTIONS,
   ],
 ] as const
@@ -252,6 +268,13 @@ describe("built-in adapter preservation", () => {
       const token = expectSinglePreserveToken(roundTrip.inputText)
 
       if (id === "qwen-3-0.6b") {
+        expect(roundTrip.inputText).toBe(
+          "Translate this text to Spanish (es).\n" +
+            "Return only the translated text.\n\n" +
+            "Source:\n" +
+            `Hello ${token}`,
+        )
+      } else if (id === "gemma-3-1b-it") {
         expect(roundTrip.inputText).toBe(
           "Translate this text to Spanish (es).\n" +
             "Return only the translated text.\n\n" +
@@ -493,7 +516,7 @@ describe("chat adapters", () => {
       gemma3ChatAdapter,
       GEMMA3_BASE_SYSTEM_PROMPT,
       GEMMA3_MARKDOWN_INSTRUCTION,
-      "Hello **world**",
+      GEMMA3_MARKDOWN_USER_PROMPT,
       BASE_CHAT_MODEL_OPTIONS,
     ],
   ] as const)(
@@ -525,7 +548,12 @@ describe("chat adapters", () => {
     expect(invocation.modelInput[0]?.content).toBe(
       `${GEMMA3_BASE_SYSTEM_PROMPT} Copy every preservation token exactly unchanged.`,
     )
-    expect(invocation.modelInput[1]?.content).toBe(`Hello ${token}`)
+    expect(invocation.modelInput[1]?.content).toBe(
+      "Translate this text to Spanish (es).\n" +
+        "Return only the translated text.\n\n" +
+        "Source:\n" +
+        `Hello ${token}`,
+    )
     expect(
       gemma3ChatAdapter.extractText(
         REQUEST,
@@ -535,25 +563,24 @@ describe("chat adapters", () => {
     ).toEqual({ text: "Hola **world**" })
   })
 
-  it("auto-preserves Gemma technical and product spans with placeholders", () => {
+  it("auto-prompts Gemma to preserve technical and product spans", () => {
     const request = {
       text: "Babulfish uses `WebGPU`.",
       source: { code: "en" },
       target: { code: "es" },
     } satisfies TranslationRequest
     const invocation = gemma3ChatAdapter.buildInvocation(request, OPTIONS)
-    const tokens = [...invocation.modelInput[1].content.matchAll(PRESERVE_TOKEN_PATTERN)]
 
-    expect(tokens).toHaveLength(2)
-    expect(invocation.modelInput[0]?.content).toBe(
-      `${GEMMA3_BASE_SYSTEM_PROMPT} Copy every preservation token exactly unchanged.`,
+    expect(invocation.modelInput[0]?.content).toContain(
+      "Preserve these exact substrings unchanged: " +
+        "[\"`WebGPU`\",\"WebGPU\",\"Babulfish\"].",
     )
-    expect(invocation.modelInput[1]?.content).not.toContain("Babulfish")
-    expect(invocation.modelInput[1]?.content).not.toContain("WebGPU")
+    expect(invocation.modelInput[1]?.content).toContain(request.text)
+    expect(invocation.modelInput[1]?.content).not.toContain("__BF_PRESERVE_")
     expect(
       gemma3ChatAdapter.extractText(request, OPTIONS, [
         {
-          generated_text: `El ${tokens[0]![0]} usa ${tokens[1]![0]}.`,
+          generated_text: "El Babulfish usa `WebGPU`.",
         },
       ]),
     ).toEqual({ text: "El Babulfish usa `WebGPU`." })
@@ -570,7 +597,12 @@ describe("chat adapters", () => {
     )
 
     expect(invocation.modelInput[0]?.content).toBe(GEMMA3_BASE_SYSTEM_PROMPT)
-    expect(invocation.modelInput[1]?.content).toBe("User Profile")
+    expect(invocation.modelInput[1]?.content).toBe(
+      "Translate this text to Spanish (es).\n" +
+        "Return only the translated text.\n\n" +
+        "Source:\n" +
+        "User Profile",
+    )
   })
 
   it("auto-prompts Qwen to preserve product and technical spans", () => {
@@ -713,7 +745,7 @@ describe("chat adapters", () => {
       `${GEMMA3_BASE_SYSTEM_PROMPT} ` +
         "Preserve these exact substrings unchanged: [\"**world**\"].",
     )
-    expect(invocation.modelInput[1]?.content).toBe("Hello **world**")
+    expect(invocation.modelInput[1]?.content).toBe(GEMMA3_BASE_USER_PROMPT)
   })
 
   it.each(CHAT_ADAPTER_FIXTURES)(
@@ -730,7 +762,7 @@ describe("chat adapters", () => {
       expect(invocation.modelInput[0]?.content).toBe(
         `${systemPrompt} Copy every preservation token exactly unchanged.`,
       )
-      if (id === "qwen-3-0.6b-chat") {
+      if (id === "qwen-3-0.6b-chat" || id === "gemma-3-1b-it-chat") {
         expect(invocation.modelInput[1]?.content).toBe(
           "Translate this text to Spanish (es).\n" +
             "Return only the translated text.\n\n" +
