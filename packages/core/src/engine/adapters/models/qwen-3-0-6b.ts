@@ -27,6 +27,63 @@ const LANGUAGE_NAMES: Readonly<Record<string, string>> = Object.freeze({
   zh: "Chinese",
 })
 
+const QWEN_AUTO_PRESERVE_TERMS = Object.freeze([
+  "Babulfish",
+  "babulfish",
+  "TranslateGemma",
+  "WebGPU",
+  "WASM",
+  "ONNX",
+])
+const QWEN_AUTO_PRESERVE_LIMIT = 12
+
+function collectMatches(text: string, pattern: RegExp): string[] {
+  return Array.from(text.matchAll(pattern), (match) => match[0])
+}
+
+function isIdentifierBoundary(char: string | undefined): boolean {
+  return char === undefined || !/[A-Za-z0-9_@./-]/u.test(char)
+}
+
+function includesStandaloneTerm(text: string, term: string): boolean {
+  let start = text.indexOf(term)
+  while (start !== -1) {
+    const end = start + term.length
+    if (isIdentifierBoundary(text[start - 1]) && isIdentifierBoundary(text[end])) {
+      return true
+    }
+    start = text.indexOf(term, end)
+  }
+  return false
+}
+
+function collectQwenAutoPreservedSubstrings(text: string): readonly string[] {
+  const candidates = [
+    ...collectMatches(text, /`[^`\n]+`/gu),
+    ...collectMatches(text, /\bhttps?:\/\/[^\s<>)]+/giu),
+    ...collectMatches(text, /@[a-z0-9][\w.-]*\/[a-z0-9][\w.-]*/giu),
+    ...collectMatches(text, /\b[A-Z]{2,}-\d+\b/gu),
+    ...collectMatches(text, /\bv?\d+(?:\.\d+){1,}(?:[-+][\w.-]+)?\b/giu),
+    ...collectMatches(text, /\b[$A-Z_a-z][$\w]*(?:\.[A-Z_a-z][$\w]*)+\b/gu),
+    ...collectMatches(text, /\b[A-Z_a-z][$\w]*\(\)/gu),
+    ...collectMatches(text, /\b(?:[a-z]+[A-Z][A-Za-z0-9]*|[A-Z]+[a-z0-9]*[A-Z][A-Za-z0-9]*|[A-Z]{2,})(?!-\d)\b/gu),
+    ...QWEN_AUTO_PRESERVE_TERMS.filter((term) =>
+      includesStandaloneTerm(text, term),
+    ),
+  ]
+  const seen = new Set<string>()
+  const preserved: string[] = []
+
+  for (const candidate of candidates) {
+    if (candidate.length === 0 || seen.has(candidate)) continue
+    seen.add(candidate)
+    preserved.push(candidate)
+    if (preserved.length >= QWEN_AUTO_PRESERVE_LIMIT) break
+  }
+
+  return preserved
+}
+
 function formatLanguageName(code: string): string {
   const normalizedCode = code.toLowerCase()
   const baseCode = normalizedCode.split(/[-_]/)[0] ?? normalizedCode
@@ -44,6 +101,21 @@ export class Qwen3ChatAdapter extends ChatModelBaseAdapter {
       id: "qwen-3-0.6b-chat",
       label: "Qwen 3 0.6B chat translator",
     })
+  }
+
+  override buildInvocation(
+    request: TranslationRequest,
+    options: TranslationOptions,
+  ): TranslationModelInvocation<ChatInput, ChatOptions> {
+    return super.buildInvocation(request, this.withAutoPreservation(request, options))
+  }
+
+  override extractText(
+    request: TranslationRequest,
+    options: TranslationOptions,
+    output: unknown,
+  ) {
+    return super.extractText(request, this.withAutoPreservation(request, options), output)
   }
 
   protected override buildModelInvocation(
@@ -65,6 +137,25 @@ export class Qwen3ChatAdapter extends ChatModelBaseAdapter {
         ...invocation.modelOptions,
         tokenizer_encode_kwargs: { enable_thinking: false },
       },
+    }
+  }
+
+  private withAutoPreservation(
+    request: TranslationRequest,
+    options: TranslationOptions,
+  ): TranslationOptions {
+    if (options.preservation_approach === "placeholders") return options
+
+    const autoPreserved = collectQwenAutoPreservedSubstrings(request.text)
+    if (autoPreserved.length === 0) return options
+
+    return {
+      ...options,
+      preservation_approach: "prompting",
+      substrings_to_preserve: [
+        ...(options.substrings_to_preserve ?? []),
+        ...autoPreserved,
+      ],
     }
   }
 

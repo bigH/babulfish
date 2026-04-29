@@ -573,6 +573,80 @@ describe("chat adapters", () => {
     expect(invocation.modelInput[1]?.content).toBe("User Profile")
   })
 
+  it("auto-prompts Qwen to preserve product and technical spans", () => {
+    const request = {
+      text: "Babulfish uses `WebGPU` and TranslateGemma.",
+      source: { code: "en" },
+      target: { code: "ar" },
+    } satisfies TranslationRequest
+    const invocation = qwen3ChatAdapter.buildInvocation(request, OPTIONS)
+
+    expect(invocation.modelInput[0]?.content).toContain(
+      "Preserve these exact substrings unchanged: " +
+        "[\"`WebGPU`\",\"WebGPU\",\"TranslateGemma\",\"Babulfish\"].",
+    )
+    expect(invocation.modelInput[1]?.content).toContain(request.text)
+    expect(invocation.modelInput[1]?.content).not.toContain("__BF_PRESERVE_")
+  })
+
+  it("merges explicit Qwen prompt preservation with auto-preserved spans", () => {
+    const request = {
+      text: "Run @babulfish/styles on WebGPU.",
+      source: { code: "en" },
+      target: { code: "fr" },
+    } satisfies TranslationRequest
+    const invocation = qwen3ChatAdapter.buildInvocation(request, {
+      max_new_tokens: 64,
+      substrings_to_preserve: ["docs panel"],
+      preservation_approach: "prompting",
+    })
+
+    expect(invocation.modelInput[0]?.content).toContain(
+      "Preserve these exact substrings unchanged: " +
+        "[\"docs panel\",\"@babulfish/styles\",\"WebGPU\"].",
+    )
+  })
+
+  it("does not auto-preserve ordinary Qwen short labels", () => {
+    const invocation = qwen3ChatAdapter.buildInvocation(
+      {
+        text: "User Profile",
+        source: { code: "en" },
+        target: { code: "es" },
+      },
+      OPTIONS,
+    )
+
+    expect(invocation.modelInput[0]?.content).toBe(QWEN3_BASE_SYSTEM_PROMPT)
+    expect(invocation.modelInput[1]?.content).toContain("User Profile")
+  })
+
+  it("keeps explicit Qwen placeholder preservation from auto-prompting", () => {
+    const request = {
+      text: "Babulfish uses WebGPU with Chime.",
+      source: { code: "en" },
+      target: { code: "es" },
+    } satisfies TranslationRequest
+    const options = {
+      max_new_tokens: 64,
+      substrings_to_preserve: ["Chime"],
+      preservation_approach: "placeholders",
+    } satisfies TranslationOptions
+    const invocation = qwen3ChatAdapter.buildInvocation(request, options)
+    const token = expectSinglePreserveToken(invocation.modelInput[1].content)
+
+    expect(invocation.modelInput[0]?.content).toBe(
+      `${QWEN3_BASE_SYSTEM_PROMPT} Copy every preservation token exactly unchanged.`,
+    )
+    expect(invocation.modelInput[1]?.content).toContain("Babulfish uses WebGPU")
+    expect(invocation.modelInput[1]?.content).not.toContain("Chime")
+    expect(
+      qwen3ChatAdapter.extractText(request, options, [
+        { generated_text: `Babulfish usa WebGPU con ${token}.` },
+      ]),
+    ).toEqual({ text: "Babulfish usa WebGPU con Chime." })
+  })
+
   it("keeps Qwen substring preservation prompt-based by default", () => {
     const invocation = qwen3ChatAdapter.buildInvocation(REQUEST, {
       max_new_tokens: 64,
