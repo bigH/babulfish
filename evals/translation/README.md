@@ -30,15 +30,17 @@ For grouped files, the path and JSON must agree on:
 
 The schema artifact is [`schema.json`](schema.json). It documents the current case shape, deterministic PR 2 checks, per-case DOM runner config, and provenance metadata. Provenance is required for new grouped cases. Legacy flat files are temporarily grandfathered so the existing 38 flat cases do not need migration churn.
 
-Current corpus count after PR 4:
+Current corpus count after PR 5:
 
-- 89 total cases.
+- 107 total cases.
 - 72 `dev` cases: 23 legacy flat cases plus 49 grouped PR 4 cases.
 - 15 legacy `holdout` cases.
 - 2 tiny `calibration-public` sentinel fixtures from PR 3.
-- 0 `holdout-clean` cases; the reviewed clean seed is deferred.
+- 18 reviewed grouped `holdout-clean` seed cases from PR 5.
 
 The PR 4 grouped `dev` expansion adds 15 markdown, 18 text/preservation-family, and 16 DOM cases. They are all private `dev` cases with full provenance and use only existing deterministic PR 2 check types.
+
+The PR 5 clean holdout seed adds 6 text, 6 markdown, and 6 DOM cases. The seed is intentionally 18 cases rather than the phase-1 target of 36 because the repo does not contain concrete evidence of bilingual reviewer capacity for a larger reviewed batch. Every PR 5 case is private, `holdout_approved`, auditable through concrete source origins, and excluded from default local runs unless selected explicitly with a holdout reason.
 
 Grouped provenance is validated before live evals run:
 

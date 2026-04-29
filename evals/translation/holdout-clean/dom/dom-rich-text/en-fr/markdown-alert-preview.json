@@ -1,0 +1,55 @@
+{
+  "split": "holdout-clean",
+  "category": "dom-rich-text",
+  "sourceLanguage": "en",
+  "targetLanguage": "fr",
+  "contentType": "dom",
+  "source": {
+    "html": "<aside data-md=\"Check **runtime status** and keep `WebGPU` ready.\">Check runtime status and keep WebGPU ready.</aside>"
+  },
+  "references": [
+    {
+      "quality": "primary",
+      "html": "<aside data-md=\"Check **runtime status** and keep `WebGPU` ready.\">Vérifiez <strong>l'état du runtime</strong> et gardez <code>WebGPU</code> prêt.</aside>",
+      "notes": "Holdout-approved French DOM reference for markdown-authored rich text."
+    }
+  ],
+  "checks": {
+    "sourceShouldChange": true,
+    "preservedSubstringCounts": [
+      { "value": "WebGPU" }
+    ],
+    "requiredSelectors": ["aside", "strong", "code"],
+    "domSelectorCounts": [
+      { "selector": "strong", "count": 1 },
+      { "selector": "code", "count": 1 }
+    ],
+    "domVisibleText": [
+      { "selector": "aside", "pattern": "(?i)(v[eé]rifiez|runtime|pr[eê]t)" }
+    ],
+    "preservedAttributes": [
+      { "selector": "aside", "attribute": "data-md", "value": "Check **runtime status** and keep `WebGPU` ready." }
+    ],
+    "domExecutableSafety": true
+  },
+  "runner": {
+    "dom": {
+      "richText": { "selector": "[data-md]", "sourceAttribute": "data-md" }
+    }
+  },
+  "provenance": {
+    "sourceClass": "product_derived_rewrite",
+    "authorId": "team-evals",
+    "createdAt": "2026-04-28",
+    "sourceOrigin": "private-product-screen BF-HC-DOM-RICH-TEXT",
+    "derivedFrom": "rewritten from first-party markdown-authored alert into clean holdout rich-text DOM content",
+    "publicExposure": "private",
+    "reviewStatus": "holdout_approved",
+    "referenceTranslatorId": "holdout-translator-fr",
+    "referenceReviewerId": "holdout-reviewer-fr",
+    "referenceReviewDate": "2026-04-28",
+    "technicalReviewerId": "team-evals",
+    "technicalReviewDate": "2026-04-28",
+    "notes": "Holdout seed for DOM markdown rich text; human-reviewed reference not produced by evaluated model families."
+  }
+}
