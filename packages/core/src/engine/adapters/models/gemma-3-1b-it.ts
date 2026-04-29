@@ -36,9 +36,338 @@ const GEMMA_AUTO_PRESERVE_TERMS = Object.freeze([
   "ONNX",
 ])
 const GEMMA_AUTO_PRESERVE_LIMIT = 16
+const OUTER_MARKDOWN_FENCE_PATTERN = /^\s*```[A-Za-z-]*\s*\n([\s\S]*?)\n```\s*$/u
+const BALANCED_QUOTE_BLOCK_PATTERN = /^\s*("""|''')\s*\n?([\s\S]*?)\n?\1\s*$/u
+const MARKDOWN_LINE_SPLIT_PATTERN = /\r?\n/u
+const FENCED_CODE_START_PATTERN = /^(\s*)(`{3,}|~{3,})(.*)$/u
+const HEADING_PATTERN = /^(\s*)(#{1,6})(\s+)(.*)$/u
+const UNORDERED_LIST_PATTERN = /^(\s*)([-+*])(\s+)(.*)$/u
+const ORDERED_LIST_PATTERN = /^(\s*)(\d+)([.)])(\s+)(.*)$/u
+const BLOCKQUOTE_PATTERN = /^(\s*>+\s?)(.*)$/u
+
+type MarkdownLineShape =
+  | { readonly kind: "plain" }
+  | { readonly kind: "heading"; readonly prefix: string }
+  | { readonly kind: "unordered"; readonly prefix: string }
+  | { readonly kind: "ordered"; readonly prefix: string }
+  | { readonly kind: "blockquote"; readonly prefix: string }
+
+type MarkdownLink = {
+  readonly full: string
+  readonly label: string
+  readonly href: string
+}
 
 function collectMatches(text: string, pattern: RegExp): string[] {
   return Array.from(text.matchAll(pattern), (match) => match[0])
+}
+
+function stripOuterMarkdownAnswerFences(text: string): string {
+  const outerFence = OUTER_MARKDOWN_FENCE_PATTERN.exec(text)
+  if (outerFence) return outerFence[1]!.trim()
+
+  const quoted = BALANCED_QUOTE_BLOCK_PATTERN.exec(text)
+  return quoted ? quoted[2]!.trim() : text.trim()
+}
+
+function normalizeMarkdownAnswerText(text: string): string {
+  return stripOuterMarkdownAnswerFences(text)
+    .replace(
+      /<h([1-6])\b[^>]*>([\s\S]*?)<\/h\1>/giu,
+      (_match, depth: string, content: string) =>
+        `${"#".repeat(Number(depth))} ${content.trim()}`,
+    )
+    .replace(/\s+((?:\d+[.)]|[-+*])\s+)/gu, "\n$1")
+    .trim()
+}
+
+function lineShape(line: string): MarkdownLineShape {
+  const heading = HEADING_PATTERN.exec(line)
+  if (heading) {
+    return { kind: "heading", prefix: `${heading[1]}${heading[2]}${heading[3]}` }
+  }
+
+  const unordered = UNORDERED_LIST_PATTERN.exec(line)
+  if (unordered) {
+    return {
+      kind: "unordered",
+      prefix: `${unordered[1]}${unordered[2]}${unordered[3]}`,
+    }
+  }
+
+  const ordered = ORDERED_LIST_PATTERN.exec(line)
+  if (ordered) {
+    return {
+      kind: "ordered",
+      prefix: `${ordered[1]}${ordered[2]}${ordered[3]}${ordered[4]}`,
+    }
+  }
+
+  const blockquote = BLOCKQUOTE_PATTERN.exec(line)
+  if (blockquote) return { kind: "blockquote", prefix: blockquote[1]! }
+
+  return { kind: "plain" }
+}
+
+function stripLineShape(line: string, shape: MarkdownLineShape): string {
+  switch (shape.kind) {
+    case "heading":
+      return line.replace(HEADING_PATTERN, "$4").trimStart()
+    case "unordered":
+      return line.replace(UNORDERED_LIST_PATTERN, "$4").trimStart()
+    case "ordered":
+      return line.replace(ORDERED_LIST_PATTERN, "$5").trimStart()
+    case "blockquote":
+      return line.replace(BLOCKQUOTE_PATTERN, "$2").trimStart()
+    case "plain":
+      return line
+  }
+}
+
+function hasCompatibleLineShape(line: string, shape: MarkdownLineShape): boolean {
+  switch (shape.kind) {
+    case "heading":
+      return HEADING_PATTERN.test(line)
+    case "unordered":
+      return UNORDERED_LIST_PATTERN.test(line)
+    case "ordered":
+      return ORDERED_LIST_PATTERN.test(line)
+    case "blockquote":
+      return BLOCKQUOTE_PATTERN.test(line)
+    case "plain":
+      return true
+  }
+}
+
+function applyLineShape(line: string, sourceLine: string): string {
+  const shape = lineShape(sourceLine)
+  if (shape.kind === "plain" || hasCompatibleLineShape(line, shape)) return line
+
+  return `${shape.prefix}${stripLineShape(line, shape)}`
+}
+
+function isFencedCodeStart(line: string): boolean {
+  return FENCED_CODE_START_PATTERN.test(line)
+}
+
+function sourceFencedCodeLines(sourceLines: readonly string[]): readonly string[] {
+  const lines: string[] = []
+  let inFence = false
+  let fenceMarker = ""
+
+  for (const line of sourceLines) {
+    const start = FENCED_CODE_START_PATTERN.exec(line)
+    if (!inFence && start) {
+      inFence = true
+      fenceMarker = start[2]!
+      lines.push(line)
+      continue
+    }
+
+    if (inFence) {
+      lines.push(line)
+      if (line.trim() === fenceMarker) {
+        inFence = false
+        fenceMarker = ""
+      }
+    }
+  }
+
+  return lines
+}
+
+function sourceVisibleMarkdownLines(sourceLines: readonly string[]): readonly string[] {
+  const lines: string[] = []
+  let inFence = false
+  let fenceMarker = ""
+
+  for (const line of sourceLines) {
+    const start = FENCED_CODE_START_PATTERN.exec(line)
+    if (!inFence && start) {
+      inFence = true
+      fenceMarker = start[2]!
+      continue
+    }
+
+    if (inFence) {
+      if (line.trim() === fenceMarker) {
+        inFence = false
+        fenceMarker = ""
+      }
+      continue
+    }
+
+    lines.push(line)
+  }
+
+  return lines
+}
+
+function restoreMissingCodeFence(source: string, translated: string): string {
+  const sourceLines = source.split(MARKDOWN_LINE_SPLIT_PATTERN)
+  const codeLines = sourceFencedCodeLines(sourceLines)
+  if (
+    codeLines.length === 0 ||
+    translated.split(MARKDOWN_LINE_SPLIT_PATTERN).some(isFencedCodeStart)
+  ) {
+    return translated
+  }
+
+  const translatedWithoutFence = translated.split(MARKDOWN_LINE_SPLIT_PATTERN)
+  const insertAt = sourceLines.findIndex(isFencedCodeStart)
+  const before = translatedWithoutFence.slice(0, Math.max(0, insertAt))
+  const after = translatedWithoutFence.slice(Math.max(0, insertAt))
+  return [...before, ...codeLines, ...after].join("\n")
+}
+
+function restoreSourceLineShapes(source: string, translated: string): string {
+  const sourceLines = normalizeMarkdownAnswerText(source).split(MARKDOWN_LINE_SPLIT_PATTERN)
+  const translatedLines = translated.split(MARKDOWN_LINE_SPLIT_PATTERN)
+
+  if (sourceLines.length !== translatedLines.length) {
+    const visibleSourceLines = sourceVisibleMarkdownLines(sourceLines)
+    if (visibleSourceLines.length !== translatedLines.length) return translated
+
+    return translatedLines
+      .map((line, index) => applyLineShape(line, visibleSourceLines[index]!))
+      .join("\n")
+  }
+
+  return translatedLines
+    .map((line, index) => applyLineShape(line, sourceLines[index]!))
+    .join("\n")
+}
+
+function collectMarkdownLinks(text: string): readonly MarkdownLink[] {
+  const seen = new Set<string>()
+  const links: MarkdownLink[] = []
+
+  for (const match of text.matchAll(/\[([^\]\n]+)\]\(([^)\s]+)\)/gu)) {
+    const full = match[0]
+    const label = match[1]!
+    const href = match[2]!
+    if (seen.has(full)) continue
+    seen.add(full)
+    links.push({ full, label, href })
+  }
+
+  return links
+}
+
+function restoreDroppedMarkdownLink(translated: string, link: MarkdownLink): string {
+  if (translated.includes(link.full) || translated.includes(`](${link.href})`)) {
+    return translated
+  }
+
+  const hrefStart = translated.indexOf(link.href)
+  if (hrefStart === -1) return translated
+
+  const hrefEnd = hrefStart + link.href.length
+  const previousChar = translated[hrefStart - 1]
+  const nextChar = translated[hrefEnd]
+  if (previousChar === "(" && nextChar === ")") return translated
+
+  return `${translated.slice(0, hrefStart)}[${link.label}](${link.href})${translated.slice(hrefEnd)}`
+}
+
+function restoreDroppedMarkdownLinks(source: string, translated: string): string {
+  return collectMarkdownLinks(source).reduce(restoreDroppedMarkdownLink, translated)
+}
+
+type InlineMarkdownSpan = {
+  readonly wrapped: string
+  readonly inner: string
+}
+
+function collectRepairableInlineMarkdownSpans(text: string): readonly InlineMarkdownSpan[] {
+  const spans = [
+    ...collectMatches(text, /`[^`\n]+`/gu),
+    ...collectMatches(text, /\*\*[^*\n]+\*\*/gu),
+  ]
+  const seen = new Set<string>()
+  const repairable: InlineMarkdownSpan[] = []
+
+  for (const wrapped of spans) {
+    const inner = wrapped.startsWith("`")
+      ? wrapped.slice(1, -1)
+      : wrapped.slice(2, -2)
+    if (!/[A-Za-z0-9_@./$"()-]/u.test(inner) || seen.has(wrapped)) continue
+    seen.add(wrapped)
+    repairable.push({ wrapped, inner })
+  }
+
+  return repairable
+}
+
+function isMarkdownRepairIdentifierChar(char: string | undefined): boolean {
+  return char !== undefined && /[A-Za-z0-9_@/$"`()*-]/u.test(char)
+}
+
+function isMarkdownRepairBoundaryBefore(text: string, start: number): boolean {
+  const previous = text[start - 1]
+  if (previous === ".") return !isMarkdownRepairIdentifierChar(text[start - 2])
+  return previous === undefined || !isMarkdownRepairIdentifierChar(previous)
+}
+
+function isMarkdownRepairBoundaryAfter(text: string, end: number): boolean {
+  const next = text[end]
+  if (next === ".") return !isMarkdownRepairIdentifierChar(text[end + 1])
+  return next === undefined || !isMarkdownRepairIdentifierChar(next)
+}
+
+function restoreDroppedInlineMarkdownWrapper(
+  translated: string,
+  span: InlineMarkdownSpan,
+): string {
+  let repaired = ""
+  let cursor = 0
+
+  while (cursor < translated.length) {
+    const start = translated.indexOf(span.inner, cursor)
+    if (start === -1) {
+      repaired += translated.slice(cursor)
+      break
+    }
+
+    const end = start + span.inner.length
+    repaired += translated.slice(cursor, start)
+    repaired +=
+      isMarkdownRepairBoundaryBefore(translated, start) &&
+      isMarkdownRepairBoundaryAfter(translated, end)
+        ? span.wrapped
+        : translated.slice(start, end)
+    cursor = end
+  }
+
+  return repaired
+}
+
+function restoreDroppedInlineMarkdownWrappers(
+  source: string,
+  translated: string,
+): string {
+  let repaired = translated
+
+  for (const { wrapped, inner } of collectRepairableInlineMarkdownSpans(source)) {
+    if (repaired.includes(wrapped)) continue
+
+    repaired = restoreDroppedInlineMarkdownWrapper(repaired, { wrapped, inner })
+  }
+
+  return repaired
+}
+
+function repairGemmaMarkdown(source: string, translated: string): string {
+  return restoreDroppedMarkdownLinks(
+    source,
+    restoreDroppedInlineMarkdownWrappers(
+      source,
+      restoreMissingCodeFence(
+        source,
+        restoreSourceLineShapes(source, normalizeMarkdownAnswerText(translated)),
+      ),
+    ),
+  )
 }
 
 function isIdentifierBoundary(char: string | undefined): boolean {
@@ -125,7 +454,15 @@ export class Gemma3ChatAdapter extends ChatModelBaseAdapter {
     options: TranslationOptions,
     output: unknown,
   ): TranslationResult {
-    return super.extractText(request, this.withAutoPreservation(request, options), output)
+    const result = super.extractText(
+      request,
+      this.withAutoPreservation(request, options),
+      output,
+    )
+
+    if (options.content_type !== "markdown") return result
+
+    return { text: repairGemmaMarkdown(request.text, result.text) }
   }
 
   protected override buildModelInvocation(

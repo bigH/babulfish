@@ -605,6 +605,80 @@ describe("chat adapters", () => {
     )
   })
 
+  it("repairs Gemma markdown answer wrappers and restored block markers", () => {
+    const request = {
+      text:
+        "## Release checklist\n" +
+        "- Confirm `WebGPU` fallback.\n" +
+        "- Update the [runtime notes](/docs/runtime).",
+      source: { code: "en" },
+      target: { code: "es" },
+    } satisfies TranslationRequest
+
+    expect(
+      gemma3ChatAdapter.extractText(
+        request,
+        { max_new_tokens: 64, content_type: "markdown" },
+        [
+          {
+            generated_text:
+              "```spanish\n" +
+              "<h2>Lista de verificación de lanzamiento</h2>\n" +
+              "Confirmar WebGPU fallback.\n" +
+              "Actualizar las notas de /docs/runtime.\n" +
+              "```",
+          },
+        ],
+      ),
+    ).toEqual({
+      text:
+        "## Lista de verificación de lanzamiento\n" +
+        "- Confirmar `WebGPU` fallback.\n" +
+        "- Actualizar las notas de [runtime notes](/docs/runtime).",
+    })
+  })
+
+  it("repairs missing Gemma markdown code fences without touching raw output", () => {
+    const request = {
+      text:
+        "### Worker runbook\n" +
+        "1. Run `pnpm test`.\n" +
+        "```bash\n" +
+        "pnpm --filter @babulfish/core test\n" +
+        "```",
+      source: { code: "en" },
+      target: { code: "fr" },
+    } satisfies TranslationRequest
+
+    const generatedText =
+      '"""Workflow d’exploitation\n' +
+      "1. Exécutez pnpm test.\n" +
+      '"""'
+
+    expect(
+      gemma3ChatAdapter.extractText(
+        request,
+        { max_new_tokens: 64, content_type: "markdown" },
+        [{ generated_text: generatedText }],
+      ),
+    ).toEqual({
+      text:
+        "### Workflow d’exploitation\n" +
+        "1. Exécutez `pnpm test`.\n" +
+        "```bash\n" +
+        "pnpm --filter @babulfish/core test\n" +
+        "```",
+    })
+
+    expect(
+      gemma3ChatAdapter.extractText(
+        request,
+        { max_new_tokens: 64 },
+        [{ generated_text: generatedText }],
+      ).text,
+    ).toBe(generatedText.trim())
+  })
+
   it("auto-prompts Qwen to preserve product and technical spans", () => {
     const request = {
       text: "Babulfish uses `WebGPU` and TranslateGemma.",
