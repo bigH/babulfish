@@ -371,9 +371,22 @@ type InlineMarkdownSpan = {
   readonly inner: string
 }
 
+function collectInlineCodeSpans(text: string): readonly InlineMarkdownSpan[] {
+  const seen = new Set<string>()
+  const spans: InlineMarkdownSpan[] = []
+
+  for (const wrapped of collectMatches(text, /`[^`\n]+`/gu)) {
+    if (seen.has(wrapped)) continue
+    seen.add(wrapped)
+    spans.push({ wrapped, inner: wrapped.slice(1, -1) })
+  }
+
+  return spans
+}
+
 function collectRepairableInlineMarkdownSpans(text: string): readonly InlineMarkdownSpan[] {
   const spans = [
-    ...collectMatches(text, /`[^`\n]+`/gu),
+    ...collectInlineCodeSpans(text).map(({ wrapped }) => wrapped),
     ...collectMatches(text, /\*\*[^*\n]+\*\*/gu),
   ]
   const seen = new Set<string>()
@@ -434,6 +447,39 @@ function restoreDroppedInlineMarkdownWrapper(
   return repaired
 }
 
+function appendBeforeTrailingPunctuation(text: string, value: string): string {
+  const match = /([.!?。！？؟]+)(\s*)$/u.exec(text)
+  if (!match) return `${text} ${value}`.trimStart()
+
+  const punctuationStart = match.index
+  return `${text.slice(0, punctuationStart).trimEnd()} ${value}${text.slice(punctuationStart)}`
+}
+
+function restoreMissingInlineCodeSpans(source: string, translated: string): string {
+  const missing = collectInlineCodeSpans(source).filter(
+    ({ wrapped, inner }) => !translated.includes(wrapped) && !translated.includes(inner),
+  )
+  if (missing.length === 0) return translated
+
+  const sourceLines = normalizeMarkdownAnswerText(source).split(MARKDOWN_LINE_SPLIT_PATTERN)
+  const translatedLines = translated.split(MARKDOWN_LINE_SPLIT_PATTERN)
+  if (sourceLines.length !== translatedLines.length) {
+    return missing.reduce(
+      (current, span) => appendBeforeTrailingPunctuation(current, span.wrapped),
+      translated,
+    )
+  }
+
+  const repaired = [...translatedLines]
+  for (const span of missing) {
+    const sourceLineIndex = sourceLines.findIndex((line) => line.includes(span.wrapped))
+    const index = sourceLineIndex === -1 ? repaired.length - 1 : sourceLineIndex
+    repaired[index] = appendBeforeTrailingPunctuation(repaired[index] ?? "", span.wrapped)
+  }
+
+  return repaired.join("\n")
+}
+
 function restoreDroppedInlineMarkdownWrappers(
   source: string,
   translated: string,
@@ -452,11 +498,14 @@ function restoreDroppedInlineMarkdownWrappers(
 function repairGemmaMarkdown(source: string, translated: string): string {
   return restoreDroppedMarkdownLinks(
     source,
-    restoreDroppedInlineMarkdownWrappers(
+    restoreMissingInlineCodeSpans(
       source,
-      restoreMissingCodeFence(
+      restoreDroppedInlineMarkdownWrappers(
         source,
-        restoreSourceLineShapes(source, normalizeMarkdownAnswerText(translated)),
+        restoreMissingCodeFence(
+          source,
+          restoreSourceLineShapes(source, normalizeMarkdownAnswerText(translated)),
+        ),
       ),
     ),
   )

@@ -679,6 +679,37 @@ describe("chat adapters", () => {
     ).toBe(generatedText.trim())
   })
 
+  it("repairs dropped Gemma inline code spans when the model omits them", () => {
+    const request = {
+      text:
+        "## Runtime note\n" +
+        "> Keep `GPUDevice` near the setup guide.\n" +
+        "Run `pnpm test` before release.",
+      source: { code: "en" },
+      target: { code: "fr" },
+    } satisfies TranslationRequest
+
+    expect(
+      gemma3ChatAdapter.extractText(
+        request,
+        { max_new_tokens: 64, content_type: "markdown" },
+        [
+          {
+            generated_text:
+              "Note d'execution\n" +
+              "Gardez-le pres du guide de configuration.\n" +
+              "Executez avant la publication.",
+          },
+        ],
+      ),
+    ).toEqual({
+      text:
+        "## Note d'execution\n" +
+        "> Gardez-le pres du guide de configuration `GPUDevice`.\n" +
+        "Executez avant la publication `pnpm test`.",
+    })
+  })
+
   it("repairs implicit Gemma block markdown without changing raw prompt intent", () => {
     const request = {
       text:
