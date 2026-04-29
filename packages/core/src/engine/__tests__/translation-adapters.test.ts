@@ -710,6 +710,34 @@ describe("chat adapters", () => {
     })
   })
 
+  it("keeps Gemma markdown links navigable when the model drops the href", () => {
+    const request = {
+      text:
+        "> Read the [runtime runbook](/docs/runbook) before release.\n" +
+        "> Keep `WebGPU` ready.",
+      source: { code: "en" },
+      target: { code: "fr" },
+    } satisfies TranslationRequest
+
+    expect(
+      gemma3ChatAdapter.extractText(
+        request,
+        { max_new_tokens: 64, content_type: "markdown" },
+        [
+          {
+            generated_text:
+              "Lisez le manuel d'exploitation avant la publication.\n" +
+              "Gardez WebGPU prêt.",
+          },
+        ],
+      ),
+    ).toEqual({
+      text:
+        "> Lisez le manuel d'exploitation avant la publication [runtime runbook](/docs/runbook).\n" +
+        "> Gardez `WebGPU` prêt.",
+    })
+  })
+
   it("repairs implicit Gemma block markdown without changing raw prompt intent", () => {
     const request = {
       text:

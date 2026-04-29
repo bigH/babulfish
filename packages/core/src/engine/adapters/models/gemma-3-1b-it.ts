@@ -348,7 +348,7 @@ function restoreDroppedMarkdownLink(translated: string, link: MarkdownLink): str
   }
 
   const hrefStart = translated.indexOf(link.href)
-  if (hrefStart === -1) return translated
+  if (hrefStart === -1) return appendBeforeTrailingPunctuation(translated, link.full)
 
   const hrefEnd = hrefStart + link.href.length
   const previousChar = translated[hrefStart - 1]
@@ -362,8 +362,26 @@ function restoreDroppedMarkdownLink(translated: string, link: MarkdownLink): str
   return `${translated.slice(0, hrefStart)}[${link.label}](${link.href})${translated.slice(hrefEnd)}`
 }
 
+function restoreDroppedMarkdownLinksInText(
+  translated: string,
+  links: readonly MarkdownLink[],
+): string {
+  return links.reduce(restoreDroppedMarkdownLink, translated)
+}
+
 function restoreDroppedMarkdownLinks(source: string, translated: string): string {
-  return collectMarkdownLinks(source).reduce(restoreDroppedMarkdownLink, translated)
+  const sourceLines = normalizeMarkdownAnswerText(source).split(MARKDOWN_LINE_SPLIT_PATTERN)
+  const translatedLines = translated.split(MARKDOWN_LINE_SPLIT_PATTERN)
+
+  if (sourceLines.length === translatedLines.length) {
+    return translatedLines
+      .map((line, index) =>
+        restoreDroppedMarkdownLinksInText(line, collectMarkdownLinks(sourceLines[index]!)),
+      )
+      .join("\n")
+  }
+
+  return restoreDroppedMarkdownLinksInText(translated, collectMarkdownLinks(source))
 }
 
 type InlineMarkdownSpan = {
