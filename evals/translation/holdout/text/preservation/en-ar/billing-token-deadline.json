@@ -1,0 +1,42 @@
+{
+  "split": "holdout",
+  "category": "preservation",
+  "sourceLanguage": "en",
+  "targetLanguage": "ar",
+  "contentType": "text",
+  "source": {
+    "text": "Before 17:00 UTC, move {{invoiceId}} from /billing/review to queue HC-2048."
+  },
+  "references": [
+    {
+      "quality": "primary",
+      "text": "قبل 17:00 UTC، انقل {{invoiceId}} من /billing/review إلى قائمة الانتظار HC-2048.",
+      "notes": "Holdout-approved Arabic reference preserving placeholder, route, time, and queue ID."
+    }
+  ],
+  "checks": {
+    "sourceShouldChange": true,
+    "expectedPatterns": ["(قبل|انقل|قائمة الانتظار)"],
+    "preservedSubstringCounts": [
+      { "value": "17:00 UTC" },
+      { "value": "{{invoiceId}}" },
+      { "value": "/billing/review" },
+      { "value": "HC-2048" }
+    ]
+  },
+  "provenance": {
+    "sourceClass": "synthetic_template",
+    "authorId": "team-evals",
+    "createdAt": "2026-04-28",
+    "sourceOrigin": "private-holdout-template BF-HC-TEXT-003",
+    "derivedFrom": "template: billing workflow notice with time literal, placeholder, route path, and queue ID",
+    "publicExposure": "private",
+    "reviewStatus": "holdout_approved",
+    "referenceTranslatorId": "holdout-translator-ar",
+    "referenceReviewerId": "holdout-reviewer-ar",
+    "referenceReviewDate": "2026-04-28",
+    "technicalReviewerId": "team-evals",
+    "technicalReviewDate": "2026-04-28",
+    "notes": "Holdout seed for count-aware preservation; human-reviewed reference not produced by evaluated model families."
+  }
+}

@@ -1,0 +1,45 @@
+{
+  "split": "targeted",
+  "category": "markdown",
+  "sourceLanguage": "es",
+  "targetLanguage": "en",
+  "contentType": "markdown",
+  "source": {
+    "text": "## Nota de versión\n\n- Mantén `WebGPU` activado.\n- Revisa [la guía](/docs/runtime)."
+  },
+  "references": [
+    {
+      "quality": "primary",
+      "text": "## Release note\n\n- Keep `WebGPU` enabled.\n- Review [the guide](/docs/runtime).",
+      "notes": "First-party dev reference for reverse markdown smoke coverage."
+    }
+  ],
+  "checks": {
+    "sourceShouldChange": true,
+    "expectedPatterns": ["(?i)\\b(release|guide|enabled)\\b"],
+    "preservedSubstringCounts": [
+      { "value": "WebGPU" }
+    ],
+    "markdownStructure": {
+      "headings": [{ "level": 2, "count": 1 }],
+      "unorderedListItems": 2,
+      "inlineCode": { "count": 1, "texts": ["WebGPU"] },
+      "links": { "count": 1, "hrefs": ["/docs/runtime"] }
+    }
+  },
+  "provenance": {
+    "sourceClass": "first_party_authored",
+    "authorId": "team-evals",
+    "createdAt": "2026-04-28",
+    "sourceOrigin": "private-eval-spec BF-EVAL-MD-013",
+    "derivedFrom": null,
+    "publicExposure": "private",
+    "reviewStatus": "technical_reviewed",
+    "referenceTranslatorId": "evals-translator-en",
+    "referenceReviewerId": "evals-reviewer-en",
+    "referenceReviewDate": "2026-04-28",
+    "technicalReviewerId": "team-evals",
+    "technicalReviewDate": "2026-04-28",
+    "notes": "Dev reverse markdown smoke case authored for phase-1 language matrix."
+  }
+}

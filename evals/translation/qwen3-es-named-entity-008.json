@@ -1,5 +1,5 @@
 {
-  "split": "holdout",
+  "split": "general",
   "category": "named-entity",
   "sourceLanguage": "en",
   "targetLanguage": "es",

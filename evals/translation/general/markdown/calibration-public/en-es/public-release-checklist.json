@@ -1,0 +1,44 @@
+{
+  "split": "general",
+  "category": "calibration-public",
+  "sourceLanguage": "en",
+  "targetLanguage": "es",
+  "contentType": "markdown",
+  "source": {
+    "text": "## Release checklist\n\n- Confirm `WebGPU` fallback.\n- Update the [runtime notes](/docs/runtime).\n- Publish the changelog after review."
+  },
+  "references": [
+    {
+      "quality": "primary",
+      "text": "## Lista de verificacion de lanzamiento\n\n- Confirme la alternativa de `WebGPU`.\n- Actualice las [notas de ejecucion](/docs/runtime).\n- Publique el registro de cambios despues de la revision.",
+      "notes": "Technical-reviewed synthetic public-style markdown reference for calibration only."
+    }
+  ],
+  "checks": {
+    "sourceShouldChange": true,
+    "preservedSubstringCounts": [
+      { "value": "WebGPU" }
+    ],
+    "markdownStructure": {
+      "headings": [{ "level": 2, "count": 1 }],
+      "unorderedListItems": 3,
+      "inlineCode": { "count": 1, "texts": ["WebGPU"] },
+      "links": { "count": 1, "hrefs": ["/docs/runtime"] }
+    }
+  },
+  "provenance": {
+    "sourceClass": "public_web",
+    "authorId": "team-evals",
+    "createdAt": "2026-04-28",
+    "sourceOrigin": "synthetic-public-web-style-release-checklist",
+    "derivedFrom": "synthetic public-style changelog fixture; not copied from a project page, release note, or public corpus",
+    "publicExposure": "public",
+    "reviewStatus": "technical_reviewed",
+    "referenceTranslatorId": "calibration-translator-es",
+    "referenceReviewerId": "calibration-reviewer-es",
+    "referenceReviewDate": "2026-04-28",
+    "technicalReviewerId": "team-evals",
+    "technicalReviewDate": "2026-04-28",
+    "notes": "contamination warning: public-web-style markdown calibration case; exclude from clean headline scoring"
+  }
+}

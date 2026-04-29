@@ -17,8 +17,8 @@
   "properties": {
     "split": {
       "type": "string",
-      "enum": ["dev", "holdout", "holdout-clean", "calibration-public"],
-      "description": "Legacy flat cases may use holdout. New grouped clean holdout cases should use holdout-clean."
+      "enum": ["targeted", "general", "holdout"],
+      "description": "targeted is focused development coverage; general is default broad coverage and public comparability probes; holdout is clean private release-gate material."
     },
     "category": {
       "type": "string",
@@ -98,7 +98,7 @@
     },
     {
       "if": {
-        "properties": { "split": { "const": "holdout-clean" } },
+        "properties": { "split": { "const": "holdout" } },
         "required": ["split"]
       },
       "then": {
@@ -122,27 +122,6 @@
     },
     {
       "if": {
-        "properties": { "split": { "const": "calibration-public" } },
-        "required": ["split"]
-      },
-      "then": {
-        "required": ["provenance"],
-        "properties": {
-          "provenance": {
-            "properties": {
-              "sourceClass": {
-                "enum": ["public_benchmark", "public_web"]
-              },
-              "publicExposure": {
-                "enum": ["public", "mixed"]
-              }
-            }
-          }
-        }
-      }
-    },
-    {
-      "if": {
         "properties": {
           "provenance": {
             "properties": {
@@ -157,7 +136,7 @@
       },
       "then": {
         "properties": {
-          "split": { "const": "calibration-public" }
+          "split": { "const": "general" }
         }
       }
     },
@@ -190,13 +169,25 @@
     },
     {
       "if": {
-        "properties": { "split": { "const": "calibration-public" } },
-        "required": ["split"]
+        "properties": {
+          "provenance": {
+            "properties": {
+              "sourceClass": {
+                "enum": ["public_benchmark", "public_web"]
+              }
+            },
+            "required": ["sourceClass"]
+          }
+        },
+        "required": ["provenance"]
       },
       "then": {
         "properties": {
           "provenance": {
             "properties": {
+              "publicExposure": {
+                "enum": ["public", "mixed"]
+              },
               "reviewStatus": {
                 "not": { "const": "holdout_approved" }
               },

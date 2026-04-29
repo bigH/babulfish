@@ -12,10 +12,9 @@ export const WEBGPU_EVAL_CORPUS_GLOB_PATTERNS = {
 } as const
 
 export const WEBGPU_EVAL_SPLITS = [
-  "dev",
+  "targeted",
+  "general",
   "holdout",
-  "holdout-clean",
-  "calibration-public",
 ] as const
 
 export const WEBGPU_EVAL_LANGUAGES = [
@@ -53,8 +52,8 @@ export const WEBGPU_EVAL_REVIEW_STATUSES = [
 ] as const
 
 export const WEBGPU_EVAL_DEFAULT_LOCAL_SPLITS = [
-  "dev",
-  "holdout",
+  "targeted",
+  "general",
 ] as const satisfies readonly WebGpuEvalSplit[]
 
 export type WebGpuEvalSplit = (typeof WEBGPU_EVAL_SPLITS)[number]
@@ -667,54 +666,51 @@ function assertProvenancePolicy(
     )
   }
 
-  if (PUBLIC_SOURCE_CLASSES.has(provenance.sourceClass) && split !== "calibration-public") {
+  const isPublicSource = PUBLIC_SOURCE_CLASSES.has(provenance.sourceClass)
+
+  if (isPublicSource && split !== "general") {
     throw new Error(
-      `Eval case ${id} provenance sourceClass ${provenance.sourceClass} is only allowed in calibration-public`,
+      `Eval case ${id} provenance sourceClass ${provenance.sourceClass} is only allowed in general`,
     )
   }
 
-  if (split === "holdout-clean") {
+  if (split === "holdout") {
     if (!PRIVATE_HOLDOUT_SOURCE_CLASSES.has(provenance.sourceClass)) {
       throw new Error(
-        `Eval case ${id} holdout-clean provenance.sourceClass must be private and auditable`,
+        `Eval case ${id} holdout provenance.sourceClass must be private and auditable`,
       )
     }
     if (provenance.publicExposure !== "private") {
       throw new Error(
-        `Eval case ${id} holdout-clean provenance.publicExposure must be private`,
+        `Eval case ${id} holdout provenance.publicExposure must be private`,
       )
     }
     if (provenance.reviewStatus !== "holdout_approved") {
       throw new Error(
-        `Eval case ${id} holdout-clean provenance.reviewStatus must be holdout_approved`,
+        `Eval case ${id} holdout provenance.reviewStatus must be holdout_approved`,
       )
     }
     if (hasVaguePrivateSourceOrigin(provenance.sourceOrigin)) {
       throw new Error(
-        `Eval case ${id} holdout-clean provenance.sourceOrigin must name a concrete private source`,
+        `Eval case ${id} holdout provenance.sourceOrigin must name a concrete private source`,
       )
     }
   }
 
-  if (split === "calibration-public") {
-    if (!PUBLIC_SOURCE_CLASSES.has(provenance.sourceClass)) {
-      throw new Error(
-        `Eval case ${id} calibration-public provenance.sourceClass must be public_benchmark or public_web`,
-      )
-    }
+  if (split === "general" && isPublicSource) {
     if (provenance.publicExposure !== "public" && provenance.publicExposure !== "mixed") {
       throw new Error(
-        `Eval case ${id} calibration-public provenance.publicExposure must be public or mixed`,
+        `Eval case ${id} public-source general provenance.publicExposure must be public or mixed`,
       )
     }
     if (!/contamination/i.test(provenance.notes)) {
       throw new Error(
-        `Eval case ${id} calibration-public provenance.notes must include a contamination warning`,
+        `Eval case ${id} public-source general provenance.notes must include a contamination warning`,
       )
     }
     if (provenance.reviewStatus === "holdout_approved") {
       throw new Error(
-        `Eval case ${id} calibration-public provenance.reviewStatus must not be holdout_approved`,
+        `Eval case ${id} public-source general provenance.reviewStatus must not be holdout_approved`,
       )
     }
   }
@@ -728,8 +724,7 @@ function provenanceFor(
   if (value === undefined) {
     if (
       metadata.kind === "grouped" ||
-      json.split === "holdout-clean" ||
-      json.split === "calibration-public"
+      json.split === "holdout"
     ) {
       throw new Error(`Eval case ${metadata.id} must define provenance`)
     }
@@ -2685,10 +2680,10 @@ export function normalizeWebGpuEvalSelection(
     : selection
 }
 
-export function webGpuEvalSelectionIncludesHoldoutClean(
+export function webGpuEvalSelectionIncludesHoldout(
   selection: WebGpuEvalSelection,
 ): boolean {
-  return selection.split?.includes("holdout-clean") ?? false
+  return selection.split?.includes("holdout") ?? false
 }
 
 export function createWebGpuEvalRunMetadata({
@@ -2713,10 +2708,10 @@ export function createWebGpuEvalRunMetadata({
     throw new Error("WebGPU eval run metadata must define timestamp")
   }
   if (
-    webGpuEvalSelectionIncludesHoldoutClean(normalizedFilters) &&
+    webGpuEvalSelectionIncludesHoldout(normalizedFilters) &&
     normalizedReason === null
   ) {
-    throw new Error("Holdout-clean WebGPU eval runs require a reason")
+    throw new Error("Holdout WebGPU eval runs require a reason")
   }
 
   return {
@@ -2891,9 +2886,11 @@ export function scoreWebGpuEvalModel(
 export function scoreWebGpuEvalCleanHeadline(
   cases: readonly WebGpuEvalScoreAggregationCase[],
 ): WebGpuEvalCleanHeadlineScoreSummary {
-  const includedCases = cases.filter((evalCase) => evalCase.split !== "calibration-public")
+  const includedCases = cases.filter(
+    (evalCase) => !PUBLIC_SOURCE_CLASSES.has(evalCase.sourceClass ?? "unknown"),
+  )
   const excludedCaseIds = cases
-    .filter((evalCase) => evalCase.split === "calibration-public")
+    .filter((evalCase) => PUBLIC_SOURCE_CLASSES.has(evalCase.sourceClass ?? "unknown"))
     .map((evalCase) => evalCase.id)
   const summary = scoreWebGpuEvalModel(includedCases)
 

@@ -1,0 +1,55 @@
+{
+  "split": "holdout",
+  "category": "dom-linked",
+  "sourceLanguage": "en",
+  "targetLanguage": "es",
+  "contentType": "dom",
+  "source": {
+    "html": "<nav data-testid=\"toolbar\"><a data-i18n-key=\"export\" href=\"/export\">Export</a><button data-i18n-key=\"export\" type=\"button\">Export</button><a data-i18n-key=\"audit\" href=\"/audit\">Audit log</a></nav>"
+  },
+  "references": [
+    {
+      "quality": "primary",
+      "html": "<nav data-testid=\"toolbar\"><a data-i18n-key=\"export\" href=\"/export\">Exportar</a><button data-i18n-key=\"export\" type=\"button\">Exportar</button><a data-i18n-key=\"audit\" href=\"/audit\">Registro de auditoría</a></nav>",
+      "notes": "Holdout-approved Spanish DOM reference for linked repeated toolbar labels."
+    }
+  ],
+  "checks": {
+    "sourceShouldChange": true,
+    "domSelectorCounts": [
+      { "selector": "[data-i18n-key=\"export\"]", "count": 2 },
+      { "selector": "[data-i18n-key=\"audit\"]", "count": 1 }
+    ],
+    "domVisibleText": [
+      { "selector": "nav", "pattern": "Exportar.*Exportar" },
+      { "selector": "a[data-i18n-key=\"audit\"]", "pattern": "(?i)(auditor[ií]a|registro)" }
+    ],
+    "preservedAttributes": [
+      { "selector": "nav", "attribute": "data-testid", "value": "toolbar" },
+      { "selector": "a[data-i18n-key=\"export\"]", "attribute": "href", "value": "/export" },
+      { "selector": "a[data-i18n-key=\"audit\"]", "attribute": "href", "value": "/audit" },
+      { "selector": "button", "attribute": "type", "value": "button" }
+    ],
+    "domExecutableSafety": true
+  },
+  "runner": {
+    "dom": {
+      "linkedBy": { "selector": "[data-i18n-key]", "keyAttribute": "data-i18n-key" }
+    }
+  },
+  "provenance": {
+    "sourceClass": "product_derived_rewrite",
+    "authorId": "team-evals",
+    "createdAt": "2026-04-28",
+    "sourceOrigin": "private-product-screen BF-HC-DOM-TOOLBAR",
+    "derivedFrom": "rewritten from first-party toolbar shortcuts into clean holdout linked-label content",
+    "publicExposure": "private",
+    "reviewStatus": "holdout_approved",
+    "referenceTranslatorId": "holdout-translator-es",
+    "referenceReviewerId": "holdout-reviewer-es",
+    "referenceReviewDate": "2026-04-28",
+    "technicalReviewerId": "team-evals",
+    "technicalReviewDate": "2026-04-28",
+    "notes": "Holdout seed for DOM linked label fan-out; human-reviewed reference not produced by evaluated model families."
+  }
+}

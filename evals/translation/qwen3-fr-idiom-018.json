@@ -1,5 +1,5 @@
 {
-  "split": "holdout",
+  "split": "general",
   "category": "idiom",
   "sourceLanguage": "en",
   "targetLanguage": "fr",

@@ -1,0 +1,53 @@
+{
+  "split": "targeted",
+  "category": "dom-linked",
+  "sourceLanguage": "en",
+  "targetLanguage": "ar",
+  "contentType": "dom",
+  "source": {
+    "html": "<nav><a data-i18n-key=\"save\" href=\"/save\">Save</a><button data-i18n-key=\"save\" type=\"button\">Save</button><a data-i18n-key=\"cancel\" href=\"/cancel\">Cancel</a></nav>"
+  },
+  "references": [
+    {
+      "quality": "primary",
+      "html": "<nav><a data-i18n-key=\"save\" href=\"/save\">حفظ</a><button data-i18n-key=\"save\" type=\"button\">حفظ</button><a data-i18n-key=\"cancel\" href=\"/cancel\">إلغاء</a></nav>",
+      "notes": "Product-derived dev reference for Arabic linked duplicate labels."
+    }
+  ],
+  "checks": {
+    "sourceShouldChange": true,
+    "domSelectorCounts": [
+      { "selector": "[data-i18n-key=\"save\"]", "count": 2 },
+      { "selector": "[data-i18n-key=\"cancel\"]", "count": 1 }
+    ],
+    "domVisibleText": [
+      { "selector": "nav", "pattern": "حفظ.*حفظ" }
+    ],
+    "preservedAttributes": [
+      { "selector": "a[data-i18n-key=\"save\"]", "attribute": "href", "value": "/save" },
+      { "selector": "a[data-i18n-key=\"cancel\"]", "attribute": "href", "value": "/cancel" },
+      { "selector": "button", "attribute": "type", "value": "button" }
+    ],
+    "domExecutableSafety": true
+  },
+  "runner": {
+    "dom": {
+      "linkedBy": { "selector": "[data-i18n-key]", "keyAttribute": "data-i18n-key" }
+    }
+  },
+  "provenance": {
+    "sourceClass": "product_derived_rewrite",
+    "authorId": "team-evals",
+    "createdAt": "2026-04-28",
+    "sourceOrigin": "private-product-screen BF-DOM-TOOLBAR",
+    "derivedFrom": "rewritten from first-party toolbar labels into synthetic linked-label eval content",
+    "publicExposure": "private",
+    "reviewStatus": "technical_reviewed",
+    "referenceTranslatorId": "evals-translator-ar",
+    "referenceReviewerId": "evals-reviewer-ar",
+    "referenceReviewDate": "2026-04-28",
+    "technicalReviewerId": "team-evals",
+    "technicalReviewDate": "2026-04-28",
+    "notes": "Dev DOM linked case for duplicate label fan-out and attr preservation."
+  }
+}

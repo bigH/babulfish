@@ -1,5 +1,5 @@
 {
-  "split": "dev",
+  "split": "targeted",
   "category": "ui-label",
   "sourceLanguage": "en",
   "targetLanguage": "ar",

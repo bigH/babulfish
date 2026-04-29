@@ -1,0 +1,52 @@
+{
+  "split": "holdout",
+  "category": "dom-attrs",
+  "sourceLanguage": "en",
+  "targetLanguage": "ar",
+  "contentType": "dom",
+  "source": {
+    "html": "<button id=\"archive-action\" data-action=\"archive\" title=\"Archive project\" aria-label=\"Archive project\">Archive</button>"
+  },
+  "references": [
+    {
+      "quality": "primary",
+      "html": "<button id=\"archive-action\" data-action=\"archive\" title=\"أرشفة المشروع\" aria-label=\"أرشفة المشروع\">أرشفة</button>",
+      "notes": "Holdout-approved Arabic DOM reference for translated accessible attributes."
+    }
+  ],
+  "checks": {
+    "sourceShouldChange": true,
+    "domVisibleText": [
+      { "selector": "button", "text": "أرشفة" }
+    ],
+    "preservedAttributes": [
+      { "selector": "button", "attribute": "id", "value": "archive-action" },
+      { "selector": "button", "attribute": "data-action", "value": "archive" }
+    ],
+    "translatedAttributes": [
+      { "selector": "button", "attribute": "title", "expectedPattern": "أرشفة" },
+      { "selector": "button", "attribute": "aria-label", "expectedPattern": "أرشفة" }
+    ],
+    "domExecutableSafety": true
+  },
+  "runner": {
+    "dom": {
+      "translateAttributes": ["title", "aria-label"]
+    }
+  },
+  "provenance": {
+    "sourceClass": "product_derived_rewrite",
+    "authorId": "team-evals",
+    "createdAt": "2026-04-28",
+    "sourceOrigin": "private-product-screen BF-HC-DOM-ACTIONS",
+    "derivedFrom": "rewritten from first-party action menu into clean holdout accessible-attribute content",
+    "publicExposure": "private",
+    "reviewStatus": "holdout_approved",
+    "referenceTranslatorId": "holdout-translator-ar",
+    "referenceReviewerId": "holdout-reviewer-ar",
+    "referenceReviewDate": "2026-04-28",
+    "technicalReviewerId": "team-evals",
+    "technicalReviewDate": "2026-04-28",
+    "notes": "Holdout seed for DOM translated attributes; human-reviewed reference not produced by evaluated model families."
+  }
+}

@@ -1,0 +1,40 @@
+{
+  "split": "targeted",
+  "category": "preservation",
+  "sourceLanguage": "en",
+  "targetLanguage": "fr",
+  "contentType": "text",
+  "source": {
+    "text": "babulfish sync keeps WebGPU active, and babulfish sync logs WebGPU readiness."
+  },
+  "references": [
+    {
+      "quality": "primary",
+      "text": "babulfish sync garde WebGPU actif, et babulfish sync consigne la disponibilité de WebGPU.",
+      "notes": "Synthetic dev reference for repeated protected-token counts."
+    }
+  ],
+  "checks": {
+    "sourceShouldChange": true,
+    "expectedPatterns": ["(?i)\\b(garde|consigne|disponibilité)\\b"],
+    "preservedSubstringCounts": [
+      { "value": "babulfish", "count": 2 },
+      { "value": "WebGPU", "count": 2 }
+    ]
+  },
+  "provenance": {
+    "sourceClass": "synthetic_template",
+    "authorId": "team-evals",
+    "createdAt": "2026-04-28",
+    "sourceOrigin": "private-eval-template BF-EVAL-PRES-002",
+    "derivedFrom": "template: repeated product and runtime names in a status sentence",
+    "publicExposure": "private",
+    "reviewStatus": "technical_reviewed",
+    "referenceTranslatorId": "evals-translator-fr",
+    "referenceReviewerId": "evals-reviewer-fr",
+    "referenceReviewDate": "2026-04-28",
+    "technicalReviewerId": "team-evals",
+    "technicalReviewDate": "2026-04-28",
+    "notes": "Dev preservation case for count-aware repeated product tokens."
+  }
+}

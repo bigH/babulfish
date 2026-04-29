@@ -1,0 +1,37 @@
+{
+  "split": "holdout",
+  "category": "plain",
+  "sourceLanguage": "ar",
+  "targetLanguage": "en",
+  "contentType": "text",
+  "source": {
+    "text": "انتهت جلسة الهاتف المحمول. افتح لوحة الحساب للمتابعة."
+  },
+  "references": [
+    {
+      "quality": "primary",
+      "text": "The mobile session expired. Open the account dashboard to continue.",
+      "notes": "Holdout-approved English reference for private Arabic product copy."
+    }
+  ],
+  "checks": {
+    "sourceShouldChange": true,
+    "expectedPatterns": ["(?i)(mobile session|account dashboard|continue)"],
+    "forbiddenPatterns": ["جلسة الهاتف", "لوحة الحساب"]
+  },
+  "provenance": {
+    "sourceClass": "first_party_authored",
+    "authorId": "team-evals",
+    "createdAt": "2026-04-28",
+    "sourceOrigin": "private-holdout-spec BF-HC-TEXT-006",
+    "derivedFrom": null,
+    "publicExposure": "private",
+    "reviewStatus": "holdout_approved",
+    "referenceTranslatorId": "holdout-translator-en",
+    "referenceReviewerId": "holdout-reviewer-en",
+    "referenceReviewDate": "2026-04-28",
+    "technicalReviewerId": "team-evals",
+    "technicalReviewDate": "2026-04-28",
+    "notes": "Holdout seed for reverse plain copy; human-reviewed reference not produced by evaluated model families."
+  }
+}

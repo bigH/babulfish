@@ -13,31 +13,35 @@ import {
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 
 describe("webgpu eval cli", () => {
-  it("defaults local report runs to dev and legacy holdout only", () => {
+  it("defaults local report runs to targeted and general", () => {
     const options = parseArgs([])
 
     assert.deepEqual(options.models, ["qwen-3-0.6b"])
-    assert.deepEqual(options.filters, { split: ["dev", "holdout"] })
+    assert.deepEqual(options.filters, { split: ["targeted", "general"] })
     assert.equal(options.holdoutReason, null)
     assert.equal(options.referencesExposed, false)
     assert.match(options.outputDir, /\.evals[/\\]web-gpu-/)
   })
 
-  it("requires a reason when holdout-clean is explicitly selected", () => {
+  it("requires a reason when holdout is explicitly selected", () => {
     assert.throws(
-      () => parseArgs(["--split", "holdout-clean"]),
-      /--split holdout-clean requires --holdout-reason/,
+      () => parseArgs(["--split", "holdout"]),
+      /--split holdout requires --holdout-reason/,
+    )
+    assert.throws(
+      () => parseArgs(["--split", "targeted,holdout"]),
+      /--split holdout requires --holdout-reason/,
     )
 
     const options = parseArgs([
       "--split",
-      "holdout-clean",
+      "holdout",
       "--holdout-reason",
       "release gate",
       "--references-exposed",
     ])
 
-    assert.deepEqual(options.filters, { split: ["holdout-clean"] })
+    assert.deepEqual(options.filters, { split: ["holdout"] })
     assert.equal(options.holdoutReason, "release gate")
     assert.equal(options.referencesExposed, true)
   })
@@ -47,7 +51,7 @@ describe("webgpu eval cli", () => {
       "--model",
       "gemma-3-1b-it",
       "--split",
-      "holdout-clean",
+      "holdout",
       "--holdout-reason",
       "release gate",
       "--references-exposed",
@@ -56,7 +60,7 @@ describe("webgpu eval cli", () => {
 
     assert.equal(metadata.runner, "webgpu-eval-cli")
     assert.equal(metadata.modelId, "gemma-3-1b-it")
-    assert.deepEqual(metadata.filters, { split: ["holdout-clean"] })
+    assert.deepEqual(metadata.filters, { split: ["holdout"] })
     assert.equal(metadata.reason, "release gate")
     assert.equal(metadata.referencesExposed, true)
     assert.match(metadata.timestamp, /^\d{4}-\d{2}-\d{2}T/)
@@ -94,9 +98,10 @@ describe("webgpu eval schema policy", () => {
     assert.equal(provenance.createdAt.pattern, "^\\d{4}-\\d{2}-\\d{2}$")
     assert.equal(provenance.referenceReviewDate.pattern, "^\\d{4}-\\d{2}-\\d{2}$")
     assert.equal(provenance.technicalReviewDate.pattern, "^\\d{4}-\\d{2}-\\d{2}$")
-    assert.match(schemaText, /holdout-clean/)
+    assert.match(schemaText, /targeted/)
+    assert.match(schemaText, /general/)
+    assert.match(schemaText, /holdout/)
     assert.match(schemaText, /holdout_approved/)
-    assert.match(schemaText, /calibration-public/)
     assert.match(schemaText, /public_benchmark/)
     assert.match(schemaText, /public_web/)
     assert.match(schemaText, /synthetic_template/)

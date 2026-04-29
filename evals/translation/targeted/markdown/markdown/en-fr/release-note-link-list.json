@@ -1,0 +1,45 @@
+{
+  "split": "targeted",
+  "category": "markdown",
+  "sourceLanguage": "en",
+  "targetLanguage": "fr",
+  "contentType": "markdown",
+  "source": {
+    "text": "## Runtime update\n\n- Keep `WebGPU` enabled.\n- Read the [runtime guide](/docs/runtime).\n- Restart babulfish after changing models."
+  },
+  "references": [
+    {
+      "quality": "primary",
+      "text": "## Mise à jour de l'environnement d'exécution\n\n- Gardez `WebGPU` activé.\n- Lisez le [guide d'exécution](/docs/runtime).\n- Redémarrez babulfish après avoir changé de modèle.",
+      "notes": "First-party dev reference for markdown structure and preservation."
+    }
+  ],
+  "checks": {
+    "sourceShouldChange": true,
+    "preservedSubstringCounts": [
+      { "value": "WebGPU" },
+      { "value": "babulfish" }
+    ],
+    "markdownStructure": {
+      "headings": [{ "level": 2, "count": 1 }],
+      "unorderedListItems": 3,
+      "inlineCode": { "count": 1, "texts": ["WebGPU"] },
+      "links": { "count": 1, "labels": ["guide d'exécution"], "hrefs": ["/docs/runtime"] }
+    }
+  },
+  "provenance": {
+    "sourceClass": "first_party_authored",
+    "authorId": "team-evals",
+    "createdAt": "2026-04-28",
+    "sourceOrigin": "private-eval-spec BF-EVAL-MD-005",
+    "derivedFrom": null,
+    "publicExposure": "private",
+    "reviewStatus": "technical_reviewed",
+    "referenceTranslatorId": "evals-translator-fr",
+    "referenceReviewerId": "evals-reviewer-fr",
+    "referenceReviewDate": "2026-04-28",
+    "technicalReviewerId": "team-evals",
+    "technicalReviewDate": "2026-04-28",
+    "notes": "Dev markdown case authored for release-note list coverage."
+  }
+}

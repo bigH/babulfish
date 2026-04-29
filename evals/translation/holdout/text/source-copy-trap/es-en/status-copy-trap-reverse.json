@@ -1,0 +1,37 @@
+{
+  "split": "holdout",
+  "category": "source-copy-trap",
+  "sourceLanguage": "es",
+  "targetLanguage": "en",
+  "contentType": "text",
+  "source": {
+    "text": "Estado del lote: pendiente. No copie esta frase sin traducirla."
+  },
+  "references": [
+    {
+      "quality": "primary",
+      "text": "Batch status: pending. Do not copy this sentence without translating it.",
+      "notes": "Holdout-approved English reference for a reverse source-copy trap."
+    }
+  ],
+  "checks": {
+    "sourceShouldChange": true,
+    "expectedPatterns": ["(?i)(batch status|pending|translat)"],
+    "forbiddenPatterns": ["Estado del lote", "No copie esta frase"]
+  },
+  "provenance": {
+    "sourceClass": "synthetic_template",
+    "authorId": "team-evals",
+    "createdAt": "2026-04-28",
+    "sourceOrigin": "private-holdout-template BF-HC-TEXT-005",
+    "derivedFrom": "template: Spanish status sentence that must not be copied into English output",
+    "publicExposure": "private",
+    "reviewStatus": "holdout_approved",
+    "referenceTranslatorId": "holdout-translator-en",
+    "referenceReviewerId": "holdout-reviewer-en",
+    "referenceReviewDate": "2026-04-28",
+    "technicalReviewerId": "team-evals",
+    "technicalReviewDate": "2026-04-28",
+    "notes": "Holdout seed for reverse source-copy detection; human-reviewed reference not produced by evaluated model families."
+  }
+}

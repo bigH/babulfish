@@ -1,0 +1,43 @@
+{
+  "split": "targeted",
+  "category": "markdown",
+  "sourceLanguage": "en",
+  "targetLanguage": "ar",
+  "contentType": "markdown",
+  "source": {
+    "text": "| Item | Status |\n|---|---|\n| WebGPU | Ready |\n| WASM | Fallback |\n\n![runtime diagram](/img/runtime-flow.png)"
+  },
+  "references": [
+    {
+      "quality": "primary",
+      "text": "| العنصر | الحالة |\n|---|---|\n| WebGPU | جاهز |\n| WASM | احتياطي |\n\n![مخطط التشغيل](/img/runtime-flow.png)",
+      "notes": "First-party dev reference for Arabic table and image preservation."
+    }
+  ],
+  "checks": {
+    "sourceShouldChange": true,
+    "preservedSubstringCounts": [
+      { "value": "WebGPU" },
+      { "value": "WASM" }
+    ],
+    "markdownStructure": {
+      "tables": { "rows": 3, "cells": 6 },
+      "images": { "count": 1, "altTexts": ["مخطط التشغيل"], "srcs": ["/img/runtime-flow.png"] }
+    }
+  },
+  "provenance": {
+    "sourceClass": "first_party_authored",
+    "authorId": "team-evals",
+    "createdAt": "2026-04-28",
+    "sourceOrigin": "private-eval-spec BF-EVAL-MD-011",
+    "derivedFrom": null,
+    "publicExposure": "private",
+    "reviewStatus": "technical_reviewed",
+    "referenceTranslatorId": "evals-translator-ar",
+    "referenceReviewerId": "evals-reviewer-ar",
+    "referenceReviewDate": "2026-04-28",
+    "technicalReviewerId": "team-evals",
+    "technicalReviewDate": "2026-04-28",
+    "notes": "Dev markdown case authored for Arabic table and image structure."
+  }
+}

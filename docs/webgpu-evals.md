@@ -18,12 +18,12 @@ Useful options:
 pnpm eval:webgpu -- --model qwen-3-0.6b
 pnpm eval:webgpu -- --model gemma-3-1b-it --headed
 pnpm eval:webgpu -- --model translategemma-4
-pnpm eval:webgpu -- --split dev --category markdown
+pnpm eval:webgpu -- --split targeted --category markdown
 pnpm eval:webgpu -- --content-type dom --language-pair en-es
 pnpm eval:webgpu -- --source-language en --target-language fr
 pnpm eval:webgpu -- --source-class synthetic_template
-pnpm eval:webgpu -- --split calibration-public --source-class public_benchmark
-pnpm eval:webgpu -- --split holdout-clean --holdout-reason "release gate"
+pnpm eval:webgpu -- --split general --source-class public_benchmark
+pnpm eval:webgpu -- --split holdout --holdout-reason "release gate"
 pnpm eval:webgpu -- --output-dir .evals/manual-webgpu-run
 ```
 
@@ -35,16 +35,16 @@ The runner starts the vanilla Vite demo with COOP/COEP headers, launches Chromiu
 
 Text and Markdown cases run through `translateText()`. DOM cases run through `translateTo(..., { root })` against an isolated per-case fixture so selector and attribute checks exercise the DOM path. DOM artifacts capture the eval root `outerHTML`, which keeps root-level `dir` assertions visible.
 
-The default local report run uses `--split dev,holdout`. `holdout-clean` is excluded unless explicitly selected, and selecting it requires `--holdout-reason`. `calibration-public` is also explicit so public/mixed, contamination-marked calibration cases do not perturb local optimization baselines.
+The default local report run uses `--split targeted,general`. `holdout` is excluded unless explicitly selected, and selecting it requires `--holdout-reason`.
 
 The corpus currently contains 117 cases:
 
-- 38 legacy flat cases: 23 `dev` and 15 `holdout`.
-- 49 grouped PR 4 `dev` cases covering markdown, preservation-family text, and forward DOM behavior.
-- 18 grouped PR 5 `holdout-clean` seed cases covering text basics, preservation/entities/source-copy, markdown, and DOM behavior.
-- 12 `calibration-public` cases: the 2 PR 3 sentinels plus 10 PR 6 public/mixed regression and comparability probes.
+- 38 legacy flat cases: 23 `targeted` and 15 `general`.
+- 49 grouped PR 4 `targeted` cases covering markdown, preservation-family text, and forward DOM behavior.
+- 18 grouped PR 5 `holdout` seed cases covering text basics, preservation/entities/source-copy, markdown, and DOM behavior.
+- 12 public-source `general` cases with `category: "calibration-public"`: the 2 PR 3 sentinels plus 10 PR 6 public/mixed regression and comparability probes.
 
-The clean holdout seed is 18 cases, not the phase-1 target of 36, because the repo does not contain concrete evidence of bilingual reviewer capacity for a larger reviewed batch. The calibration-public bucket is expanded, explicitly contamination-marked, and excluded from clean headline scoring.
+The clean holdout seed is 18 cases, not the phase-1 target of 36, because the repo does not contain concrete evidence of bilingual reviewer capacity for a larger reviewed batch. Public-source general probes are explicitly contamination-marked and excluded from clean headline scoring by source class.
 
 Live WebGPU evals are intentionally opt-in and are not part of `pnpm test`; they download and run real models.
 
@@ -67,7 +67,7 @@ evals/translation/<split>/<contentType>/<category>/<source>-<target>/<slug>.json
 Grouped IDs are the grouped path without `.json`, such as:
 
 ```text
-dev/markdown/markdown/en-es/release-note-link-list
+targeted/markdown/markdown/en-es/release-note-link-list
 ```
 
 For grouped files, the loader validates that path-derived `split`, `contentType`, `category`, `sourceLanguage`, and `targetLanguage` match the JSON fields. Unknown top-level JSON keys and unknown `checks` keys are rejected before live evals run.
@@ -76,10 +76,10 @@ The schema artifact lives at [`evals/translation/schema.json`](../evals/translat
 
 Grouped provenance gates:
 
-- `holdout-clean` must be private, `holdout_approved`, and backed by concrete source/reviewer metadata.
+- `holdout` must be private, `holdout_approved`, and backed by concrete source/reviewer metadata.
 - `synthetic_template` and `product_derived_rewrite` require `derivedFrom`.
-- public source classes are allowed only in `calibration-public`.
-- `calibration-public` must record public or mixed exposure and a contamination warning.
+- `public_benchmark` and `public_web` are allowed only in `general`.
+- public-source `general` cases must record public or mixed exposure and a contamination warning.
 
 ## Deterministic Checks
 
@@ -125,9 +125,9 @@ Reference similarity uses a local chrF-style character n-gram F-score over norma
 
 No LLM judge is used as the primary score.
 
-Artifacts include both raw scoring and clean headline scoring. Raw `model.score` scores exactly the selected cases. `model.cleanHeadlineScore` excludes `calibration-public`, reports the excluded case IDs, and is the score to quote for clean local reporting. `model.scoreGroupSummaries` groups score summaries only by `split` and `sourceClass`; `model.caseGroupSummaries` remains the non-score triage breakdown by split/content/category/language/source class.
+Artifacts include both raw scoring and clean headline scoring. Raw `model.score` scores exactly the selected cases. `model.cleanHeadlineScore` excludes `public_benchmark` and `public_web` cases, reports the excluded case IDs, and is the score to quote for clean local reporting. Private `general` cases remain included. `model.scoreGroupSummaries` groups score summaries only by `split` and `sourceClass`; `model.caseGroupSummaries` remains the non-score triage breakdown by split/content/category/language/source class.
 
-Holdout-clean artifacts also record auditable run metadata:
+Holdout artifacts also record auditable run metadata:
 
 - runner
 - timestamp
@@ -188,7 +188,7 @@ Sample artifact shape:
     },
     "caseGroupSummaries": [
       {
-        "split": "dev",
+        "split": "targeted",
         "contentType": "markdown",
         "category": "markdown",
         "languagePair": "en-es",
@@ -204,7 +204,7 @@ Sample artifact shape:
     ],
     "scoreGroupSummaries": [
       {
-        "split": "dev",
+        "split": "targeted",
         "sourceClass": "missing",
         "total": 23,
         "passed": 14,
@@ -217,14 +217,14 @@ Sample artifact shape:
       "runner": "webgpu-eval-cli",
       "timestamp": "2026-04-28T19:00:00.000Z",
       "modelId": "qwen-3-0.6b",
-      "filters": { "split": ["dev", "holdout"] },
+      "filters": { "split": ["targeted", "general"] },
       "reason": null,
       "referencesExposed": false
     },
     "cases": [
       {
         "id": "plain-es",
-        "split": "dev",
+        "split": "targeted",
         "category": "plain",
         "sourceText": "The browser translates this short sentence.",
         "contentType": "text",

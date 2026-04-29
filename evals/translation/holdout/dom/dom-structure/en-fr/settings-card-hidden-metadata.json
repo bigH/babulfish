@@ -1,0 +1,55 @@
+{
+  "split": "holdout",
+  "category": "dom-structure",
+  "sourceLanguage": "en",
+  "targetLanguage": "fr",
+  "contentType": "dom",
+  "source": {
+    "html": "<section data-testid=\"settings-card\"><p>Show the workspace privacy summary.</p><span hidden>Internal flag HC-7</span><span aria-hidden=\"true\">Decorative chevron</span><pre>pnpm release:check</pre><code>SECRET_TOKEN</code></section>"
+  },
+  "references": [
+    {
+      "quality": "primary",
+      "html": "<section data-testid=\"settings-card\"><p>Affichez le résumé de confidentialité de l'espace de travail.</p><span hidden>Internal flag HC-7</span><span aria-hidden=\"true\">Decorative chevron</span><pre>pnpm release:check</pre><code>SECRET_TOKEN</code></section>",
+      "notes": "Holdout-approved French DOM reference preserving hidden and skipped technical islands."
+    }
+  ],
+  "checks": {
+    "sourceShouldChange": true,
+    "domSelectorCounts": [
+      { "selector": "span", "count": 2 },
+      { "selector": "pre", "count": 1 },
+      { "selector": "code", "count": 1 }
+    ],
+    "domVisibleText": [
+      { "selector": "p", "pattern": "(?i)(r[eé]sum[eé]|confidentialit[eé]|espace de travail)" }
+    ],
+    "preservedAttributes": [
+      { "selector": "section", "attribute": "data-testid", "value": "settings-card" }
+    ],
+    "domHiddenText": [
+      { "selector": "[hidden]" },
+      { "selector": "[aria-hidden=\"true\"]" }
+    ],
+    "domSkippedText": [
+      { "selector": "pre" },
+      { "selector": "code" }
+    ],
+    "domExecutableSafety": true
+  },
+  "provenance": {
+    "sourceClass": "product_derived_rewrite",
+    "authorId": "team-evals",
+    "createdAt": "2026-04-28",
+    "sourceOrigin": "private-product-screen BF-HC-DOM-SETTINGS",
+    "derivedFrom": "rewritten from first-party settings card into clean holdout hidden/skipped-island content",
+    "publicExposure": "private",
+    "reviewStatus": "holdout_approved",
+    "referenceTranslatorId": "holdout-translator-fr",
+    "referenceReviewerId": "holdout-reviewer-fr",
+    "referenceReviewDate": "2026-04-28",
+    "technicalReviewerId": "team-evals",
+    "technicalReviewDate": "2026-04-28",
+    "notes": "Holdout seed for DOM hidden and skipped text behavior; human-reviewed reference not produced by evaluated model families."
+  }
+}

@@ -1,0 +1,43 @@
+{
+  "split": "targeted",
+  "category": "markdown",
+  "sourceLanguage": "en",
+  "targetLanguage": "fr",
+  "contentType": "markdown",
+  "source": {
+    "text": "| Item | Status |\n|---|---|\n| WebGPU | Ready |\n| WASM | Fallback |\n\n![runtime diagram](/img/runtime-flow.png)"
+  },
+  "references": [
+    {
+      "quality": "primary",
+      "text": "| Élément | État |\n|---|---|\n| WebGPU | Prêt |\n| WASM | Secours |\n\n![schéma d'exécution](/img/runtime-flow.png)",
+      "notes": "First-party dev reference for table and image preservation."
+    }
+  ],
+  "checks": {
+    "sourceShouldChange": true,
+    "preservedSubstringCounts": [
+      { "value": "WebGPU" },
+      { "value": "WASM" }
+    ],
+    "markdownStructure": {
+      "tables": { "rows": 3, "cells": 6 },
+      "images": { "count": 1, "altTexts": ["schéma d'exécution"], "srcs": ["/img/runtime-flow.png"] }
+    }
+  },
+  "provenance": {
+    "sourceClass": "first_party_authored",
+    "authorId": "team-evals",
+    "createdAt": "2026-04-28",
+    "sourceOrigin": "private-eval-spec BF-EVAL-MD-007",
+    "derivedFrom": null,
+    "publicExposure": "private",
+    "reviewStatus": "technical_reviewed",
+    "referenceTranslatorId": "evals-translator-fr",
+    "referenceReviewerId": "evals-reviewer-fr",
+    "referenceReviewDate": "2026-04-28",
+    "technicalReviewerId": "team-evals",
+    "technicalReviewDate": "2026-04-28",
+    "notes": "Dev markdown case authored for table and image structure."
+  }
+}

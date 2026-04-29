@@ -13,8 +13,8 @@ const evalModelIds = [
   "gemma-3-1b-it",
   "translategemma-4",
 ]
-const evalSplits = ["dev", "holdout", "holdout-clean", "calibration-public"]
-const defaultLocalSplits = ["dev", "holdout"]
+const evalSplits = ["targeted", "general", "holdout"]
+const defaultLocalSplits = ["targeted", "general"]
 const evalContentTypes = ["text", "markdown", "dom"]
 const evalLanguages = ["en", "es", "fr", "ar", "de", "ja", "hi"]
 const evalSourceClasses = [
@@ -49,11 +49,11 @@ function usage() {
     "Defaults:",
     "  --model qwen-3-0.6b",
     "  --output-dir .evals/web-gpu-<timestamp>",
-    "  --split dev,holdout",
-    "  holdout-clean and calibration-public run only when explicitly selected",
+    "  --split targeted,general",
+    "  holdout runs only when explicitly selected with --holdout-reason",
     "",
     "Filters:",
-    "  --split dev,holdout",
+    "  --split targeted,general",
     "  --category markdown,dom-attrs",
     "  --content-type text,markdown,dom",
     "  --source-language en",
@@ -197,10 +197,10 @@ export function parseArgs(argv) {
   }
 
   if (
-    options.filters.split.includes("holdout-clean") &&
+    options.filters.split.includes("holdout") &&
     (!options.holdoutReason || options.holdoutReason.trim().length === 0)
   ) {
-    throw new Error("--split holdout-clean requires --holdout-reason.")
+    throw new Error("--split holdout requires --holdout-reason.")
   }
 
   return {

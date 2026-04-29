@@ -1,0 +1,51 @@
+{
+  "split": "general",
+  "category": "calibration-public",
+  "sourceLanguage": "en",
+  "targetLanguage": "ar",
+  "contentType": "dom",
+  "source": {
+    "html": "<section data-testid=\"public-rtl-status\"><h2>Status update</h2><p>The WebGPU runtime is ready for Arabic readers.</p><code>WebGPU</code></section>"
+  },
+  "references": [
+    {
+      "quality": "primary",
+      "html": "<section data-testid=\"public-rtl-status\"><h2>تحديث الحالة</h2><p>بيئة تشغيل WebGPU جاهزة للقراء العرب.</p><code>WebGPU</code></section>",
+      "notes": "Technical-reviewed synthetic public-style Arabic DOM reference for calibration only."
+    }
+  ],
+  "checks": {
+    "sourceShouldChange": true,
+    "domSelectorCounts": [
+      { "selector": "section", "count": 1 },
+      { "selector": "code", "count": 1 }
+    ],
+    "domVisibleText": [
+      { "selector": "h2", "pattern": "(الحالة|تحديث)" },
+      { "selector": "p", "pattern": "(جاهزة|العرب)" }
+    ],
+    "preservedSubstringCounts": [
+      { "value": "WebGPU", "count": 2 }
+    ],
+    "preservedAttributes": [
+      { "selector": "section", "attribute": "data-testid", "value": "public-rtl-status" }
+    ],
+    "domRootDir": { "dir": "rtl" },
+    "domExecutableSafety": true
+  },
+  "provenance": {
+    "sourceClass": "public_benchmark",
+    "authorId": "team-evals",
+    "createdAt": "2026-04-28",
+    "sourceOrigin": "synthetic-public-benchmark-style-rtl-status",
+    "derivedFrom": "synthetic public-style RTL fixture; not imported from WMT, FLORES, OPUS, Tatoeba, Wikipedia, or another public corpus",
+    "publicExposure": "mixed",
+    "reviewStatus": "technical_reviewed",
+    "referenceTranslatorId": "calibration-translator-ar",
+    "referenceReviewerId": "calibration-reviewer-ar",
+    "referenceReviewDate": "2026-04-28",
+    "technicalReviewerId": "team-evals",
+    "technicalReviewDate": "2026-04-28",
+    "notes": "contamination warning: benchmark-style public DOM calibration case; exclude from clean headline scoring"
+  }
+}

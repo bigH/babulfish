@@ -100,7 +100,7 @@ function publicProvenance(
 function syntheticCase(overrides: Partial<WebGpuEvalCase> = {}): WebGpuEvalCase {
   return {
     id: "synthetic",
-    split: "dev",
+    split: "targeted",
     category: "plain",
     sourceText: "Hello world",
     sourceLanguage: "en",
@@ -113,7 +113,7 @@ function syntheticCase(overrides: Partial<WebGpuEvalCase> = {}): WebGpuEvalCase 
 
 function translationJson(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
-    split: "dev",
+    split: "targeted",
     category: "plain",
     sourceLanguage: "en",
     targetLanguage: "es",
@@ -132,7 +132,7 @@ function scoredCase(
   const pass = overrides.pass ?? true
   return {
     id: "scored",
-    split: "dev",
+    split: "targeted",
     sourceClass: "first_party_authored",
     category: "plain",
     pass,
@@ -148,38 +148,37 @@ function scoredCase(
 }
 
 describe("webgpu eval scorer", () => {
-  it("loads legacy flat cases, grouped dev/holdout-clean cases, and PR 6 calibration-public cases", () => {
-    const groupedDevCases = WEBGPU_EVAL_CORPUS.filter((evalCase) =>
-      evalCase.id.startsWith("dev/"),
+  it("loads targeted, general, and holdout cases with the migrated split names", () => {
+    const groupedTargetedCases = WEBGPU_EVAL_CORPUS.filter((evalCase) =>
+      evalCase.id.startsWith("targeted/"),
     )
-    const groupedHoldoutCleanCases = WEBGPU_EVAL_CORPUS.filter((evalCase) =>
-      evalCase.id.startsWith("holdout-clean/"),
+    const groupedHoldoutCases = WEBGPU_EVAL_CORPUS.filter((evalCase) =>
+      evalCase.id.startsWith("holdout/"),
     )
 
     expect(WEBGPU_EVAL_CORPUS).toHaveLength(117)
     expect(corpusById.size).toBe(117)
-    expect(WEBGPU_EVAL_CORPUS.filter((evalCase) => evalCase.split === "dev")).toHaveLength(72)
-    expect(WEBGPU_EVAL_CORPUS.filter((evalCase) => evalCase.split === "holdout")).toHaveLength(15)
-    expect(WEBGPU_EVAL_CORPUS.filter((evalCase) => evalCase.split === "holdout-clean")).toHaveLength(18)
-    expect(WEBGPU_EVAL_CORPUS.filter((evalCase) => evalCase.split === "calibration-public")).toHaveLength(12)
+    expect(WEBGPU_EVAL_CORPUS.filter((evalCase) => evalCase.split === "targeted")).toHaveLength(72)
+    expect(WEBGPU_EVAL_CORPUS.filter((evalCase) => evalCase.split === "general")).toHaveLength(27)
+    expect(WEBGPU_EVAL_CORPUS.filter((evalCase) => evalCase.split === "holdout")).toHaveLength(18)
     expect(WEBGPU_EVAL_CORPUS.filter((evalCase) => evalCase.contentType === "dom")).toHaveLength(32)
     expect(WEBGPU_EVAL_CORPUS.filter((evalCase) => evalCase.contentType === "markdown")).toHaveLength(30)
     expect(WEBGPU_EVAL_CORPUS.filter((evalCase) => evalCase.contentType === "text")).toHaveLength(55)
-    expect(groupedDevCases).toHaveLength(49)
-    expect(groupedDevCases.every((evalCase) => evalCase.provenance)).toBe(true)
-    expect(groupedDevCases.every((evalCase) => evalCase.sourceClass !== "public_benchmark"))
+    expect(groupedTargetedCases).toHaveLength(49)
+    expect(groupedTargetedCases.every((evalCase) => evalCase.provenance)).toBe(true)
+    expect(groupedTargetedCases.every((evalCase) => evalCase.sourceClass !== "public_benchmark"))
       .toBe(true)
-    expect(groupedDevCases.every((evalCase) => evalCase.sourceClass !== "public_web"))
+    expect(groupedTargetedCases.every((evalCase) => evalCase.sourceClass !== "public_web"))
       .toBe(true)
-    expect(groupedHoldoutCleanCases).toHaveLength(18)
-    expect(countBy(groupedHoldoutCleanCases, (evalCase) => evalCase.contentType)).toEqual({
+    expect(groupedHoldoutCases).toHaveLength(18)
+    expect(countBy(groupedHoldoutCases, (evalCase) => evalCase.contentType)).toEqual({
       dom: 6,
       markdown: 6,
       text: 6,
     })
     expect(
       countBy(
-        groupedHoldoutCleanCases,
+        groupedHoldoutCases,
         (evalCase) => `${evalCase.sourceLanguage}-${evalCase.targetLanguage}`,
       ),
     ).toEqual({
@@ -191,21 +190,21 @@ describe("webgpu eval scorer", () => {
       "fr-en": 2,
     })
     expect(
-      countBy(groupedHoldoutCleanCases, (evalCase) => evalCase.sourceClass ?? "missing"),
+      countBy(groupedHoldoutCases, (evalCase) => evalCase.sourceClass ?? "missing"),
     ).toEqual({
       first_party_authored: 8,
       product_derived_rewrite: 5,
       synthetic_template: 5,
     })
     expect(
-      groupedHoldoutCleanCases.every(
+      groupedHoldoutCases.every(
         (evalCase) =>
           evalCase.provenance?.publicExposure === "private" &&
           evalCase.provenance.reviewStatus === "holdout_approved",
       ),
     ).toBe(true)
     expect(
-      groupedHoldoutCleanCases.every(
+      groupedHoldoutCases.every(
         (evalCase) =>
           evalCase.sourceClass === "first_party_authored" ||
           evalCase.sourceClass === "product_derived_rewrite" ||
@@ -225,12 +224,12 @@ describe("webgpu eval scorer", () => {
 
   it("loads grouped paths with path-derived IDs", () => {
     const cases = loadWebGpuEvalCorpusFromModules({
-      "../../../evals/translation/dev/text/plain/en-es/browser-short.json": translationJson(),
+      "../../../evals/translation/targeted/text/plain/en-es/browser-short.json": translationJson(),
     })
 
     expect(cases).toHaveLength(1)
-    expect(cases[0]?.id).toBe("dev/text/plain/en-es/browser-short")
-    expect(cases[0]?.split).toBe("dev")
+    expect(cases[0]?.id).toBe("targeted/text/plain/en-es/browser-short")
+    expect(cases[0]?.split).toBe("targeted")
     expect(cases[0]?.category).toBe("plain")
     expect(cases[0]?.sourceLanguage).toBe("en")
     expect(cases[0]?.targetLanguage).toBe("es")
@@ -239,31 +238,31 @@ describe("webgpu eval scorer", () => {
   it.each([
     [
       "split",
-      "../../../evals/translation/dev/text/plain/en-es/browser-short.json",
+      "../../../evals/translation/targeted/text/plain/en-es/browser-short.json",
       { split: "holdout" },
-      /path split "dev" does not match JSON split "holdout"/,
+      /path split "targeted" does not match JSON split "holdout"/,
     ],
     [
       "content type",
-      "../../../evals/translation/dev/text/plain/en-es/browser-short.json",
+      "../../../evals/translation/targeted/text/plain/en-es/browser-short.json",
       { contentType: "markdown" },
       /path contentType "text" does not match JSON contentType "markdown"/,
     ],
     [
       "category",
-      "../../../evals/translation/dev/text/plain/en-es/browser-short.json",
+      "../../../evals/translation/targeted/text/plain/en-es/browser-short.json",
       { category: "ui-label" },
       /path category "plain" does not match JSON category "ui-label"/,
     ],
     [
       "source language",
-      "../../../evals/translation/dev/text/plain/en-es/browser-short.json",
+      "../../../evals/translation/targeted/text/plain/en-es/browser-short.json",
       { sourceLanguage: "fr" },
       /path sourceLanguage "en" does not match JSON sourceLanguage "fr"/,
     ],
     [
       "target language",
-      "../../../evals/translation/dev/text/plain/en-es/browser-short.json",
+      "../../../evals/translation/targeted/text/plain/en-es/browser-short.json",
       { targetLanguage: "fr" },
       /path targetLanguage "es" does not match JSON targetLanguage "fr"/,
     ],
@@ -301,11 +300,11 @@ describe("webgpu eval scorer", () => {
   it("requires provenance for grouped cases while grandfathering legacy flat files", () => {
     expect(() =>
       loadWebGpuEvalCorpusFromModules({
-        "../../../evals/translation/dev/text/plain/en-es/browser-short.json": translationJson({
+        "../../../evals/translation/targeted/text/plain/en-es/browser-short.json": translationJson({
           provenance: undefined,
         }),
       }),
-    ).toThrow("Eval case dev/text/plain/en-es/browser-short must define provenance")
+    ).toThrow("Eval case targeted/text/plain/en-es/browser-short must define provenance")
 
     expect(
       loadWebGpuEvalCorpusFromModules({
@@ -319,39 +318,39 @@ describe("webgpu eval scorer", () => {
   it("rejects malformed provenance before live evals run", () => {
     expect(() =>
       loadWebGpuEvalCorpusFromModules({
-        "../../../evals/translation/dev/text/plain/en-es/browser-short.json": translationJson({
+        "../../../evals/translation/targeted/text/plain/en-es/browser-short.json": translationJson({
           provenance: { ...privateProvenance(), unexpected: true },
         }),
       }),
-    ).toThrow("Eval case dev/text/plain/en-es/browser-short provenance has unknown key: unexpected")
+    ).toThrow("Eval case targeted/text/plain/en-es/browser-short provenance has unknown key: unexpected")
 
     expect(() =>
       loadWebGpuEvalCorpusFromModules({
-        "../../../evals/translation/dev/text/plain/en-es/browser-short.json": translationJson({
+        "../../../evals/translation/targeted/text/plain/en-es/browser-short.json": translationJson({
           provenance: { ...privateProvenance(), sourceClass: "made_up" },
         }),
       }),
-    ).toThrow("Eval case dev/text/plain/en-es/browser-short has invalid provenance.sourceClass")
+    ).toThrow("Eval case targeted/text/plain/en-es/browser-short has invalid provenance.sourceClass")
 
     expect(() =>
       loadWebGpuEvalCorpusFromModules({
-        "../../../evals/translation/dev/text/plain/en-es/browser-short.json": translationJson({
+        "../../../evals/translation/targeted/text/plain/en-es/browser-short.json": translationJson({
           provenance: { ...privateProvenance(), createdAt: "today" },
         }),
       }),
-    ).toThrow("Eval case dev/text/plain/en-es/browser-short must define provenance.createdAt as YYYY-MM-DD")
+    ).toThrow("Eval case targeted/text/plain/en-es/browser-short must define provenance.createdAt as YYYY-MM-DD")
 
     expect(() =>
       loadWebGpuEvalCorpusFromModules({
-        "../../../evals/translation/dev/text/plain/en-es/browser-short.json": translationJson({
+        "../../../evals/translation/targeted/text/plain/en-es/browser-short.json": translationJson({
           provenance: publicProvenance(),
         }),
       }),
-    ).toThrow("provenance sourceClass public_benchmark is only allowed in calibration-public")
+    ).toThrow("provenance sourceClass public_benchmark is only allowed in general")
   })
 
-  it("enforces holdout-clean private approved provenance", () => {
-    const holdoutPath = "../../../evals/translation/holdout-clean/text/plain/en-es/clean-short.json"
+  it("enforces holdout private approved provenance", () => {
+    const holdoutPath = "../../../evals/translation/holdout/text/plain/en-es/clean-short.json"
     const validHoldoutCases = [
       privateProvenance(),
       privateProvenance({
@@ -368,7 +367,7 @@ describe("webgpu eval scorer", () => {
       expect(() =>
         loadWebGpuEvalCorpusFromModules({
           [holdoutPath]: translationJson({
-            split: "holdout-clean",
+            split: "holdout",
             provenance,
           }),
         }),
@@ -378,43 +377,43 @@ describe("webgpu eval scorer", () => {
     expect(() =>
       loadWebGpuEvalCorpusFromModules({
         [holdoutPath]: translationJson({
-          split: "holdout-clean",
+          split: "holdout",
           provenance: privateProvenance({ publicExposure: "public" }),
         }),
       }),
-    ).toThrow("holdout-clean provenance.publicExposure must be private")
+    ).toThrow("holdout provenance.publicExposure must be private")
 
     expect(() =>
       loadWebGpuEvalCorpusFromModules({
         [holdoutPath]: translationJson({
-          split: "holdout-clean",
+          split: "holdout",
           provenance: privateProvenance({ reviewStatus: "draft" }),
         }),
       }),
-    ).toThrow("holdout-clean provenance.reviewStatus must be holdout_approved")
+    ).toThrow("holdout provenance.reviewStatus must be holdout_approved")
 
     expect(() =>
       loadWebGpuEvalCorpusFromModules({
         [holdoutPath]: translationJson({
-          split: "holdout-clean",
+          split: "holdout",
           provenance: privateProvenance({ sourceClass: "unknown" }),
         }),
       }),
-    ).toThrow("holdout-clean provenance.sourceClass must be private and auditable")
+    ).toThrow("holdout provenance.sourceClass must be private and auditable")
 
     expect(() =>
       loadWebGpuEvalCorpusFromModules({
         [holdoutPath]: translationJson({
-          split: "holdout-clean",
+          split: "holdout",
           provenance: privateProvenance({ sourceOrigin: "private" }),
         }),
       }),
-    ).toThrow("holdout-clean provenance.sourceOrigin must name a concrete private source")
+    ).toThrow("holdout provenance.sourceOrigin must name a concrete private source")
 
     expect(() =>
       loadWebGpuEvalCorpusFromModules({
         [holdoutPath]: translationJson({
-          split: "holdout-clean",
+          split: "holdout",
           provenance: privateProvenance({
             sourceClass: "synthetic_template",
             derivedFrom: null,
@@ -424,14 +423,14 @@ describe("webgpu eval scorer", () => {
     ).toThrow("provenance.derivedFrom is required for sourceClass synthetic_template")
   })
 
-  it("enforces calibration-public provenance warnings", () => {
-    const calibrationPath =
-      "../../../evals/translation/calibration-public/text/calibration-public/en-es/public-short.json"
+  it("enforces public-source general provenance warnings", () => {
+    const publicGeneralPath =
+      "../../../evals/translation/general/text/calibration-public/en-es/public-short.json"
 
     expect(() =>
       loadWebGpuEvalCorpusFromModules({
-        [calibrationPath]: translationJson({
-          split: "calibration-public",
+        [publicGeneralPath]: translationJson({
+          split: "general",
           category: "calibration-public",
           provenance: publicProvenance(),
         }),
@@ -440,23 +439,23 @@ describe("webgpu eval scorer", () => {
 
     expect(() =>
       loadWebGpuEvalCorpusFromModules({
-        [calibrationPath]: translationJson({
-          split: "calibration-public",
+        [publicGeneralPath]: translationJson({
+          split: "general",
           category: "calibration-public",
           provenance: publicProvenance({ publicExposure: "private" }),
         }),
       }),
-    ).toThrow("calibration-public provenance.publicExposure must be public or mixed")
+    ).toThrow("public-source general provenance.publicExposure must be public or mixed")
 
     expect(() =>
       loadWebGpuEvalCorpusFromModules({
-        [calibrationPath]: translationJson({
-          split: "calibration-public",
+        [publicGeneralPath]: translationJson({
+          split: "general",
           category: "calibration-public",
           provenance: publicProvenance({ notes: "public benchmark lineage" }),
         }),
       }),
-    ).toThrow("calibration-public provenance.notes must include a contamination warning")
+    ).toThrow("public-source general provenance.notes must include a contamination warning")
   })
 
   it("rejects invalid content source and reference shapes", () => {
@@ -524,7 +523,7 @@ describe("webgpu eval scorer", () => {
 
   it("loads complete provenance and per-case DOM runner config", () => {
     const cases = loadWebGpuEvalCorpusFromModules({
-      "../../../evals/translation/dev/dom/dom-rich-text/en-es/rich-label.json": translationJson({
+      "../../../evals/translation/targeted/dom/dom-rich-text/en-es/rich-label.json": translationJson({
         category: "dom-rich-text",
         contentType: "dom",
         source: { html: "<span data-md=\"Hello **WebGPU**\">Hello <strong>WebGPU</strong></span>" },
@@ -595,48 +594,49 @@ describe("webgpu eval scorer", () => {
     }
   })
 
-  it("loads the expanded calibration-public bucket with contamination-marked public provenance", () => {
-    const calibrationCases = WEBGPU_EVAL_CORPUS.filter((evalCase) =>
-      evalCase.id.startsWith("calibration-public/"),
+  it("loads the public general comparability probes with contamination-marked provenance", () => {
+    const publicGeneralCases = WEBGPU_EVAL_CORPUS.filter((evalCase) =>
+      evalCase.id.startsWith("general/"),
     )
-    const calibrationCaseIds = calibrationCases.map((evalCase) => evalCase.id).sort()
+    const publicGeneralCaseIds = publicGeneralCases.map((evalCase) => evalCase.id).sort()
 
-    expect(calibrationCases).toHaveLength(12)
-    expect(calibrationCaseIds).toEqual([
-      "calibration-public/dom/calibration-public/en-ar/public-rtl-status",
-      "calibration-public/dom/calibration-public/en-es/public-card-structure",
-      "calibration-public/dom/calibration-public/en-fr/public-button-attrs",
-      "calibration-public/dom/calibration-public/fr-en/public-hidden-skip",
-      "calibration-public/markdown/calibration-public/en-es/public-release-checklist",
-      "calibration-public/markdown/calibration-public/en-fr/sentinel-public-markdown",
-      "calibration-public/text/calibration-public/en-ar/public-health-notice",
-      "calibration-public/text/calibration-public/en-es/public-entity-preservation",
-      "calibration-public/text/calibration-public/en-es/sentinel-public-short",
-      "calibration-public/text/calibration-public/en-fr/public-news-brief",
-      "calibration-public/text/calibration-public/es-en/public-service-delay",
-      "calibration-public/text/calibration-public/fr-en/public-weather-update",
+    expect(publicGeneralCases).toHaveLength(12)
+    expect(publicGeneralCaseIds).toEqual([
+      "general/dom/calibration-public/en-ar/public-rtl-status",
+      "general/dom/calibration-public/en-es/public-card-structure",
+      "general/dom/calibration-public/en-fr/public-button-attrs",
+      "general/dom/calibration-public/fr-en/public-hidden-skip",
+      "general/markdown/calibration-public/en-es/public-release-checklist",
+      "general/markdown/calibration-public/en-fr/sentinel-public-markdown",
+      "general/text/calibration-public/en-ar/public-health-notice",
+      "general/text/calibration-public/en-es/public-entity-preservation",
+      "general/text/calibration-public/en-es/sentinel-public-short",
+      "general/text/calibration-public/en-fr/public-news-brief",
+      "general/text/calibration-public/es-en/public-service-delay",
+      "general/text/calibration-public/fr-en/public-weather-update",
     ])
-    expect(countBy(calibrationCases, (evalCase) => evalCase.contentType)).toEqual({
+    expect(countBy(publicGeneralCases, (evalCase) => evalCase.contentType)).toEqual({
       dom: 4,
       markdown: 2,
       text: 6,
     })
-    expect(countBy(calibrationCases, (evalCase) => evalCase.sourceClass ?? "missing")).toEqual({
+    expect(countBy(publicGeneralCases, (evalCase) => evalCase.sourceClass ?? "missing")).toEqual({
       public_benchmark: 4,
       public_web: 8,
     })
-    for (const calibrationCase of calibrationCases) {
-      expect(calibrationCase.category).toBe("calibration-public")
-      expect(["public_benchmark", "public_web"]).toContain(calibrationCase.sourceClass)
-      expect(["public", "mixed"]).toContain(calibrationCase.provenance?.publicExposure)
-      expect(calibrationCase.provenance?.reviewStatus).toBe("technical_reviewed")
-      expect(calibrationCase.provenance?.notes).toMatch(/contamination/i)
+    for (const publicGeneralCase of publicGeneralCases) {
+      expect(publicGeneralCase.split).toBe("general")
+      expect(publicGeneralCase.category).toBe("calibration-public")
+      expect(["public_benchmark", "public_web"]).toContain(publicGeneralCase.sourceClass)
+      expect(["public", "mixed"]).toContain(publicGeneralCase.provenance?.publicExposure)
+      expect(publicGeneralCase.provenance?.reviewStatus).toBe("technical_reviewed")
+      expect(publicGeneralCase.provenance?.notes).toMatch(/contamination/i)
     }
   })
 
-  it("keeps the ported inline cases in the dev split", () => {
+  it("keeps the ported inline cases in the targeted split", () => {
     for (const id of portedInlineCaseIds) {
-      expect(requireCase(id).split).toBe("dev")
+      expect(requireCase(id).split).toBe("targeted")
     }
   })
 
@@ -1109,11 +1109,12 @@ describe("webgpu eval scorer", () => {
     })
   })
 
-  it("excludes calibration-public from clean headline scores without changing raw scoring", () => {
-    const cleanPass = scoredCase({ id: "dev/text/plain/en-es/pass", split: "dev" })
-    const cleanFail = scoredCase({
-      id: "holdout-clean/text/plain/en-es/fail",
-      split: "holdout-clean",
+  it("excludes public source classes from clean headline scores without changing raw scoring", () => {
+    const cleanPass = scoredCase({ id: "targeted/text/plain/en-es/pass", split: "targeted" })
+    const privateGeneralFail = scoredCase({
+      id: "legacy-private-general-fail",
+      split: "general",
+      sourceClass: "first_party_authored",
       pass: false,
       checks: [check("clean-check", false)],
       scoreBreakdown: {
@@ -1123,9 +1124,9 @@ describe("webgpu eval scorer", () => {
         hardFailureReason: "generation-error",
       },
     })
-    const publicFail = scoredCase({
-      id: "calibration-public/text/calibration-public/en-es/fail",
-      split: "calibration-public",
+    const publicBenchmarkFail = scoredCase({
+      id: "general/text/calibration-public/en-es/fail",
+      split: "general",
       sourceClass: "public_benchmark",
       category: "calibration-public",
       pass: false,
@@ -1137,31 +1138,56 @@ describe("webgpu eval scorer", () => {
         hardFailureReason: "generation-error",
       },
     })
+    const publicWebFail = scoredCase({
+      id: "general/text/calibration-public/en-fr/web-fail",
+      split: "general",
+      sourceClass: "public_web",
+      category: "calibration-public",
+      pass: false,
+      checks: [check("public-web-check", false)],
+      scoreBreakdown: {
+        checkScore: 0,
+        referenceSimilarity: 0,
+        hardFailure: true,
+        hardFailureReason: "generation-error",
+      },
+    })
 
-    const rawSummary = scoreWebGpuEvalModel([cleanPass, cleanFail, publicFail])
-    const cleanHeadline = scoreWebGpuEvalCleanHeadline([cleanPass, cleanFail, publicFail])
+    const rawSummary = scoreWebGpuEvalModel([
+      cleanPass,
+      privateGeneralFail,
+      publicBenchmarkFail,
+      publicWebFail,
+    ])
+    const cleanHeadline = scoreWebGpuEvalCleanHeadline([
+      cleanPass,
+      privateGeneralFail,
+      publicBenchmarkFail,
+      publicWebFail,
+    ])
 
-    expect(rawSummary.score).toBeCloseTo(0.333333)
+    expect(rawSummary.score).toBeCloseTo(0.25)
     expect(cleanHeadline.score).toBe(0.5)
     expect(cleanHeadline.pass).toBe(false)
     expect(cleanHeadline.includedCases).toBe(2)
-    expect(cleanHeadline.excludedCases).toBe(1)
+    expect(cleanHeadline.excludedCases).toBe(2)
     expect(cleanHeadline.excludedCaseIds).toEqual([
-      "calibration-public/text/calibration-public/en-es/fail",
+      "general/text/calibration-public/en-es/fail",
+      "general/text/calibration-public/en-fr/web-fail",
     ])
     expect(cleanHeadline.failuresByCheck).toEqual({ "clean-check": 1 })
   })
 
-  it("keeps calibration-public failures visible but out of clean headline pass/fail", () => {
+  it("keeps public-source general failures visible but out of clean headline pass/fail", () => {
     const cleanHeadline = scoreWebGpuEvalCleanHeadline([
-      scoredCase({ id: "dev/text/plain/en-es/pass", split: "dev" }),
+      scoredCase({ id: "targeted/text/plain/en-es/pass", split: "targeted" }),
       scoredCase({
-        id: "holdout-clean/text/plain/en-es/pass",
-        split: "holdout-clean",
+        id: "holdout/text/plain/en-es/pass",
+        split: "holdout",
       }),
       scoredCase({
-        id: "calibration-public/text/calibration-public/en-es/fail",
-        split: "calibration-public",
+        id: "general/text/calibration-public/en-es/fail",
+        split: "general",
         sourceClass: "public_benchmark",
         pass: false,
         checks: [check("public-check", false)],
@@ -1183,24 +1209,24 @@ describe("webgpu eval scorer", () => {
   it("groups score summaries only by split and source class", () => {
     const groups = summarizeWebGpuEvalScoreGroups([
       scoredCase({
-        id: "dev/synthetic",
-        split: "dev",
+        id: "targeted/synthetic",
+        split: "targeted",
         sourceClass: "synthetic_template",
       }),
       scoredCase({
-        id: "dev/first-party",
-        split: "dev",
+        id: "targeted/first-party",
+        split: "targeted",
         sourceClass: "first_party_authored",
         pass: false,
       }),
       scoredCase({
         id: "holdout/first-party",
-        split: "holdout-clean",
+        split: "holdout",
         sourceClass: "first_party_authored",
       }),
       scoredCase({
         id: "calibration/public",
-        split: "calibration-public",
+        split: "general",
         sourceClass: "public_benchmark",
         pass: false,
       }),
@@ -1216,7 +1242,7 @@ describe("webgpu eval scorer", () => {
       pass: group.pass,
     }))).toEqual([
       {
-        split: "calibration-public",
+        split: "general",
         sourceClass: "public_benchmark",
         total: 1,
         passed: 0,
@@ -1225,7 +1251,16 @@ describe("webgpu eval scorer", () => {
         pass: false,
       },
       {
-        split: "dev",
+        split: "holdout",
+        sourceClass: "first_party_authored",
+        total: 1,
+        passed: 1,
+        failed: 0,
+        score: 1,
+        pass: true,
+      },
+      {
+        split: "targeted",
         sourceClass: "first_party_authored",
         total: 1,
         passed: 0,
@@ -1234,17 +1269,8 @@ describe("webgpu eval scorer", () => {
         pass: false,
       },
       {
-        split: "dev",
+        split: "targeted",
         sourceClass: "synthetic_template",
-        total: 1,
-        passed: 1,
-        failed: 0,
-        score: 1,
-        pass: true,
-      },
-      {
-        split: "holdout-clean",
-        sourceClass: "first_party_authored",
         total: 1,
         passed: 1,
         failed: 0,
@@ -1256,8 +1282,8 @@ describe("webgpu eval scorer", () => {
     expect(Object.keys(groups[0] ?? {})).not.toContain("contentType")
   })
 
-  it("defaults local runs away from holdout-clean and requires holdout metadata", () => {
-    expect(defaultWebGpuEvalSelection()).toEqual({ split: ["dev", "holdout"] })
+  it("defaults local runs away from holdout and requires holdout metadata", () => {
+    expect(defaultWebGpuEvalSelection()).toEqual({ split: ["targeted", "general"] })
 
     expect(createWebGpuEvalRunMetadata({
       runner: "unit-test",
@@ -1267,7 +1293,7 @@ describe("webgpu eval scorer", () => {
       runner: "unit-test",
       timestamp: "2026-04-28T12:00:00.000Z",
       modelId: "qwen-3-0.6b",
-      filters: { split: ["dev", "holdout"] },
+      filters: { split: ["targeted", "general"] },
       reason: null,
       referencesExposed: false,
     })
@@ -1277,22 +1303,22 @@ describe("webgpu eval scorer", () => {
         runner: "unit-test",
         timestamp: "2026-04-28T12:00:00.000Z",
         modelId: "qwen-3-0.6b",
-        filters: { split: ["holdout-clean"] },
+        filters: { split: ["holdout"] },
       }),
-    ).toThrow("Holdout-clean WebGPU eval runs require a reason")
+    ).toThrow("Holdout WebGPU eval runs require a reason")
 
     expect(createWebGpuEvalRunMetadata({
       runner: "unit-test",
       timestamp: "2026-04-28T12:00:00.000Z",
       modelId: "qwen-3-0.6b",
-      filters: { split: ["dev", "holdout-clean"] },
+      filters: { split: ["targeted", "holdout"] },
       reason: "release gate",
       referencesExposed: true,
     })).toEqual({
       runner: "unit-test",
       timestamp: "2026-04-28T12:00:00.000Z",
       modelId: "qwen-3-0.6b",
-      filters: { split: ["dev", "holdout-clean"] },
+      filters: { split: ["targeted", "holdout"] },
       reason: "release gate",
       referencesExposed: true,
     })
@@ -1301,8 +1327,8 @@ describe("webgpu eval scorer", () => {
   it("filters selected runner cases by split, category, content type, language pair, and source class", () => {
     const cases = [
       syntheticCase({
-        id: "dev-markdown",
-        split: "dev",
+        id: "targeted-markdown",
+        split: "targeted",
         category: "markdown",
         contentType: "markdown",
         sourceLanguage: "en",
@@ -1310,8 +1336,8 @@ describe("webgpu eval scorer", () => {
         sourceClass: "synthetic_template",
       }),
       syntheticCase({
-        id: "dev-dom",
-        split: "dev",
+        id: "targeted-dom",
+        split: "targeted",
         category: "dom-attrs",
         contentType: "dom",
         sourceLanguage: "en",
@@ -1320,7 +1346,7 @@ describe("webgpu eval scorer", () => {
       }),
       syntheticCase({
         id: "holdout-markdown",
-        split: "holdout-clean",
+        split: "holdout",
         category: "markdown",
         contentType: "markdown",
         sourceLanguage: "en",
@@ -1329,22 +1355,22 @@ describe("webgpu eval scorer", () => {
     ]
 
     expect(filterWebGpuEvalCorpus(cases, {
-      split: ["dev"],
+      split: ["targeted"],
       category: ["markdown"],
       contentType: ["markdown"],
       languagePair: ["en-es"],
       sourceClass: ["synthetic_template"],
-    }).map((evalCase) => evalCase.id)).toEqual(["dev-markdown"])
+    }).map((evalCase) => evalCase.id)).toEqual(["targeted-markdown"])
 
     expect(filterWebGpuEvalCorpus(cases, {
       sourceClass: ["synthetic_template"],
-    }).map((evalCase) => evalCase.id)).toEqual(["dev-markdown"])
+    }).map((evalCase) => evalCase.id)).toEqual(["targeted-markdown"])
   })
 
   it("creates grouped artifact summaries without score grouping", () => {
     const groups = summarizeWebGpuEvalCaseGroups([
       {
-        split: "dev",
+        split: "targeted",
         contentType: "markdown",
         category: "markdown",
         sourceLanguage: "en",
@@ -1360,7 +1386,7 @@ describe("webgpu eval scorer", () => {
         },
       },
       {
-        split: "dev",
+        split: "targeted",
         contentType: "markdown",
         category: "markdown",
         sourceLanguage: "en",
@@ -1379,7 +1405,7 @@ describe("webgpu eval scorer", () => {
 
     expect(groups).toEqual([
       {
-        split: "dev",
+        split: "targeted",
         contentType: "markdown",
         category: "markdown",
         languagePair: "en-es",

@@ -1,5 +1,5 @@
 {
-  "split": "holdout",
+  "split": "general",
   "category": "ui-label",
   "sourceLanguage": "en",
   "targetLanguage": "ar",

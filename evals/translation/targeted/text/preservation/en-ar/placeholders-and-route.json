@@ -1,0 +1,42 @@
+{
+  "split": "targeted",
+  "category": "preservation",
+  "sourceLanguage": "en",
+  "targetLanguage": "ar",
+  "contentType": "text",
+  "source": {
+    "text": "Send {{userName}} to /settings/billing before invoice INV-2048 closes on 2026-05-01."
+  },
+  "references": [
+    {
+      "quality": "primary",
+      "text": "أرسل {{userName}} إلى /settings/billing قبل إغلاق الفاتورة INV-2048 في 2026-05-01.",
+      "notes": "Synthetic dev reference for Arabic placeholders, route, ID, and date preservation."
+    }
+  ],
+  "checks": {
+    "sourceShouldChange": true,
+    "expectedPatterns": ["(الفاتورة|إغلاق|قبل)"],
+    "preservedSubstringCounts": [
+      { "value": "{{userName}}" },
+      { "value": "/settings/billing" },
+      { "value": "INV-2048" },
+      { "value": "2026-05-01" }
+    ]
+  },
+  "provenance": {
+    "sourceClass": "synthetic_template",
+    "authorId": "team-evals",
+    "createdAt": "2026-04-28",
+    "sourceOrigin": "private-eval-template BF-EVAL-PRES-006",
+    "derivedFrom": "template: notification with placeholder, route path, invoice ID, and ISO date",
+    "publicExposure": "private",
+    "reviewStatus": "technical_reviewed",
+    "referenceTranslatorId": "evals-translator-ar",
+    "referenceReviewerId": "evals-reviewer-ar",
+    "referenceReviewDate": "2026-04-28",
+    "technicalReviewerId": "team-evals",
+    "technicalReviewDate": "2026-04-28",
+    "notes": "Dev preservation case for count-aware placeholder and route survival."
+  }
+}

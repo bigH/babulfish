@@ -1,5 +1,5 @@
 {
-  "split": "dev",
+  "split": "targeted",
   "category": "preservation",
   "sourceLanguage": "en",
   "targetLanguage": "es",

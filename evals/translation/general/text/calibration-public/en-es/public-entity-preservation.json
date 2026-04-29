@@ -1,0 +1,41 @@
+{
+  "split": "general",
+  "category": "calibration-public",
+  "sourceLanguage": "en",
+  "targetLanguage": "es",
+  "contentType": "text",
+  "source": {
+    "text": "Dr. Mira Patel presented the WebGPU findings at Station 14."
+  },
+  "references": [
+    {
+      "quality": "primary",
+      "text": "La Dra. Mira Patel presento los hallazgos de WebGPU en la Estacion 14.",
+      "notes": "Technical-reviewed synthetic public-style reference for calibration only."
+    }
+  ],
+  "checks": {
+    "sourceShouldChange": true,
+    "expectedPatterns": ["(?i)(hallazg|estaci|present)"],
+    "preservedSubstringCounts": [
+      { "value": "Mira Patel" },
+      { "value": "WebGPU" },
+      { "value": "14" }
+    ]
+  },
+  "provenance": {
+    "sourceClass": "public_benchmark",
+    "authorId": "team-evals",
+    "createdAt": "2026-04-28",
+    "sourceOrigin": "synthetic-public-benchmark-style-entity-preservation",
+    "derivedFrom": "synthetic public-style named-entity fixture; not imported from WMT, FLORES, OPUS, Tatoeba, Wikipedia, or another public corpus",
+    "publicExposure": "mixed",
+    "reviewStatus": "technical_reviewed",
+    "referenceTranslatorId": "calibration-translator-es",
+    "referenceReviewerId": "calibration-reviewer-es",
+    "referenceReviewDate": "2026-04-28",
+    "technicalReviewerId": "team-evals",
+    "technicalReviewDate": "2026-04-28",
+    "notes": "contamination warning: benchmark-style public calibration case; exclude from clean headline scoring"
+  }
+}

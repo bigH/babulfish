@@ -30,7 +30,7 @@ Non-goals:
 Current corpus shape:
 
 - 38 flat JSON files in `evals/translation/`; filename stem is the case ID.
-- Splits: 23 `dev`, 15 `holdout`.
+- Splits: 23 `targeted`, 15 legacy `general`.
 - Target languages: 14 Spanish, 13 French, 11 Arabic.
 - Content types: 25 `text`, 7 `markdown`, 6 `dom`.
 - Categories: `ui-label`, `dom`, `plain`, `markdown`, `preservation`, `punctuation`, `rtl`, `named-entity`, `output-only`, `source-copy-trap`, `idiom`, `technical-docs`.
@@ -78,18 +78,18 @@ Known gaps:
 
 Clean holdout policy:
 
-- `holdout-clean` must contain only newly created private material:
+- `holdout` must contain only newly created private material:
   - first-party authored text
   - product-derived rewrites/paraphrases created after this policy
   - deterministic synthetic templates with human reference translations
 - Clean holdout references must be human translated or human reviewed.
 - Clean holdout cases must not be used for prompt tuning, model choice, threshold tuning, regex design, or check design.
-- Any material edit to a clean holdout case moves it back to `dev` or creates a new holdout ID.
+- Any material edit to a clean holdout case moves it back to `targeted` or creates a new holdout ID.
 
 Public corpus policy:
 
-- Public corpora and benchmarks belong only in `calibration-public`.
-- `calibration-public` is useful for regression/comparability, but is excluded from clean headline scores by default.
+- Public corpora and benchmarks belong only in `general` with `sourceClass` `public_benchmark` or `public_web`.
+- Public-source `general` cases are useful for regression/comparability, but are excluded from clean headline scores by source class.
 - Public-derived cases must carry contamination warnings in provenance.
 
 Treat these as unsafe for clean holdout:
@@ -146,9 +146,9 @@ Target layout:
 evals/translation/
   README.md
   schema.json
-  dev/
-  holdout-clean/
-  calibration-public/
+  targeted/
+  general/
+  holdout/
 ```
 
 Case path:
@@ -160,9 +160,9 @@ Case path:
 Examples:
 
 ```text
-dev/markdown/markdown/en-es/release-note-link-list.json
-holdout-clean/dom/dom-attrs/en-ar/settings-button-aria-label.json
-calibration-public/text/calibration-public/en-fr/flores-style-short-news.json
+targeted/markdown/markdown/en-es/release-note-link-list.json
+holdout/dom/dom-attrs/en-ar/settings-button-aria-label.json
+general/text/calibration-public/en-fr/flores-style-short-news.json
 ```
 
 Path and JSON must agree. Accepted holdout IDs are immutable; deprecate and replace instead of renaming.
@@ -189,7 +189,7 @@ Required provenance block:
 }
 ```
 
-Provenance must be specific enough to audit later. `sourceOrigin` should point to a private source doc, ticket, product screen, or template ID. `derivedFrom` is required for product rewrites and templates, and must describe the rewrite/template rule without exposing private customer text. Freeform "private" claims are not enough for `holdout-clean`.
+Provenance must be specific enough to audit later. `sourceOrigin` should point to a private source doc, ticket, product screen, or template ID. `derivedFrom` is required for product rewrites and templates, and must describe the rewrite/template rule without exposing private customer text. Freeform "private" claims are not enough for `holdout`.
 
 Allowed `sourceClass`:
 
@@ -231,17 +231,17 @@ Language matrix:
 
 Target counts:
 
-| Phase | Total | Dev | Holdout-clean | Calibration-public | Notes |
+| Phase | Total | Targeted | Holdout | Public general | Notes |
 |---|---:|---:|---:|---:|---|
 | 1 | 120 target | 72 | 36 target | 12 | Establish governance and behavior coverage |
 | 2 | 250 | TBD | TBD | TBD | At least 90 combined DOM/markdown/preservation |
 | 3 | 500+ | TBD | TBD | TBD | Add new frozen holdout; do not tune against old holdout |
 
-The phase-1 holdout target is 36 only if review capacity is real. If bilingual review is the bottleneck, ship a smaller honest seed of 12-18 `holdout-clean` cases rather than rubber-stamping references to hit a round number.
+The phase-1 holdout target is 36 only if review capacity is real. If bilingual review is the bottleneck, ship a smaller honest seed of 12-18 `holdout` cases rather than rubber-stamping references to hit a round number.
 
 Phase 1 allocation:
 
-| Family | Dev | Holdout-clean | Calibration-public |
+| Family | Targeted | Holdout | Public general |
 |---|---:|---:|---:|
 | text basics | 18 | 9 | 4 |
 | preservation/entities/source-copy | 18 | 9 | 2 |
@@ -362,8 +362,8 @@ Implement these before adding the large corpus:
 9. Add DOM structural/attribute/hidden/skip checks.
 10. Add runner selection by split, category, content type, language pair, and source class.
 11. Add artifact summaries by group so a 120-case run is readable and cheap to triage.
-12. Aggregate scores by split and source class, excluding `calibration-public` from clean headline scores.
-13. Add a local optimization/report mode that excludes `holdout-clean` by default.
+12. Aggregate scores by split and source class, excluding `public_benchmark` and `public_web` from clean headline scores.
+13. Add a local optimization/report mode that uses `targeted,general` by default and excludes `holdout`.
 14. Require explicit holdout-run metadata: runner, timestamp, model, filters, reason, and whether references were exposed.
 
 Default CI should stay deterministic:
@@ -375,28 +375,28 @@ Default CI should stay deterministic:
 Live WebGPU evals remain manual:
 
 ```bash
-pnpm eval:webgpu -- --model qwen-3-0.6b --split dev --category markdown --output-dir .evals/manual-webgpu-run
-pnpm eval:webgpu -- --model all --split dev --output-dir .evals/manual-webgpu-all
+pnpm eval:webgpu -- --model qwen-3-0.6b --split targeted --category markdown --output-dir .evals/manual-webgpu-run
+pnpm eval:webgpu -- --model all --split targeted --output-dir .evals/manual-webgpu-all
 ```
 
-Holdout runs should require an explicit `--split holdout-clean`-style choice and a recorded reason. That does not make anti-tuning foolproof, but it turns misuse from accidental behavior into an auditable decision.
+Holdout runs require an explicit `--split holdout` choice and a recorded reason. That does not make anti-tuning foolproof, but it turns misuse from accidental behavior into an auditable decision.
 
 ## 9. Corpus Expansion Workflow
 
 Case lifecycle:
 
-1. Author creates a `dev` case with provenance and draft checks.
+1. Author creates a `targeted` case with provenance and draft checks.
 2. Reference translator supplies one or more acceptable references.
 3. Reference reviewer checks meaning, register, entities, and preservation.
 4. Technical reviewer checks regexes, selectors, attributes, structural checks, and over-broad assertions.
 5. Holdout gate verifies private provenance and confirms the case has not been used for tuning.
-6. Case moves to `holdout-clean` and freezes.
+6. Case moves to `holdout` and freezes.
 
 Review rules:
 
 - Any reference edit after holdout approval requires re-review.
-- Any material source/check edit after holdout approval mints a new ID or moves the case back to `dev`.
-- Public-derived cases never move to `holdout-clean`.
+- Any material source/check edit after holdout approval mints a new ID or moves the case back to `targeted`.
+- Public-derived cases never move to `holdout`.
 - Synthetic templates must document generation rules and must have human references.
 - Target references must not be generated by the evaluated model family.
 - Every target language needs an owner for reference review and a separate owner for technical review.
@@ -411,12 +411,12 @@ Review rules:
 flowchart TD
   A["PR 1: schema, docs, grouped loader support"] --> B["PR 2: deterministic checks and runner selection"]
   A --> C["PR 3: provenance gates, score grouping, sentinel fixtures"]
-  B --> D["PR 4: dev corpus expansion"]
+  B --> D["PR 4: targeted corpus expansion"]
   C --> D
-  B --> E["PR 5: holdout-clean seed set"]
+  B --> E["PR 5: holdout seed set"]
   C --> E
   D --> E
-  C --> F["PR 6: calibration-public expansion"]
+  C --> F["PR 6: public general expansion"]
   E --> F
 ```
 
@@ -441,27 +441,27 @@ flowchart TD
    - Enforce holdout eligibility.
    - Add holdout run metadata and default local optimization mode that excludes holdout.
    - Aggregate by split/source class.
-   - Exclude `calibration-public` from clean headline scores.
+   - Exclude `public_benchmark` and `public_web` from clean headline scores.
    - Add tiny public-labeled sentinel fixtures so aggregation/reporting is tested before the full public bucket exists.
    - Depends on PR 1.
 
-4. `[Artisan] PR 4: Dev corpus expansion`
-   - Add the 72 phase-1 `dev` cases under the full validators.
+4. `[Artisan] PR 4: Targeted corpus expansion`
+   - Add the 72 phase-1 `targeted` cases under the full validators.
    - Prioritize markdown, preservation, and DOM forward directions.
    - Keep headline score semantics unchanged.
    - Depends on PR 2 and PR 3.
 
-5. `[Critic] PR 5: Holdout-clean seed set`
-   - Add 36 reviewed `holdout-clean` cases if reviewer capacity is real; otherwise seed 12-18 and document the gap.
+5. `[Critic] PR 5: Holdout seed set`
+   - Add 36 reviewed `holdout` cases if reviewer capacity is real; otherwise seed 12-18 and document the gap.
    - Freeze IDs and record reviewer IDs, review dates, source origins, and holdout approval metadata.
    - Reduce accidental tuning and make any holdout use explicit and auditable.
    - Depends on PR 2, PR 3, and PR 4.
 
-6. `[Researcher] PR 6: Calibration-public bucket`
-   - Expand to 12 public calibration cases with contamination warnings.
+6. `[Researcher] PR 6: Public general probes`
+   - Expand to 12 public-source general cases with contamination warnings.
    - Label results as regression/comparability only.
    - Confirm no clean score aggregation includes them.
-   - Depends on PR 3 and should follow PR 5 to avoid muddying the clean-holdout rollout.
+   - Depends on PR 3 and should follow PR 5 to avoid muddying the clean holdout rollout.
 
 ## 11. Validation
 
@@ -481,8 +481,8 @@ Validation must fail for:
 - invalid regex syntax
 - invalid CSS selectors
 - attribute checks missing selector, attribute, or expected value
-- `holdout-clean` with public, mixed, unknown, or missing provenance
-- `calibration-public` included in clean headline score aggregation
+- `holdout` with public, mixed, unknown, or missing provenance
+- `public_benchmark` or `public_web` included in clean headline score aggregation
 - repeated preserved token count loss
 - markdown structure loss
 - required DOM selector loss
@@ -522,29 +522,29 @@ Recommended local commands during implementation:
 pnpm --filter @babulfish/demo-vanilla test -- webgpu-eval-scorer
 pnpm test
 pnpm docs:check
-pnpm eval:webgpu -- --model qwen-3-0.6b --split dev --category markdown --output-dir .evals/manual-webgpu-run
+pnpm eval:webgpu -- --model qwen-3-0.6b --split targeted --category markdown --output-dir .evals/manual-webgpu-run
 ```
 
 ## 12. Risks And Mitigations
 
 | Risk | Mitigation |
 |---|---|
-| Public corpus leakage makes headline scores look better than real product quality | `holdout-clean` provenance gate; public sources only in `calibration-public` |
+| Public corpus leakage makes headline scores look better than real product quality | `holdout` provenance gate; public sources only in `general` and excluded from clean scoring by source class |
 | Holdout becomes a tuning loop | Default optimization reports exclude holdout; holdout runs require explicit filters, reason, and run metadata |
 | Regex checks become gameable | Prefer structural checks, count-aware preservation, scoped selectors, paired negative tests, and technical-review notes for broad regexes |
 | Markdown checks only preserve punctuation | Add structure-specific checks for lists, links, code, tables, headings, and frontmatter |
 | DOM evals collapse into visible-text similarity | Require selector counts, attrs, hidden/skip checks, RTL, linked, rich text, and restore coverage |
 | DOM output introduces script/URL/attribute injection risk | Validate executable URLs, event attributes, raw markup, and preserved URL attributes in deterministic checks |
-| Validation slows corpus creation | Make `dev` visible/mutable; reserve heavy gates for `holdout-clean` |
+| Validation slows corpus creation | Make `targeted` visible/mutable; reserve heavy gates for `holdout` |
 | Runtime cost grows too fast | Keep deterministic validation in CI; keep live WebGPU opt-in; add split/category/language filters and group summaries |
 | Human review burden becomes the bottleneck | Use per-language owners, 6-12 case batches, smaller honest holdout seed if needed, and clear review metadata |
 
 ## 13. What Not To Do
 
-- Do not import WMT, FLORES, OPUS, Tatoeba, TED/IWSLT, Europarl, ParaCrawl, WikiMatrix, Wikipedia, OpenSubtitles, GNOME/KDE/Ubuntu, UN, or similar public corpora into `holdout-clean`.
-- Do not mix `calibration-public` into clean headline scores.
+- Do not import WMT, FLORES, OPUS, Tatoeba, TED/IWSLT, Europarl, ParaCrawl, WikiMatrix, Wikipedia, OpenSubtitles, GNOME/KDE/Ubuntu, UN, or similar public corpora into `holdout`.
+- Do not mix `public_benchmark` or `public_web` cases into clean headline scores.
 - Do not tune prompts, thresholds, regexes, or model choice from holdout failures.
-- Do not add large dev or holdout corpus batches before the structural validators exist.
+- Do not add large targeted or holdout corpus batches before the structural validators exist.
 - Do not generate target references with the evaluated model family.
 - Do not claim markdown coverage from marker substring checks alone.
 - Do not claim DOM coverage from visible text alone.

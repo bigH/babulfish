@@ -1,0 +1,34 @@
+{
+  "split": "general",
+  "category": "calibration-public",
+  "sourceLanguage": "en",
+  "targetLanguage": "es",
+  "contentType": "text",
+  "source": {
+    "text": "Public sentinel: keep WebGPU visible."
+  },
+  "references": [
+    {
+      "quality": "sentinel",
+      "text": "Sentinela publico: mantenga WebGPU visible."
+    }
+  ],
+  "checks": {
+    "preservedSubstrings": ["WebGPU"]
+  },
+  "provenance": {
+    "sourceClass": "public_benchmark",
+    "authorId": "team-evals",
+    "createdAt": "2026-04-28",
+    "sourceOrigin": "sentinel-public-benchmark-fixture",
+    "derivedFrom": "synthetic public-labeled sentinel; not imported from a benchmark",
+    "publicExposure": "public",
+    "reviewStatus": "technical_reviewed",
+    "referenceTranslatorId": "sentinel-translator-es",
+    "referenceReviewerId": "sentinel-reviewer-es",
+    "referenceReviewDate": "2026-04-28",
+    "technicalReviewerId": "team-evals",
+    "technicalReviewDate": "2026-04-28",
+    "notes": "contamination warning: public-labeled sentinel for aggregation gates only"
+  }
+}
