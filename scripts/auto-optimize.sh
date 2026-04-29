@@ -65,6 +65,65 @@ timestamp() {
   date -u +"%Y-%m-%dT%H-%M-%SZ"
 }
 
+format_duration() {
+  local total_seconds="$1"
+  local hours=$((total_seconds / 3600))
+  local minutes=$(((total_seconds % 3600) / 60))
+  local seconds=$((total_seconds % 60))
+
+  if ((hours > 0)); then
+    printf '%dh %02dm %02ds' "$hours" "$minutes" "$seconds"
+  elif ((minutes > 0)); then
+    printf '%dm %02ds' "$minutes" "$seconds"
+  else
+    printf '%ds' "$seconds"
+  fi
+}
+
+ITERATION_TIMINGS=()
+TIMING_LOG=""
+
+record_timing() {
+  local label="$1"
+  local started_at="$2"
+  local duration=$((SECONDS - started_at))
+  local formatted
+  formatted="$(format_duration "$duration")"
+
+  ITERATION_TIMINGS+=("${label}=${formatted}")
+  printf -- "- timing: %s took %s\n" "$label" "$formatted"
+
+  if [[ -n "$TIMING_LOG" ]]; then
+    printf '%s %s took %s\n' "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" "$label" "$formatted" >> "$TIMING_LOG"
+  fi
+}
+
+print_iteration_timing_summary() {
+  local started_at="$1"
+  local duration=$((SECONDS - started_at))
+  local formatted
+  local summary=""
+  local timing
+  formatted="$(format_duration "$duration")"
+
+  for timing in "${ITERATION_TIMINGS[@]}"; do
+    [[ -n "$summary" ]] && summary+=", "
+    summary+="$timing"
+  done
+
+  if [[ -n "$summary" ]]; then
+    printf -- "- timing summary: %s\n" "$summary"
+  fi
+  printf -- "- iteration took %s\n" "$formatted"
+
+  if [[ -n "$TIMING_LOG" ]]; then
+    {
+      [[ -n "$summary" ]] && printf 'summary: %s\n' "$summary"
+      printf 'iteration took %s\n' "$formatted"
+    } >> "$TIMING_LOG"
+  fi
+}
+
 positive_integer() {
   [[ "$1" =~ ^[1-9][0-9]*$ ]]
 }
@@ -357,7 +416,7 @@ reset_inner_cleanup_paths() {
       git -C "$inner_repo" restore --source="$base_sha" --staged --worktree -- "$cleanup_path" ||
         return 1
     else
-      rm -rf -- "$inner_repo/$cleanup_path" || return 1
+      rm -rf -- "${inner_repo:?}/$cleanup_path" || return 1
     fi
   done < "$pathspec_file"
 }
@@ -866,17 +925,25 @@ create_baseline_snapshot "$ACTIVE_BASELINE_JSON" "$BASELINE_EVAL_LOG_PREFIX"
 set_active_baseline_eval_log_prefixes "$BASELINE_EVAL_LOG_PREFIX" "${ALL_MODELS[@]}"
 
 for ((iteration = 1; iteration <= ITERATIONS; iteration += 1)); do
+  ITERATION_STARTED_AT=$SECONDS
+  ITERATION_TIMINGS=()
   ITERATION_DIR="$RUN_LOG_DIR/iteration-${iteration}"
   CURRENT_ITERATION_DIR="$ITERATION_DIR"
   mkdir -p "$ITERATION_DIR"
+  TIMING_LOG="$ITERATION_DIR/timing.log"
+  : > "$TIMING_LOG"
+
+  printf '====================== iteration %s/%s ======================\n' "$iteration" "$ITERATIONS"
+
+  STEP_STARTED_AT=$SECONDS
   SELECTED_MODEL="$(node "$HELPER" select-model "$MODEL_ARG" "$ACTIVE_BASELINE_JSON")"
   ATTEMPT_BASE_SHA="$(git rev-parse HEAD)"
   cp "$ACTIVE_BASELINE_JSON" "$ITERATION_DIR/active-baseline.json"
   copy_snapshot_artifacts "$ACTIVE_BASELINE_JSON" "$ITERATION_DIR/eval-artifacts/baseline"
   copy_active_baseline_eval_logs "$ITERATION_DIR/eval-logs/baseline" "${ALL_MODELS[@]}"
 
-  printf '====================== iteration %s/%s ======================\n' "$iteration" "$ITERATIONS"
   printf -- "- selected '%s'\n" "$SELECTED_MODEL"
+  record_timing "setup" "$STEP_STARTED_AT"
 
   COMMIT_SHA=""
   SCORE_LINE="no improvement"
@@ -902,16 +969,22 @@ for ((iteration = 1; iteration <= ITERATIONS; iteration += 1)); do
   BASELINE_EVAL_REFS="$(active_baseline_eval_refs "${ALL_MODELS[@]}")"
   VERIFY_EVAL_REFS="none"
 
+  STEP_STARTED_AT=$SECONDS
   create_inner_worktree "$ATTEMPT_BASE_SHA" "$iteration" "1" "$ITERATION_DIR/install.log"
   write_inner_prompt "$PROMPT_FILE" "$INNER_REPO" "$SELECTED_MODEL" "$ACTIVE_BASELINE_JSON" "$iteration" "$ITERATIONS" "$REPORT_FILE"
+  record_timing "inner setup" "$STEP_STARTED_AT"
+
   printf -- "- codex running...\n"
   printf '    stderr: %s // stdout: %s\n' "$STDERR_LOG" "$STDOUT_LOG"
 
+  STEP_STARTED_AT=$SECONDS
   set +e
   run_codex_attempt "$INNER_REPO" "$PROMPT_FILE" "$STDOUT_LOG" "$STDERR_LOG"
   CODEX_STATUS=$?
   set -e
+  record_timing "codex attempt" "$STEP_STARTED_AT"
 
+  STEP_STARTED_AT=$SECONDS
   capture_inner_raw_diff "$INNER_REPO" "$ATTEMPT_BASE_SHA" "$RAW_DIFF"
 
   if grep -q 'BLOCKED:' "$STDOUT_LOG" "$STDERR_LOG" 2>/dev/null; then
@@ -942,7 +1015,10 @@ for ((iteration = 1; iteration <= ITERATIONS; iteration += 1)); do
 
   print_change_blurb "$REPORT_FILE" "$STDOUT_LOG"
   printf '\n'
+  record_timing "patch extraction" "$STEP_STARTED_AT"
 
+  STEP_STARTED_AT=$SECONDS
+  RUN_TESTS="no"
   if [[ "$CODEX_STATUS" -ne 0 ]]; then
     SCORE_LINE="no improvement (codex exited ${CODEX_STATUS})"
     SKIP_VERIFY="yes"
@@ -959,18 +1035,25 @@ for ((iteration = 1; iteration <= ITERATIONS; iteration += 1)); do
       import_inner_patches "$ATTEMPT_BASE_SHA" "$IMPORT_PATCH" "no"
     else
       import_inner_patches "$ATTEMPT_BASE_SHA" "$IMPORT_PATCH" "yes"
-
-      printf -- "- tests running...\n"
-      printf '    output: %s\n' "$TEST_LOG"
-      if ! run_to_log "$TEST_LOG" pnpm test; then
-        SCORE_LINE="no improvement (tests failed)"
-        SKIP_VERIFY="yes"
-        reset_candidate_product_patch "$IMPORT_PATCH"
-        ensure_product_changes_reset
-      fi
+      RUN_TESTS="yes"
     fi
   fi
+  record_timing "candidate decision" "$STEP_STARTED_AT"
 
+  if [[ "$RUN_TESTS" == "yes" ]]; then
+    printf -- "- tests running...\n"
+    printf '    output: %s\n' "$TEST_LOG"
+    STEP_STARTED_AT=$SECONDS
+    if ! run_to_log "$TEST_LOG" pnpm test; then
+      SCORE_LINE="no improvement (tests failed)"
+      SKIP_VERIFY="yes"
+      reset_candidate_product_patch "$IMPORT_PATCH"
+      ensure_product_changes_reset
+    fi
+    record_timing "tests" "$STEP_STARTED_AT"
+  fi
+
+  STEP_STARTED_AT=$SECONDS
   if [[ "$SKIP_VERIFY" == "yes" ]]; then
     printf -- "- verification skipped: %s\n" "$SCORE_LINE"
   else
@@ -1026,7 +1109,9 @@ for ((iteration = 1; iteration <= ITERATIONS; iteration += 1)); do
       fi
     fi
   fi
+  record_timing "verification" "$STEP_STARTED_AT"
 
+  STEP_STARTED_AT=$SECONDS
   append_run_note "$SELECTED_MODEL" "$iteration" "$SCORE_LINE" "$REPORT_FILE" "$STDOUT_LOG" "$STDERR_LOG" "$TEST_LOG" "$BASELINE_EVAL_REFS" "$VERIFY_EVAL_REFS"
 
   if [[ "$SCORE_LINE" == no\ improvement* ]]; then
@@ -1047,6 +1132,7 @@ for ((iteration = 1; iteration <= ITERATIONS; iteration += 1)); do
     set_active_baseline_eval_log_prefixes "$VERIFY_EVAL_LOG_PREFIX" "${VERIFY_MODELS[@]}"
     node "$HELPER" update-last-good "$SELECTED_MODEL" "$ACTIVE_BASELINE_JSON" "$COMMIT_SHA"
   fi
+  record_timing "finalize" "$STEP_STARTED_AT"
 
   printf -- "- score: %s\n" "$SCORE_LINE"
   if [[ -n "$COMMIT_SHA" ]]; then
@@ -1054,5 +1140,6 @@ for ((iteration = 1; iteration <= ITERATIONS; iteration += 1)); do
   else
     printf -- "- commit: none\n"
   fi
+  print_iteration_timing_summary "$ITERATION_STARTED_AT"
   printf '\n'
 done
