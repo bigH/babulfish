@@ -120,7 +120,7 @@ export abstract class ChatModelBaseAdapter<
 
   protected override defaultPreservationApproach(
     options: TranslationOptions,
-  ): "prompting" | "none" {
+  ): "placeholders" | "prompting" | "none" {
     return this.preservedSubstrings(options).length > 0 ? "prompting" : "none"
   }
 

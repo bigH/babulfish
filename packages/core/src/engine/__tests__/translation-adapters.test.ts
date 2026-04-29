@@ -515,10 +515,82 @@ describe("chat adapters", () => {
     },
   )
 
-  it("defaults substring preservation to prompting for chat adapters", () => {
+  it("defaults Gemma substring preservation to placeholders", () => {
     const invocation = gemma3ChatAdapter.buildInvocation(REQUEST, {
       max_new_tokens: 64,
       substrings_to_preserve: ["**world**"],
+    })
+    const token = expectSinglePreserveToken(invocation.modelInput[1].content)
+
+    expect(invocation.modelInput[0]?.content).toBe(
+      `${GEMMA3_BASE_SYSTEM_PROMPT} Copy every preservation token exactly unchanged.`,
+    )
+    expect(invocation.modelInput[1]?.content).toBe(`Hello ${token}`)
+    expect(
+      gemma3ChatAdapter.extractText(
+        REQUEST,
+        { max_new_tokens: 64, substrings_to_preserve: ["**world**"] },
+        [{ generated_text: `Hola ${token}` }],
+      ),
+    ).toEqual({ text: "Hola **world**" })
+  })
+
+  it("auto-preserves Gemma technical and product spans with placeholders", () => {
+    const request = {
+      text: "Babulfish uses `WebGPU`.",
+      source: { code: "en" },
+      target: { code: "es" },
+    } satisfies TranslationRequest
+    const invocation = gemma3ChatAdapter.buildInvocation(request, OPTIONS)
+    const tokens = [...invocation.modelInput[1].content.matchAll(PRESERVE_TOKEN_PATTERN)]
+
+    expect(tokens).toHaveLength(2)
+    expect(invocation.modelInput[0]?.content).toBe(
+      `${GEMMA3_BASE_SYSTEM_PROMPT} Copy every preservation token exactly unchanged.`,
+    )
+    expect(invocation.modelInput[1]?.content).not.toContain("Babulfish")
+    expect(invocation.modelInput[1]?.content).not.toContain("WebGPU")
+    expect(
+      gemma3ChatAdapter.extractText(request, OPTIONS, [
+        {
+          generated_text: `El ${tokens[0]![0]} usa ${tokens[1]![0]}.`,
+        },
+      ]),
+    ).toEqual({ text: "El Babulfish usa `WebGPU`." })
+  })
+
+  it("does not auto-preserve ordinary Gemma short labels", () => {
+    const invocation = gemma3ChatAdapter.buildInvocation(
+      {
+        text: "User Profile",
+        source: { code: "en" },
+        target: { code: "es" },
+      },
+      OPTIONS,
+    )
+
+    expect(invocation.modelInput[0]?.content).toBe(GEMMA3_BASE_SYSTEM_PROMPT)
+    expect(invocation.modelInput[1]?.content).toBe("User Profile")
+  })
+
+  it("keeps Qwen substring preservation prompt-based by default", () => {
+    const invocation = qwen3ChatAdapter.buildInvocation(REQUEST, {
+      max_new_tokens: 64,
+      substrings_to_preserve: ["**world**"],
+    })
+
+    expect(invocation.modelInput[0]?.content).toBe(
+      `${QWEN3_BASE_SYSTEM_PROMPT} ` +
+        "Preserve these exact substrings unchanged: [\"**world**\"].",
+    )
+    expect(invocation.modelInput[1]?.content).toBe(QWEN3_BASE_USER_PROMPT)
+  })
+
+  it("honors explicit prompt preservation for chat adapters", () => {
+    const invocation = gemma3ChatAdapter.buildInvocation(REQUEST, {
+      max_new_tokens: 64,
+      substrings_to_preserve: ["**world**"],
+      preservation_approach: "prompting",
     })
 
     expect(invocation.modelInput[0]?.content).toBe(
