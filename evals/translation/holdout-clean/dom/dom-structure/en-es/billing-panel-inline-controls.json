@@ -1,0 +1,52 @@
+{
+  "split": "holdout-clean",
+  "category": "dom-structure",
+  "sourceLanguage": "en",
+  "targetLanguage": "es",
+  "contentType": "dom",
+  "source": {
+    "html": "<section data-testid=\"billing-panel\"><h2>Billing summary</h2><p>Review <strong>open invoices</strong> before closing.</p><button type=\"button\" data-action=\"review\">Review invoices</button></section>"
+  },
+  "references": [
+    {
+      "quality": "primary",
+      "html": "<section data-testid=\"billing-panel\"><h2>Resumen de facturación</h2><p>Revise las <strong>facturas abiertas</strong> antes de cerrar.</p><button type=\"button\" data-action=\"review\">Revisar facturas</button></section>",
+      "notes": "Holdout-approved Spanish DOM reference preserving inline structure and control attributes."
+    }
+  ],
+  "checks": {
+    "sourceShouldChange": true,
+    "requiredSelectors": ["section", "h2", "p strong", "button"],
+    "domSelectorCounts": [
+      { "selector": "section", "count": 1 },
+      { "selector": "strong", "count": 1 },
+      { "selector": "button", "count": 1 }
+    ],
+    "domVisibleText": [
+      { "selector": "h2", "text": "Resumen de facturación" },
+      { "selector": "p", "pattern": "(?i)(facturas abiertas|antes de cerrar)" },
+      { "selector": "button", "pattern": "(?i)revisar" }
+    ],
+    "preservedAttributes": [
+      { "selector": "section", "attribute": "data-testid", "value": "billing-panel" },
+      { "selector": "button", "attribute": "type", "value": "button" },
+      { "selector": "button", "attribute": "data-action", "value": "review" }
+    ],
+    "domExecutableSafety": true
+  },
+  "provenance": {
+    "sourceClass": "product_derived_rewrite",
+    "authorId": "team-evals",
+    "createdAt": "2026-04-28",
+    "sourceOrigin": "private-product-screen BF-HC-DOM-BILLING",
+    "derivedFrom": "rewritten from first-party billing panel into clean holdout DOM structure content",
+    "publicExposure": "private",
+    "reviewStatus": "holdout_approved",
+    "referenceTranslatorId": "holdout-translator-es",
+    "referenceReviewerId": "holdout-reviewer-es",
+    "referenceReviewDate": "2026-04-28",
+    "technicalReviewerId": "team-evals",
+    "technicalReviewDate": "2026-04-28",
+    "notes": "Holdout seed for DOM inline structure; human-reviewed reference not produced by evaluated model families."
+  }
+}

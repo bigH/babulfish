@@ -1,0 +1,41 @@
+{
+  "split": "holdout-clean",
+  "category": "named-entity",
+  "sourceLanguage": "en",
+  "targetLanguage": "fr",
+  "contentType": "text",
+  "source": {
+    "text": "Northstar Clinic opens the Paris beta on May 14 for Acme Pilot Team."
+  },
+  "references": [
+    {
+      "quality": "primary",
+      "text": "Northstar Clinic ouvre la bêta de Paris le 14 mai pour Acme Pilot Team.",
+      "notes": "Holdout-approved French reference preserving private entity names."
+    }
+  ],
+  "checks": {
+    "sourceShouldChange": true,
+    "expectedPatterns": ["(?i)(b[eê]ta|ouvre|mai)"],
+    "preservedSubstringCounts": [
+      { "value": "Northstar Clinic" },
+      { "value": "Paris" },
+      { "value": "Acme Pilot Team" }
+    ]
+  },
+  "provenance": {
+    "sourceClass": "synthetic_template",
+    "authorId": "team-evals",
+    "createdAt": "2026-04-28",
+    "sourceOrigin": "private-holdout-template BF-HC-TEXT-002",
+    "derivedFrom": "template: private regional rollout sentence with organization, city, date, and pilot-team entity",
+    "publicExposure": "private",
+    "reviewStatus": "holdout_approved",
+    "referenceTranslatorId": "holdout-translator-fr",
+    "referenceReviewerId": "holdout-reviewer-fr",
+    "referenceReviewDate": "2026-04-28",
+    "technicalReviewerId": "team-evals",
+    "technicalReviewDate": "2026-04-28",
+    "notes": "Holdout seed for entity preservation; human-reviewed reference not produced by evaluated model families."
+  }
+}

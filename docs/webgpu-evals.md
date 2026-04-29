@@ -37,13 +37,14 @@ Text and Markdown cases run through `translateText()`. DOM cases run through `tr
 
 The default local report run uses `--split dev,holdout`. `holdout-clean` is excluded unless explicitly selected, and selecting it requires `--holdout-reason`. `calibration-public` is also explicit so public sentinel fixtures do not perturb local optimization baselines.
 
-The corpus currently contains 89 cases:
+The corpus currently contains 107 cases:
 
 - 38 legacy flat cases: 23 `dev` and 15 `holdout`.
 - 49 grouped PR 4 `dev` cases covering markdown, preservation-family text, and forward DOM behavior.
+- 18 grouped PR 5 `holdout-clean` seed cases covering text basics, preservation/entities/source-copy, markdown, and DOM behavior.
 - 2 tiny PR 3 `calibration-public` sentinel fixtures for gating and reporting tests only.
 
-There is still no `holdout-clean` seed set and no calibration-public expansion beyond the sentinels.
+The clean holdout seed is 18 cases, not the phase-1 target of 36, because the repo does not contain concrete evidence of bilingual reviewer capacity for a larger reviewed batch. There is still no calibration-public expansion beyond the sentinels.
 
 Live WebGPU evals are intentionally opt-in and are not part of `pnpm test`; they download and run real models.
 

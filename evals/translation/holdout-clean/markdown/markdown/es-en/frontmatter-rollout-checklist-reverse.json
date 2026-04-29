@@ -1,0 +1,47 @@
+{
+  "split": "holdout-clean",
+  "category": "markdown",
+  "sourceLanguage": "es",
+  "targetLanguage": "en",
+  "contentType": "markdown",
+  "source": {
+    "text": "---\ntitle: Lista privada de lanzamiento\nowner: evals\n---\n\n# Pasos de lanzamiento\n\n- [ ] Verifique `WebGPU`.\n  - [ ] Confirme `/docs/runtime`."
+  },
+  "references": [
+    {
+      "quality": "primary",
+      "text": "---\ntitle: Private launch checklist\nowner: evals\n---\n\n# Launch steps\n\n- [ ] Verify `WebGPU`.\n  - [ ] Confirm `/docs/runtime`.",
+      "notes": "Holdout-approved English markdown reference preserving frontmatter and nested checklist structure."
+    }
+  ],
+  "checks": {
+    "sourceShouldChange": true,
+    "expectedPatterns": ["(?i)(private launch|launch steps|verify)"],
+    "preservedSubstringCounts": [
+      { "value": "WebGPU" },
+      { "value": "/docs/runtime" }
+    ],
+    "markdownStructure": {
+      "headings": [{ "level": 1, "count": 1 }],
+      "unorderedListItems": 2,
+      "minListDepth": 2,
+      "inlineCode": { "count": 1, "texts": ["WebGPU"] },
+      "frontmatter": { "keys": ["title", "owner"] }
+    }
+  },
+  "provenance": {
+    "sourceClass": "first_party_authored",
+    "authorId": "team-evals",
+    "createdAt": "2026-04-28",
+    "sourceOrigin": "private-holdout-spec BF-HC-MD-004",
+    "derivedFrom": null,
+    "publicExposure": "private",
+    "reviewStatus": "holdout_approved",
+    "referenceTranslatorId": "holdout-translator-en",
+    "referenceReviewerId": "holdout-reviewer-en",
+    "referenceReviewDate": "2026-04-28",
+    "technicalReviewerId": "team-evals",
+    "technicalReviewDate": "2026-04-28",
+    "notes": "Holdout seed for reverse markdown frontmatter; human-reviewed reference not produced by evaluated model families."
+  }
+}

@@ -45,6 +45,14 @@ function requireCase(id: EvalCaseId) {
   return evalCase
 }
 
+function countBy<T>(items: readonly T[], keyFor: (item: T) => string): Record<string, number> {
+  return items.reduce<Record<string, number>>((counts, item) => {
+    const key = keyFor(item)
+    counts[key] = (counts[key] ?? 0) + 1
+    return counts
+  }, {})
+}
+
 function check(name: string, pass: boolean): WebGpuEvalCheck {
   return {
     name,
@@ -140,26 +148,70 @@ function scoredCase(
 }
 
 describe("webgpu eval scorer", () => {
-  it("loads legacy flat cases, PR 3 sentinels, and the PR 4 grouped dev expansion", () => {
+  it("loads legacy flat cases, PR 3 sentinels, PR 4 dev cases, and PR 5 holdout-clean seeds", () => {
     const groupedDevCases = WEBGPU_EVAL_CORPUS.filter((evalCase) =>
       evalCase.id.startsWith("dev/"),
     )
+    const groupedHoldoutCleanCases = WEBGPU_EVAL_CORPUS.filter((evalCase) =>
+      evalCase.id.startsWith("holdout-clean/"),
+    )
 
-    expect(WEBGPU_EVAL_CORPUS).toHaveLength(89)
-    expect(corpusById.size).toBe(89)
+    expect(WEBGPU_EVAL_CORPUS).toHaveLength(107)
+    expect(corpusById.size).toBe(107)
     expect(WEBGPU_EVAL_CORPUS.filter((evalCase) => evalCase.split === "dev")).toHaveLength(72)
     expect(WEBGPU_EVAL_CORPUS.filter((evalCase) => evalCase.split === "holdout")).toHaveLength(15)
-    expect(WEBGPU_EVAL_CORPUS.filter((evalCase) => evalCase.split === "holdout-clean")).toHaveLength(0)
+    expect(WEBGPU_EVAL_CORPUS.filter((evalCase) => evalCase.split === "holdout-clean")).toHaveLength(18)
     expect(WEBGPU_EVAL_CORPUS.filter((evalCase) => evalCase.split === "calibration-public")).toHaveLength(2)
-    expect(WEBGPU_EVAL_CORPUS.filter((evalCase) => evalCase.contentType === "dom")).toHaveLength(22)
-    expect(WEBGPU_EVAL_CORPUS.filter((evalCase) => evalCase.contentType === "markdown")).toHaveLength(23)
-    expect(WEBGPU_EVAL_CORPUS.filter((evalCase) => evalCase.contentType === "text")).toHaveLength(44)
+    expect(WEBGPU_EVAL_CORPUS.filter((evalCase) => evalCase.contentType === "dom")).toHaveLength(28)
+    expect(WEBGPU_EVAL_CORPUS.filter((evalCase) => evalCase.contentType === "markdown")).toHaveLength(29)
+    expect(WEBGPU_EVAL_CORPUS.filter((evalCase) => evalCase.contentType === "text")).toHaveLength(50)
     expect(groupedDevCases).toHaveLength(49)
     expect(groupedDevCases.every((evalCase) => evalCase.provenance)).toBe(true)
     expect(groupedDevCases.every((evalCase) => evalCase.sourceClass !== "public_benchmark"))
       .toBe(true)
     expect(groupedDevCases.every((evalCase) => evalCase.sourceClass !== "public_web"))
       .toBe(true)
+    expect(groupedHoldoutCleanCases).toHaveLength(18)
+    expect(countBy(groupedHoldoutCleanCases, (evalCase) => evalCase.contentType)).toEqual({
+      dom: 6,
+      markdown: 6,
+      text: 6,
+    })
+    expect(
+      countBy(
+        groupedHoldoutCleanCases,
+        (evalCase) => `${evalCase.sourceLanguage}-${evalCase.targetLanguage}`,
+      ),
+    ).toEqual({
+      "ar-en": 2,
+      "en-ar": 4,
+      "en-es": 4,
+      "en-fr": 4,
+      "es-en": 2,
+      "fr-en": 2,
+    })
+    expect(
+      countBy(groupedHoldoutCleanCases, (evalCase) => evalCase.sourceClass ?? "missing"),
+    ).toEqual({
+      first_party_authored: 8,
+      product_derived_rewrite: 5,
+      synthetic_template: 5,
+    })
+    expect(
+      groupedHoldoutCleanCases.every(
+        (evalCase) =>
+          evalCase.provenance?.publicExposure === "private" &&
+          evalCase.provenance.reviewStatus === "holdout_approved",
+      ),
+    ).toBe(true)
+    expect(
+      groupedHoldoutCleanCases.every(
+        (evalCase) =>
+          evalCase.sourceClass === "first_party_authored" ||
+          evalCase.sourceClass === "product_derived_rewrite" ||
+          evalCase.sourceClass === "synthetic_template",
+      ),
+    ).toBe(true)
   })
 
   it("includes the grouped path glob without loading the schema as a case", () => {
