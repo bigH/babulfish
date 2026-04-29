@@ -621,6 +621,48 @@ describe("chat adapters", () => {
     expect(invocation.modelInput[1]?.content).toContain("User Profile")
   })
 
+  it("repairs dropped Qwen inline markdown wrappers around surviving technical spans", () => {
+    const request = {
+      text: "The **Babulfish** API is built on `WebGPU`.",
+      source: { code: "en" },
+      target: { code: "ar" },
+    } satisfies TranslationRequest
+
+    expect(
+      qwen3ChatAdapter.extractText(request, OPTIONS, [
+        { generated_text: "واجهة Babulfish مبنية على WebGPU." },
+      ]),
+    ).toEqual({ text: "واجهة **Babulfish** مبنية على `WebGPU`." })
+  })
+
+  it("repairs dropped Qwen code wrappers next to right-to-left clitics", () => {
+    const request = {
+      text: "Use `translate()` with `WebGPU`.",
+      source: { code: "en" },
+      target: { code: "ar" },
+    } satisfies TranslationRequest
+
+    expect(
+      qwen3ChatAdapter.extractText(request, OPTIONS, [
+        { generated_text: "استخدم translate() وWebGPU." },
+      ]),
+    ).toEqual({ text: "استخدم `translate()` و`WebGPU`." })
+  })
+
+  it("does not repair Qwen markdown wrappers inside longer identifiers", () => {
+    const request = {
+      text: "Render with `GPU` and `foo.bar`.",
+      source: { code: "en" },
+      target: { code: "fr" },
+    } satisfies TranslationRequest
+
+    expect(
+      qwen3ChatAdapter.extractText(request, OPTIONS, [
+        { generated_text: "Rendre avec GPURenderer et foo.bar.baz." },
+      ]),
+    ).toEqual({ text: "Rendre avec GPURenderer et foo.bar.baz." })
+  })
+
   it("keeps explicit Qwen placeholder preservation from auto-prompting", () => {
     const request = {
       text: "Babulfish uses WebGPU with Chime.",

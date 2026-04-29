@@ -36,6 +36,10 @@ const QWEN_AUTO_PRESERVE_TERMS = Object.freeze([
   "ONNX",
 ])
 const QWEN_AUTO_PRESERVE_LIMIT = 12
+type InlineMarkdownSpan = {
+  readonly wrapped: string
+  readonly inner: string
+}
 
 function collectMatches(text: string, pattern: RegExp): string[] {
   return Array.from(text.matchAll(pattern), (match) => match[0])
@@ -84,6 +88,86 @@ function collectQwenAutoPreservedSubstrings(text: string): readonly string[] {
   return preserved
 }
 
+function collectRepairableInlineMarkdownSpans(text: string): readonly InlineMarkdownSpan[] {
+  const spans = [
+    ...collectMatches(text, /`[^`\n]+`/gu),
+    ...collectMatches(text, /\*\*[^*\n]+\*\*/gu),
+  ]
+  const seen = new Set<string>()
+  const repairable: InlineMarkdownSpan[] = []
+
+  for (const wrapped of spans) {
+    const inner = wrapped.startsWith("`")
+      ? wrapped.slice(1, -1)
+      : wrapped.slice(2, -2)
+    if (!/[A-Za-z0-9_@./$()-]/u.test(inner) || seen.has(wrapped)) continue
+    seen.add(wrapped)
+    repairable.push({ wrapped, inner })
+  }
+
+  return repairable
+}
+
+function isMarkdownRepairIdentifierChar(char: string | undefined): boolean {
+  return char !== undefined && /[A-Za-z0-9_@/$()`*-]/u.test(char)
+}
+
+function isMarkdownRepairBoundaryBefore(text: string, start: number): boolean {
+  const previous = text[start - 1]
+  if (previous === undefined) return true
+  if (previous === ".") return !isMarkdownRepairIdentifierChar(text[start - 2])
+  return !isMarkdownRepairIdentifierChar(previous)
+}
+
+function isMarkdownRepairBoundaryAfter(text: string, end: number): boolean {
+  const next = text[end]
+  if (next === undefined) return true
+  if (next === ".") return !isMarkdownRepairIdentifierChar(text[end + 1])
+  return !isMarkdownRepairIdentifierChar(next)
+}
+
+function restoreDroppedInlineMarkdownWrapper(
+  translated: string,
+  span: InlineMarkdownSpan,
+): string {
+  let repaired = ""
+  let cursor = 0
+
+  while (cursor < translated.length) {
+    const start = translated.indexOf(span.inner, cursor)
+    if (start === -1) {
+      repaired += translated.slice(cursor)
+      break
+    }
+
+    const end = start + span.inner.length
+    repaired += translated.slice(cursor, start)
+    repaired +=
+      isMarkdownRepairBoundaryBefore(translated, start) &&
+      isMarkdownRepairBoundaryAfter(translated, end)
+        ? span.wrapped
+        : translated.slice(start, end)
+    cursor = end
+  }
+
+  return repaired
+}
+
+function restoreDroppedInlineMarkdownWrappers(
+  source: string,
+  translated: string,
+): string {
+  let repaired = translated
+
+  for (const { wrapped, inner } of collectRepairableInlineMarkdownSpans(source)) {
+    if (repaired.includes(wrapped)) continue
+
+    repaired = restoreDroppedInlineMarkdownWrapper(repaired, { wrapped, inner })
+  }
+
+  return repaired
+}
+
 function formatLanguageName(code: string): string {
   const normalizedCode = code.toLowerCase()
   const baseCode = normalizedCode.split(/[-_]/)[0] ?? normalizedCode
@@ -115,7 +199,14 @@ export class Qwen3ChatAdapter extends ChatModelBaseAdapter {
     options: TranslationOptions,
     output: unknown,
   ) {
-    return super.extractText(request, this.withAutoPreservation(request, options), output)
+    const result = super.extractText(
+      request,
+      this.withAutoPreservation(request, options),
+      output,
+    )
+    return {
+      text: restoreDroppedInlineMarkdownWrappers(request.text, result.text),
+    }
   }
 
   protected override buildModelInvocation(
