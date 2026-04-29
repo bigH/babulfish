@@ -1,0 +1,52 @@
+{
+  "split": "calibration-public",
+  "category": "calibration-public",
+  "sourceLanguage": "en",
+  "targetLanguage": "es",
+  "contentType": "dom",
+  "source": {
+    "html": "<section data-testid=\"public-status-card\"><h2>Service status</h2><p><strong>WebGPU</strong> translation is available.</p><a href=\"/status\">Read status</a><ul><li>Queue normal</li><li>Support online</li></ul></section>"
+  },
+  "references": [
+    {
+      "quality": "primary",
+      "html": "<section data-testid=\"public-status-card\"><h2>Estado del servicio</h2><p>La traduccion con <strong>WebGPU</strong> esta disponible.</p><a href=\"/status\">Leer estado</a><ul><li>Cola normal</li><li>Soporte en linea</li></ul></section>",
+      "notes": "Technical-reviewed synthetic public-style DOM reference for calibration only."
+    }
+  ],
+  "checks": {
+    "sourceShouldChange": true,
+    "requiredSelectors": ["section", "h2", "p strong", "a", "li"],
+    "domSelectorCounts": [
+      { "selector": "li", "count": 2 },
+      { "selector": "a", "count": 1 }
+    ],
+    "domVisibleText": [
+      { "selector": "h2", "pattern": "(?i)(estado|servicio)" },
+      { "selector": "section", "pattern": "(?i)(disponible|soporte|cola)" }
+    ],
+    "preservedSubstringCounts": [
+      { "value": "WebGPU" }
+    ],
+    "preservedAttributes": [
+      { "selector": "section", "attribute": "data-testid", "value": "public-status-card" },
+      { "selector": "a", "attribute": "href", "value": "/status" }
+    ],
+    "domExecutableSafety": true
+  },
+  "provenance": {
+    "sourceClass": "public_web",
+    "authorId": "team-evals",
+    "createdAt": "2026-04-28",
+    "sourceOrigin": "synthetic-public-web-style-status-card",
+    "derivedFrom": "synthetic public-style status card fixture; not copied from a public status page or public corpus",
+    "publicExposure": "public",
+    "reviewStatus": "technical_reviewed",
+    "referenceTranslatorId": "calibration-translator-es",
+    "referenceReviewerId": "calibration-reviewer-es",
+    "referenceReviewDate": "2026-04-28",
+    "technicalReviewerId": "team-evals",
+    "technicalReviewDate": "2026-04-28",
+    "notes": "contamination warning: public-web-style DOM calibration case; exclude from clean headline scoring"
+  }
+}

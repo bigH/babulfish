@@ -1,0 +1,55 @@
+{
+  "split": "calibration-public",
+  "category": "calibration-public",
+  "sourceLanguage": "fr",
+  "targetLanguage": "en",
+  "contentType": "dom",
+  "source": {
+    "html": "<section data-testid=\"support-panel\"><p>Affichez le resume public du support.</p><span hidden>Meta publique CP-4</span><code>CASE-42</code><a href=\"/support\">Aide</a></section>"
+  },
+  "references": [
+    {
+      "quality": "primary",
+      "html": "<section data-testid=\"support-panel\"><p>Show the public support summary.</p><span hidden>Meta publique CP-4</span><code>CASE-42</code><a href=\"/support\">Help</a></section>",
+      "notes": "Technical-reviewed synthetic public-style DOM hidden/skipped reference for calibration only."
+    }
+  ],
+  "checks": {
+    "sourceShouldChange": true,
+    "domSelectorCounts": [
+      { "selector": "span", "count": 1 },
+      { "selector": "code", "count": 1 },
+      { "selector": "a", "count": 1 }
+    ],
+    "domVisibleText": [
+      { "selector": "p", "pattern": "(?i)(support|summary)" },
+      { "selector": "a", "text": "Help" }
+    ],
+    "preservedAttributes": [
+      { "selector": "section", "attribute": "data-testid", "value": "support-panel" },
+      { "selector": "a", "attribute": "href", "value": "/support" }
+    ],
+    "domHiddenText": [
+      { "selector": "[hidden]" }
+    ],
+    "domSkippedText": [
+      { "selector": "code" }
+    ],
+    "domExecutableSafety": true
+  },
+  "provenance": {
+    "sourceClass": "public_web",
+    "authorId": "team-evals",
+    "createdAt": "2026-04-28",
+    "sourceOrigin": "synthetic-public-web-style-support-panel",
+    "derivedFrom": "synthetic public-style support panel fixture; not copied from a support site or public corpus",
+    "publicExposure": "public",
+    "reviewStatus": "technical_reviewed",
+    "referenceTranslatorId": "calibration-translator-en",
+    "referenceReviewerId": "calibration-reviewer-en",
+    "referenceReviewDate": "2026-04-28",
+    "technicalReviewerId": "team-evals",
+    "technicalReviewDate": "2026-04-28",
+    "notes": "contamination warning: public-web-style DOM hidden/skipped calibration case; exclude from clean headline scoring"
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "split": "calibration-public",
+  "category": "calibration-public",
+  "sourceLanguage": "es",
+  "targetLanguage": "en",
+  "contentType": "text",
+  "source": {
+    "text": "El servicio de trenes se retraso por una inspeccion de seguridad."
+  },
+  "references": [
+    {
+      "quality": "primary",
+      "text": "The train service was delayed because of a safety inspection.",
+      "notes": "Technical-reviewed synthetic public-style reference for calibration only."
+    }
+  ],
+  "checks": {
+    "sourceShouldChange": true,
+    "expectedPatterns": ["(?i)(train|service|delayed|safety)"],
+    "forbiddenPatterns": ["(?i)El servicio de trenes"]
+  },
+  "provenance": {
+    "sourceClass": "public_web",
+    "authorId": "team-evals",
+    "createdAt": "2026-04-28",
+    "sourceOrigin": "synthetic-public-web-style-service-delay",
+    "derivedFrom": "synthetic public-style service status fixture; not copied from a transit agency page or public corpus",
+    "publicExposure": "public",
+    "reviewStatus": "technical_reviewed",
+    "referenceTranslatorId": "calibration-translator-en",
+    "referenceReviewerId": "calibration-reviewer-en",
+    "referenceReviewDate": "2026-04-28",
+    "technicalReviewerId": "team-evals",
+    "technicalReviewDate": "2026-04-28",
+    "notes": "contamination warning: public-web-style calibration case; exclude from clean headline scoring"
+  }
+}

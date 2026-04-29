@@ -148,7 +148,7 @@ function scoredCase(
 }
 
 describe("webgpu eval scorer", () => {
-  it("loads legacy flat cases, PR 3 sentinels, PR 4 dev cases, and PR 5 holdout-clean seeds", () => {
+  it("loads legacy flat cases, grouped dev/holdout-clean cases, and PR 6 calibration-public cases", () => {
     const groupedDevCases = WEBGPU_EVAL_CORPUS.filter((evalCase) =>
       evalCase.id.startsWith("dev/"),
     )
@@ -156,15 +156,15 @@ describe("webgpu eval scorer", () => {
       evalCase.id.startsWith("holdout-clean/"),
     )
 
-    expect(WEBGPU_EVAL_CORPUS).toHaveLength(107)
-    expect(corpusById.size).toBe(107)
+    expect(WEBGPU_EVAL_CORPUS).toHaveLength(117)
+    expect(corpusById.size).toBe(117)
     expect(WEBGPU_EVAL_CORPUS.filter((evalCase) => evalCase.split === "dev")).toHaveLength(72)
     expect(WEBGPU_EVAL_CORPUS.filter((evalCase) => evalCase.split === "holdout")).toHaveLength(15)
     expect(WEBGPU_EVAL_CORPUS.filter((evalCase) => evalCase.split === "holdout-clean")).toHaveLength(18)
-    expect(WEBGPU_EVAL_CORPUS.filter((evalCase) => evalCase.split === "calibration-public")).toHaveLength(2)
-    expect(WEBGPU_EVAL_CORPUS.filter((evalCase) => evalCase.contentType === "dom")).toHaveLength(28)
-    expect(WEBGPU_EVAL_CORPUS.filter((evalCase) => evalCase.contentType === "markdown")).toHaveLength(29)
-    expect(WEBGPU_EVAL_CORPUS.filter((evalCase) => evalCase.contentType === "text")).toHaveLength(50)
+    expect(WEBGPU_EVAL_CORPUS.filter((evalCase) => evalCase.split === "calibration-public")).toHaveLength(12)
+    expect(WEBGPU_EVAL_CORPUS.filter((evalCase) => evalCase.contentType === "dom")).toHaveLength(32)
+    expect(WEBGPU_EVAL_CORPUS.filter((evalCase) => evalCase.contentType === "markdown")).toHaveLength(30)
+    expect(WEBGPU_EVAL_CORPUS.filter((evalCase) => evalCase.contentType === "text")).toHaveLength(55)
     expect(groupedDevCases).toHaveLength(49)
     expect(groupedDevCases.every((evalCase) => evalCase.provenance)).toBe(true)
     expect(groupedDevCases.every((evalCase) => evalCase.sourceClass !== "public_benchmark"))
@@ -595,20 +595,42 @@ describe("webgpu eval scorer", () => {
     }
   })
 
-  it("loads only tiny calibration-public sentinel fixtures for PR 3 gating", () => {
-    const sentinels = WEBGPU_EVAL_CORPUS.filter((evalCase) =>
+  it("loads the expanded calibration-public bucket with contamination-marked public provenance", () => {
+    const calibrationCases = WEBGPU_EVAL_CORPUS.filter((evalCase) =>
       evalCase.id.startsWith("calibration-public/"),
     )
+    const calibrationCaseIds = calibrationCases.map((evalCase) => evalCase.id).sort()
 
-    expect(sentinels.map((evalCase) => evalCase.id)).toEqual([
+    expect(calibrationCases).toHaveLength(12)
+    expect(calibrationCaseIds).toEqual([
+      "calibration-public/dom/calibration-public/en-ar/public-rtl-status",
+      "calibration-public/dom/calibration-public/en-es/public-card-structure",
+      "calibration-public/dom/calibration-public/en-fr/public-button-attrs",
+      "calibration-public/dom/calibration-public/fr-en/public-hidden-skip",
+      "calibration-public/markdown/calibration-public/en-es/public-release-checklist",
       "calibration-public/markdown/calibration-public/en-fr/sentinel-public-markdown",
+      "calibration-public/text/calibration-public/en-ar/public-health-notice",
+      "calibration-public/text/calibration-public/en-es/public-entity-preservation",
       "calibration-public/text/calibration-public/en-es/sentinel-public-short",
+      "calibration-public/text/calibration-public/en-fr/public-news-brief",
+      "calibration-public/text/calibration-public/es-en/public-service-delay",
+      "calibration-public/text/calibration-public/fr-en/public-weather-update",
     ])
-    for (const sentinel of sentinels) {
-      expect(sentinel.category).toBe("calibration-public")
-      expect(["public_benchmark", "public_web"]).toContain(sentinel.sourceClass)
-      expect(["public", "mixed"]).toContain(sentinel.provenance?.publicExposure)
-      expect(sentinel.provenance?.notes).toMatch(/contamination/i)
+    expect(countBy(calibrationCases, (evalCase) => evalCase.contentType)).toEqual({
+      dom: 4,
+      markdown: 2,
+      text: 6,
+    })
+    expect(countBy(calibrationCases, (evalCase) => evalCase.sourceClass ?? "missing")).toEqual({
+      public_benchmark: 4,
+      public_web: 8,
+    })
+    for (const calibrationCase of calibrationCases) {
+      expect(calibrationCase.category).toBe("calibration-public")
+      expect(["public_benchmark", "public_web"]).toContain(calibrationCase.sourceClass)
+      expect(["public", "mixed"]).toContain(calibrationCase.provenance?.publicExposure)
+      expect(calibrationCase.provenance?.reviewStatus).toBe("technical_reviewed")
+      expect(calibrationCase.provenance?.notes).toMatch(/contamination/i)
     }
   })
 

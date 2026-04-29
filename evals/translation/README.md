@@ -30,12 +30,12 @@ For grouped files, the path and JSON must agree on:
 
 The schema artifact is [`schema.json`](schema.json). It documents the current case shape, deterministic PR 2 checks, per-case DOM runner config, and provenance metadata. Provenance is required for new grouped cases. Legacy flat files are temporarily grandfathered so the existing 38 flat cases do not need migration churn.
 
-Current corpus count after PR 5:
+Current corpus count after PR 6:
 
-- 107 total cases.
+- 117 total cases.
 - 72 `dev` cases: 23 legacy flat cases plus 49 grouped PR 4 cases.
 - 15 legacy `holdout` cases.
-- 2 tiny `calibration-public` sentinel fixtures from PR 3.
+- 12 public/mixed `calibration-public` cases: the 2 PR 3 sentinels plus 10 PR 6 regression/comparability cases.
 - 18 reviewed grouped `holdout-clean` seed cases from PR 5.
 
 The PR 4 grouped `dev` expansion adds 15 markdown, 18 text/preservation-family, and 16 DOM cases. They are all private `dev` cases with full provenance and use only existing deterministic PR 2 check types.
@@ -49,7 +49,7 @@ Grouped provenance is validated before live evals run:
 - `public_benchmark` and `public_web` are allowed only in `calibration-public`.
 - `calibration-public` must carry public or mixed exposure plus a contamination warning in `notes`.
 
-PR 3 adds exactly two `sentinel-public-*` grouped fixtures under `calibration-public`. They exist only to test provenance gates, source-class grouping, and clean-score exclusion before the real calibration corpus is added; they are not production corpus expansion.
+PR 6 expands `calibration-public` to 12 public or mixed-exposure cases. They are contamination-marked regression/comparability probes, not clean holdout material, and clean headline scoring excludes them. The original PR 3 `sentinel-public-*` fixtures remain in the bucket to keep provenance and reporting gates covered.
 
 PR 2 adds deterministic opt-in checks only. It does not add provenance gates, score grouping, holdout policy, or corpus expansion; those belong to later PRs from [`docs/plans/eval-corpus-expansion.md`](../../docs/plans/eval-corpus-expansion.md).
 
