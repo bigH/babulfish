@@ -1,5 +1,10 @@
 # babulfish
 
+[![GitHub repo](https://img.shields.io/badge/github-repo-green)](https://github.com/bigH/babulfish)
+[![npm](https://img.shields.io/npm/v/@babulfish/react.svg)](https://www.npmjs.com/package/@babulfish/react)
+[![CI](https://github.com/bigH/babulfish/actions/workflows/ci.yml/badge.svg)](https://github.com/bigH/babulfish/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/bigH/babulfish/blob/main/LICENSE)
+
 Translate live DOM in the browser. No server round-trips, no API keys, restore the original content when you are done. babulfish assesses each browser's capabilities at runtime and picks the right path — WebGPU when it fits, WASM when it does not, and a clear `denied` verdict when nothing works. See [`packages/core/README.md`](packages/core/README.md) for the assessment details.
 
 This repo ships a small package set for that job. The demos prove the current contract; they are not extra published bindings.
