@@ -53,9 +53,9 @@ export function App() {
 
 Want proof before reading API docs?
 
-- [`packages/demo`](packages/demo/README.md) — full React UX: `TranslatorProvider`, stock UI, and the enablement verdict rendered live.
-- [`packages/demo-vanilla`](packages/demo-vanilla/README.md) — zero-framework `createBabulfish()` with COOP/COEP configured for `SharedArrayBuffer`; proves the WASM fallback path.
-- [`packages/demo-webcomponent`](packages/demo-webcomponent/README.md) — Shadow DOM plus a custom element; proves two isolated roots share one assessment and runtime.
+- [`packages/demo`](packages/demo/README.md) — full React UX: `TranslatorProvider`, stock UI, model selector, canonical `model=<spec-id>` URLs, and the enablement verdict rendered live.
+- [`packages/demo-vanilla`](packages/demo-vanilla/README.md) — zero-framework `createBabulfish()` with the shared model resolver and COOP/COEP configured for `SharedArrayBuffer`; proves the WASM fallback path.
+- [`packages/demo-webcomponent`](packages/demo-webcomponent/README.md) — Shadow DOM plus a custom element; proves two isolated roots can share one assessment and runtime selection.
 
 ## Pick your path
 
@@ -75,6 +75,7 @@ Rule of thumb:
 ## What is real today
 
 - Shipped React surface: `TranslatorProvider`, `useTranslator()`, `useTranslateDOM()`, `<TranslateButton />`, and `<TranslateDropdown />`.
+- Shipped model surface: `engine.model` selects `"translategemma-4"` by default, `"qwen-3-0.6b"`, `"gemma-3-1b-it"`, or a custom `TranslationModelSpec`; legacy `engine.modelId` remains a repo-id override.
 - Shipped DOM contract: `dom.roots`, `structuredText`, `preserve.matchers`, `shouldSkip`, DOM-only `outputTransform`, restore, translated attributes, and RTL root direction.
 - Shipped compat surface: `babulfish` mirrors `@babulfish/react`, and the CSS entrypoints for `@babulfish/styles`, `@babulfish/react`, and `babulfish` all resolve.
 - Proven in demo code, but not published as separate packages: the custom-element and Shadow DOM path.

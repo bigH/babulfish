@@ -38,12 +38,14 @@ The config table below is intentionally a highlights view, not the full DOM conf
 
 | Config field | Type | Description |
 |---|---|---|
-| `engine` | `EngineConfig` | Model and device preferences |
+| `engine` | `BabulfishEngineConfig` | Model, adapter, device, dtype, token-budget, source-language, and enablement preferences |
 | `dom.roots` | `string[]` | CSS selectors for translatable subtrees |
 | `dom.root` | `ParentNode \| Document` | Scoping root (default: `document`) |
 | `dom.structuredText` | `StructuredTextConfig` | Claim supported inline-rich DOM as one logical prose unit |
 | `dom.outputTransform` | `(translated, context) => string` | Normalize DOM-bound output immediately before writes |
 | `languages` | `readonly Language[]` | Override the built-in language list |
+
+`BabulfishEngineConfig` is the core runtime preference surface: `model`, `modelId`, `dtype`, `device`, `maxNewTokens`, `sourceLanguage`, and `enablement`.
 
 For the full DOM config surface, read `DOMTranslatorConfig` from `@babulfish/core` plus the behavior notes below. That surface also includes `preserve`, `skipTags`, `shouldSkip`, `richText`, `linkedBy`, `phases`, `batchCharLimit`, `rtlLanguages`, `translateAttributes`, and `hooks`.
 
@@ -55,11 +57,9 @@ For the full DOM config surface, read `DOMTranslatorConfig` from `@babulfish/cor
 - `"qwen-3-0.6b"`
 - `"gemma-3-1b-it"`
 
-`qwen-2.5-0.5b` was removed from the first-party built-in catalog in `0.1.0`; use `qwen-3-0.6b` for the compact Qwen WebGPU path, or provide a custom spec if you still need that older repo.
+Those ids select first-party adapter/default bundles. Use legacy `engine.modelId` for arbitrary Hugging Face repo ids only when you still want the selected adapter and defaults. With no `engine.model`, that means the default TranslateGemma adapter. If both `engine.model` and `engine.modelId` are present, `modelId` overrides only the resolved repo id; adapter, file-location, dtype, and prompt behavior still come from `model`.
 
-Use legacy `engine.modelId` for arbitrary Hugging Face repo ids when you still want the default TranslateGemma adapter. If both `engine.model` and `engine.modelId` are present, `modelId` overrides only the resolved repo id; adapter, file-location, dtype, and prompt behavior still come from `model`.
-
-Custom specs make the adapter explicit:
+For other model families, use a custom `TranslationModelSpec` with an explicit `TranslationAdapter`:
 
 ```ts
 import type { TranslationAdapter } from "@babulfish/core"
@@ -100,13 +100,13 @@ createBabulfish({
 })
 ```
 
-`q4f16` is a first-class dtype. The non-default built-ins use it with WebGPU-oriented defaults and run the adapter smoke probe when the memory heuristic cannot decide.
+`q4f16` is a first-class dtype. The non-default built-ins use it with WebGPU-oriented defaults and default `enablement.probe` to `"if-needed"`, so babulfish runs the adapter smoke probe when the memory heuristic cannot decide.
 
 ### `BabulfishCore`
 
 | Member | Signature | Description |
 |---|---|---|
-| `snapshot` | `Snapshot` | Current state (model, translation, language, capabilities) |
+| `snapshot` | `Snapshot` | Current state (model, translation, language, capabilities, enablement) |
 | `subscribe` | `(listener: (s: Snapshot) => void) => () => void` | Subscribe to state changes; returns unsubscribe |
 | `loadModel` | `(opts?) => Promise<void>` | Download and initialize the translation model |
 | `translateTo` | `(lang, opts?) => Promise<void>` | Translate all DOM roots to the given language |
@@ -148,7 +148,7 @@ createBabulfish({
 
 ### Probe
 
-Probes are optional. Set `EnablementConfig.probe` to `"if-needed"` or `"manual"` to enable one; default is `"off"`. A probe is a coarse backend smoke check — it requests an adapter and device, checks required feature bits, and runs a tiny fixed-cost op. It is not a fit oracle, does not measure VRAM, and does not simulate a real translation. Probe results cache per page session only.
+Probes are optional. Set `EnablementConfig.probe` to `"if-needed"` or `"manual"` to enable one. The general default is `"off"`, while selected built-ins can resolve their own default; `"qwen-3-0.6b"` and `"gemma-3-1b-it"` use `"if-needed"`. A probe is a coarse backend smoke check — it requests an adapter and device, checks required feature bits, and runs a tiny fixed-cost op. It is not a fit oracle, does not measure VRAM, and does not simulate a real translation. Probe results cache per page session only.
 
 ### Binding helpers
 

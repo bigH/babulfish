@@ -17,7 +17,7 @@ import "@babulfish/react/css"
 
 function App() {
   return (
-    <TranslatorProvider>
+    <TranslatorProvider config={{ dom: { roots: ["[data-babulfish-root]"] } }}>
       <YourPage />
     </TranslatorProvider>
   )
@@ -35,6 +35,11 @@ function YourPage() {
         Translate to French
       </button>
       <button onClick={() => restore()}>Restore</button>
+
+      <main data-babulfish-root>
+        <h1>Hello world</h1>
+        <p>This subtree is translated by babulfish.</p>
+      </main>
     </>
   )
 }
@@ -66,11 +71,14 @@ Wraps your app in a `BabulfishCore` context.
 
 If you need a different config after mount, remount the provider.
 
-`config` is `TranslatorConfig`, which is the same shape as `BabulfishConfig` from [`@babulfish/core`](../core/README.md). DOM options pass through unchanged:
+`config` is `TranslatorConfig`, which is the same shape as `BabulfishConfig` from [`@babulfish/core`](../core/README.md). DOM and engine options pass through unchanged:
 
 ```tsx
 <TranslatorProvider
   config={{
+    engine: {
+      model: "qwen-3-0.6b",
+    },
     dom: {
       roots: [".content"],
       structuredText: { selector: "[data-structured]" },
@@ -85,7 +93,7 @@ If you need a different config after mount, remount the provider.
 </TranslatorProvider>
 ```
 
-There is no React-only wrapper API for `structuredText` or `outputTransform`. The provider forwards the core DOM contract as-is.
+There is no React-only wrapper API for model selection, `structuredText`, or `outputTransform`. The provider forwards the core config contract as-is; custom model specs and adapters are documented in [`@babulfish/core`](../core/README.md).
 
 ## Components
 
@@ -114,7 +122,7 @@ Language picker dropdown. It only shows the `"Original"` restore option when `on
 | `onRestore` | `() => void` | Optional restore handler for the `"Original"` row |
 | `value` | `string \| null` | Currently selected language code |
 | `disabled` | `boolean` | Disable the dropdown |
-| `languages` | `readonly Language[]` | Override language list |
+| `languages` | `readonly TranslatorLanguage[]` | Override language list |
 
 ## Hooks
 
@@ -126,9 +134,10 @@ Returns the current provider snapshot plus the core actions:
 |---|---|---|
 | `model` | `ModelState` | `{ status, progress?, error? }` |
 | `translation` | `TranslationState` | `{ status, progress? }` |
+| `capabilities` | `{ ready, hasWebGPU, isMobile, approxDeviceMemoryGiB, crossOriginIsolated }` | Raw browser observations from `@babulfish/core` |
 | `enablement` | `EnablementState` | Primary truth for capability gating (`status`, `verdict`, `probe`). Re-exported from `@babulfish/core` |
 | `currentLanguage` | `string \| null` | Active target language |
-| `languages` | `ReadonlyArray<Language>` | Available target languages |
+| `languages` | `ReadonlyArray<TranslatorLanguage>` | Available target languages |
 | `capabilitiesReady` | `boolean` | Capability detection has completed |
 | `isSupported` | `boolean` | Current browser can translate |
 | `hasWebGPU` | `boolean` | WebGPU is available |

@@ -42,9 +42,9 @@ Override these on `:root` or any ancestor to theme babulfish UI:
 
 The defaults for `--babulfish-accent`, `--babulfish-border`, and `--babulfish-surface` reference `var(--accent)`, `var(--border)`, and `var(--surface)` respectively. If your design system already sets those generic tokens, babulfish picks them up with no extra configuration.
 
-## Animations
+## Stock UI classes
 
-The stylesheet includes keyframes used by `@babulfish/react` components:
+The stylesheet includes animation and state classes for babulfish UI:
 
 | Class | Effect |
 |---|---|
@@ -52,6 +52,12 @@ The stylesheet includes keyframes used by `@babulfish/react` components:
 | `.babulfish-active` | Active pulse during translation |
 | `.babulfish-settled` | Settle animation when translation completes |
 | `.babulfish-popup` | Fade-slide-in for dropdown menus |
+| `.babulfish-globe-peek` | Initial globe-button peek border and glow |
+| `.babulfish-globe-peek-out` | Transition state after the initial peek |
+| `.babulfish-globe-ready` | Ready-state globe-button border and glow |
+| `.babulfish-icon-ready` | Ready-state icon accent color and glow |
+| `.babulfish-icon-peek` | Initial peek icon color |
+| `.babulfish-icon-muted` | Idle / muted icon color |
 
 ## Related packages
 
