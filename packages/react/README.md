@@ -1,7 +1,7 @@
 # @babulfish/react
 
 React bindings for babulfish client-side translation.
-Use this package when you want the shipped React provider, hooks, and stock UI. Use [`@babulfish/core`](../core/README.md) directly when you are building your own binding or working outside React. [`babulfish`](../babulfish/README.md) is the same runtime surface under the permanent unscoped compat name.
+Use this package when you want the shipped React provider, hooks, and stock UI. Use [`@babulfish/core`][pkg-core] directly when you are building your own binding or working outside React. [`babulfish`][pkg-babulfish] is the same runtime surface under the permanent unscoped compat name.
 
 ## Quick start
 
@@ -56,7 +56,7 @@ import "@babulfish/react/css"
 import "@babulfish/styles/css"
 ```
 
-See [`@babulfish/styles`](../styles/README.md) for the custom-property contract.
+See [`@babulfish/styles`][pkg-styles] for the custom-property contract.
 
 ## Provider boundary
 
@@ -71,7 +71,7 @@ Wraps your app in a `BabulfishCore` context.
 
 If you need a different config after mount, remount the provider.
 
-`config` is `TranslatorConfig`, which is the same shape as `BabulfishConfig` from [`@babulfish/core`](../core/README.md). DOM and engine options pass through unchanged:
+`config` is `TranslatorConfig`, which is the same shape as `BabulfishConfig` from [`@babulfish/core`][pkg-core]. DOM and engine options pass through unchanged:
 
 ```tsx
 <TranslatorProvider
@@ -93,7 +93,7 @@ If you need a different config after mount, remount the provider.
 </TranslatorProvider>
 ```
 
-There is no React-only wrapper API for model selection, `structuredText`, or `outputTransform`. The provider forwards the core config contract as-is; custom model specs and adapters are documented in [`@babulfish/core`](../core/README.md).
+There is no React-only wrapper API for model selection, `structuredText`, or `outputTransform`. The provider forwards the core config contract as-is; custom model specs and adapters are documented in [`@babulfish/core`][pkg-core].
 
 ## Components
 
@@ -169,6 +169,10 @@ Convenience hook for page-level translate/restore:
 
 ## Related packages
 
-- [`@babulfish/core`](../core/README.md) — engine, DOM contract, and experimental testing surface
-- [`@babulfish/styles`](../styles/README.md) — CSS custom properties and animations
-- [`babulfish`](../babulfish/README.md) — unscoped compat alias with the same runtime surface
+- [`@babulfish/core`][pkg-core] — engine, DOM contract, and experimental testing surface
+- [`@babulfish/styles`][pkg-styles] — CSS custom properties and animations
+- [`babulfish`][pkg-babulfish] — unscoped compat alias with the same runtime surface
+
+[pkg-core]: ../core/README.md
+[pkg-styles]: ../styles/README.md
+[pkg-babulfish]: ../babulfish/README.md

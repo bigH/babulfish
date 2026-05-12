@@ -61,5 +61,8 @@ The stylesheet includes animation and state classes for babulfish UI:
 
 ## Related packages
 
-- [`@babulfish/core`](../core/README.md) — UI-agnostic engine and contract
-- [`@babulfish/react`](../react/README.md) — React binding
+- [`@babulfish/core`][pkg-core] — UI-agnostic engine and contract
+- [`@babulfish/react`][pkg-react] — React binding
+
+[pkg-core]: ../core/README.md
+[pkg-react]: ../react/README.md

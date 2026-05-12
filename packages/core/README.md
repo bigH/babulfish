@@ -1,7 +1,7 @@
 # @babulfish/core
 
 UI-agnostic translation engine and DOM orchestrator for babulfish.
-Use this package directly when building framework-agnostic integrations, custom elements, or your own binding layer. If you want the shipped React provider, hooks, and stock UI, use [`@babulfish/react`](../react/README.md) instead. Use [`babulfish`](../babulfish/README.md) only when you need the unscoped compat import.
+Use this package directly when building framework-agnostic integrations, custom elements, or your own binding layer. If you want the shipped React provider, hooks, and stock UI, use [`@babulfish/react`][pkg-react] instead. Use [`babulfish`][pkg-babulfish] only when you need the unscoped compat import.
 
 ## Quick start
 
@@ -152,7 +152,7 @@ Probes are optional. Set `EnablementConfig.probe` to `"if-needed"` or `"manual"`
 
 ### Binding helpers
 
-Binding authors can derive narrow compat booleans from `enablement` with `createEnablementCompat(state)`, and seed neutral state from `IDLE_ENABLEMENT_STATE` and `NOT_RUN_PROBE_SUMMARY`. See [`@babulfish/react`](../react/README.md) for how the shipped binding uses them.
+Binding authors can derive narrow compat booleans from `enablement` with `createEnablementCompat(state)`, and seed neutral state from `IDLE_ENABLEMENT_STATE` and `NOT_RUN_PROBE_SUMMARY`. See [`@babulfish/react`][pkg-react] for how the shipped binding uses them.
 
 ## DOM config
 
@@ -199,7 +199,7 @@ Use `dom.outputTransform(translated, context)` to normalize DOM-bound output imm
 
 ## For binding authors
 
-The conformance test suite at `@babulfish/core/testing` provides shared scenarios that any binding should pass. See [`@babulfish/react`](../react/README.md) for an example of a binding that uses the conformance driver.
+The conformance test suite at `@babulfish/core/testing` provides shared scenarios that any binding should pass. See [`@babulfish/react`][pkg-react] for an example of a binding that uses the conformance driver.
 
 ```ts
 import { scenarios, type ConformanceDriver } from "@babulfish/core/testing"
@@ -209,5 +209,9 @@ This export is marked `@experimental` — the scenario list and driver interface
 
 ## Related packages
 
-- [`@babulfish/react`](../react/README.md) — React binding
-- [`@babulfish/styles`](../styles/README.md) — CSS custom properties and animations
+- [`@babulfish/react`][pkg-react] — React binding
+- [`@babulfish/styles`][pkg-styles] — CSS custom properties and animations
+
+[pkg-react]: ../react/README.md
+[pkg-styles]: ../styles/README.md
+[pkg-babulfish]: ../babulfish/README.md

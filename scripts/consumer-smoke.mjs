@@ -4,6 +4,8 @@ import { tmpdir } from "node:os"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
+import { packPublicPackage } from "./package-readmes.mjs"
+
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const cleanupTargets = new Set()
 const EXPECTED_CORE_SNAPSHOT_KEYS = [
@@ -79,24 +81,6 @@ function assertCssBridge(specifier, source) {
   )
 }
 
-function packPackage(packageName, packDir) {
-  const output = run("pnpm", [
-    "--filter",
-    packageName,
-    "pack",
-    "--pack-destination",
-    packDir,
-    "--json",
-  ])
-  const packed = JSON.parse(output)
-  const filename = Array.isArray(packed) ? packed[0]?.filename : packed?.filename
-  assert(
-    typeof filename === "string" && filename.length > 0,
-    `Missing tarball filename for ${packageName}`,
-  )
-  return filename
-}
-
 function writePackageJson(projectDir, dependencies) {
   // Force every internal dependency edge to resolve from the packed tarballs.
   // Without this, pnpm can silently fetch already-published versions from npm,
@@ -142,10 +126,10 @@ for (const packageName of ["@babulfish/core", "@babulfish/react", "babulfish"]) 
 const packDir = registerCleanup(mkdtempSync(path.join(tmpdir(), "babulfish-pack-")))
 phaseHeader("Packing tarballs")
 const tarballs = {
-  core: packPackage("@babulfish/core", packDir),
-  react: packPackage("@babulfish/react", packDir),
-  styles: packPackage("@babulfish/styles", packDir),
-  meta: packPackage("babulfish", packDir),
+  core: packPublicPackage("@babulfish/core", packDir),
+  react: packPublicPackage("@babulfish/react", packDir),
+  styles: packPublicPackage("@babulfish/styles", packDir),
+  meta: packPublicPackage("babulfish", packDir),
 }
 
 for (const [name, tarballPath] of Object.entries(tarballs)) {

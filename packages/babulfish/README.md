@@ -1,6 +1,6 @@
 # babulfish
 
-Permanent unscoped compat package for [`@babulfish/react`](../react/README.md).
+Permanent unscoped compat package for [`@babulfish/react`][pkg-react].
 Its runtime exports and CSS bridge match `@babulfish/react` exactly. New code should prefer the scoped package, but `babulfish` is not deprecated and is intended to remain available.
 
 ## Install
@@ -16,7 +16,7 @@ import { TranslatorProvider, useTranslator } from "babulfish"
 import "babulfish/css"
 ```
 
-`babulfish/css` resolves to the same stylesheet as [`@babulfish/styles/css`](../styles/README.md).
+`babulfish/css` resolves to the same stylesheet as [`@babulfish/styles/css`][pkg-styles].
 
 ## Runtime surface
 
@@ -29,6 +29,9 @@ import "babulfish/css"
 - `TranslateDropdown`
 - `DEFAULT_LANGUAGES`
 
-`babulfish` re-exports the same runtime surface as `@babulfish/react`. `useTranslator()` returns the same `enablement`-first snapshot shape described in [`@babulfish/react`](../react/README.md).
+`babulfish` re-exports the same runtime surface as `@babulfish/react`. `useTranslator()` returns the same `enablement`-first snapshot shape described in [`@babulfish/react`][pkg-react].
 
-For the actual API, hook fields, provider behavior, model selection, and DOM config semantics, read [`@babulfish/react`](../react/README.md). This package exists for import compatibility, not as a separate React API.
+For the actual API, hook fields, provider behavior, model selection, and DOM config semantics, read [`@babulfish/react`][pkg-react]. This package exists for import compatibility, not as a separate React API.
+
+[pkg-react]: ../react/README.md
+[pkg-styles]: ../styles/README.md
