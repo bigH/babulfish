@@ -144,6 +144,24 @@ function assertNoRemainingLocalReadmePath(markdown, context) {
   }
 }
 
+function packedFilenameFromJson(output, packageName) {
+  const packed = JSON.parse(output)
+  const filename = Array.isArray(packed) ? packed[0]?.filename : packed?.filename
+
+  if (typeof filename !== "string" || filename.length === 0) {
+    throw new Error(`Missing tarball filename for ${packageName}`)
+  }
+
+  return filename
+}
+
+function assertNoPackageDirectoryEntry(tarballPath) {
+  const entries = run("tar", ["-tzf", tarballPath]).split("\n")
+  if (entries.includes("package/")) {
+    throw new Error(`${path.basename(tarballPath)} contains unsupported package/ tar entry`)
+  }
+}
+
 export function rewritePackageReadmeLinks(markdown) {
   return transformMarkdownLines(markdown, (line) => {
     for (const label of Object.keys(PACKAGE_README_LINKS)) {
@@ -253,13 +271,7 @@ export function packPublicPackage(packageName, outDir) {
     outDir,
     "--json",
   ])
-  const packed = JSON.parse(output)
-  const filename = Array.isArray(packed) ? packed[0]?.filename : packed?.filename
-
-  if (typeof filename !== "string" || filename.length === 0) {
-    throw new Error(`Missing tarball filename for ${packageName}`)
-  }
-
+  const filename = packedFilenameFromJson(output, packageName)
   const tarballPath = path.isAbsolute(filename) ? filename : path.resolve(rootDir, filename)
   const workDir = mkdtempSync(path.join(tmpdir(), "babulfish-readme-pack-"))
 
@@ -275,8 +287,16 @@ export function packPublicPackage(packageName, outDir) {
     assertPackedPublicReadme(rewrittenReadme, path.basename(tarballPath))
     writeFileSync(packedReadmePath, rewrittenReadme)
 
-    const rewrittenTarball = path.join(workDir, path.basename(tarballPath))
-    run("tar", ["-czf", rewrittenTarball, "-C", extractDir, "package"])
+    const rewrittenOutput = run("npm", [
+      "pack",
+      path.join(extractDir, "package"),
+      "--pack-destination",
+      workDir,
+      "--json",
+    ])
+    const rewrittenFilename = packedFilenameFromJson(rewrittenOutput, packageName)
+    const rewrittenTarball = path.resolve(workDir, rewrittenFilename)
+    assertNoPackageDirectoryEntry(rewrittenTarball)
     renameSync(rewrittenTarball, tarballPath)
   } finally {
     rmSync(workDir, { force: true, recursive: true })
